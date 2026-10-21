@@ -84,6 +84,8 @@
   /* 财务：语义独立，即使当前复用相同原始色值也不能互换变量。 */
   --color-finance-gain: var(--palette-red);
   --color-finance-loss: var(--palette-green);
+  --color-finance-gain-bg: var(--palette-red-soft);
+  --color-finance-loss-bg: var(--palette-green-soft);
   --color-finance-flat: var(--palette-gray-600);
   --color-finance-income: var(--palette-green);
   --color-finance-expense: var(--palette-gray-900);

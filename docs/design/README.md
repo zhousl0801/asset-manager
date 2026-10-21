@@ -1,6 +1,6 @@
 # UI 设计资料
 
-视觉方向：瓷白底色 + 克莱因蓝。手机端沿用已确认的页面结构；正式 Web App 将增加桌面宽屏适配，现有原型仍展示手机画幅。
+视觉方向：瓷白底色 + 克莱因蓝。本阶段只迭代手机版本，沿用已确认的页面结构；在电脑浏览器中仍展示手机画幅，独立桌面布局留待后续评估。
 
 ## 规范与原型
 
@@ -8,17 +8,18 @@
 | --- | --- |
 | [UI 配色规范](UI配色规范.md) | 色彩语义、组件状态、财务图表及对比度要求 |
 | [CSS 色彩变量](ui-color-tokens.css) | 配套原始色、语义色与组件变量 |
-| [最终整合线框](wireframes/index.html) | 已确认的页面结构和演示交互，包含设计评审说明 |
+| [最终整合线框](wireframes/index.html) | 归档的页面结构和演示交互，包含设计评审说明；历史线框配色不作为当前主题依据 |
 | [首页高保真原型说明](../../prototype/README.md) | 首页的瓷白、克莱因蓝视觉实现及本机启动方式 |
 | [产品设计](../product/资产管家-产品设计文档-V1.0.md) | 业务分类、状态和统计口径的依据 |
 
 GitHub 用于查看 HTML 源码；交互预览请按仓库根 README 启动静态服务。
 
-## 首页 UI 截图
+## 手机 UI 截图
 
 - [首页手机截图](screenshots/asset-home-v1-mobile.png)。
 - [首页手机下半部分](screenshots/asset-home-v1-mobile-bottom.png)。
-- [前期桌面预览截图](screenshots/asset-overview-desktop.png)：较早设计记录，不作为最终手机首页或正式桌面布局的验收依据。
+- [账本统一主题截图](screenshots/asset-ledger-v1-mobile.png)。
+- [投资统一主题截图](screenshots/asset-invest-v1-mobile.png)。
 
 截图来自已有原型演示，均为虚构财务数据。
 

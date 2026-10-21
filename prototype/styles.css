@@ -104,14 +104,18 @@ button:disabled { opacity: 1; color: var(--color-text-disabled); background: var
 .secondary:hover { background: var(--color-brand-soft); }
 .toast { background: var(--color-bg-tooltip); color: var(--color-text-tooltip); border-radius: 9px; font-size: 12px; }
 .block-note, .context-box { background: var(--color-bg-subtle); color: var(--color-text-secondary); }
-/* Other routes keep the approved wireframe and receive shared shell colors only. */
-.asset-page, .shark-header, .ledger-header, .entry-top { --asset-ink: var(--color-text-primary); --asset-tint: var(--color-brand-soft); }
+/* All routes share semantic theme colors while retaining the approved layouts. */
+.asset-page { --asset-ink: var(--color-brand); --asset-bg: var(--color-brand-soft); }
+.portfolio-card.active { color: var(--color-brand); }
+.scope-pills .portfolio-card.active { color: var(--color-on-brand); }
+.phone .primary:disabled { background: var(--color-bg-disabled); color: var(--color-text-disabled); border-color: var(--color-border-disabled); }
 .asset-page .a-accent, .a-head button, .back-link { color: var(--color-brand); }
 .a-tabs button.active { color: var(--color-brand); border-color: var(--color-brand); }
 .shark-header, .ledger-header, .entry-top { background: var(--color-bg-surface); }
 .entry-mode-tabs button.active { color: var(--color-brand); border-color: var(--color-brand); }
 .entry-keypad .key-done { background: var(--color-brand); color: var(--color-on-brand); }
 .inflow { color: var(--color-finance-income); }
+#ledger-income { color: var(--color-finance-income); }
 @media (max-width: 520px) {
   html, body { height: 100%; overflow: hidden; }
   .prototype-stage { width: 100%; height: 100dvh; margin: 0; }

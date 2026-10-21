@@ -16,7 +16,7 @@
 
 | 层次 | 选择 |
 | --- | --- |
-| 应用形态 | 手机优先的响应式 Web App / PWA，适配 iPhone 与 Mac 浏览器 |
+| 应用形态 | 手机端 Web App / PWA，本阶段以 iPhone 体验为主；电脑浏览器沿用手机画幅 |
 | 前端 | Vue 3 + TypeScript + Vite；Vue Router + Pinia |
 | UI / 图表 | Vant 4 + 产品自定义样式；Apache ECharts |
 | 后端 | ASP.NET Core 10 Web API，分层单体 |
