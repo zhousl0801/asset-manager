@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="porcelain">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="按已确认 V1.0 产品设计制作的手机端资产总览高保真原型。统一现金、基金、公积金与积存金，全部为演示数据。">
+<title>资产总览 · 资产管家</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../docs/design/ui-color-tokens.css">
+<link rel="stylesheet" href="wireframe.css">
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<main class="prototype-stage">
+  <header class="prototype-heading"><div><span>资产管家</span><h1>资产总览</h1></div><span class="preview-badge">瓷白 × 克莱因蓝</span></header>
+  <div class="phone" id="phone">
+<header class="app-top"><div><div class="app-name">资产管家</div><div class="app-sub" id="app-sub">我的财务总览</div></div><button class="icon-btn" id="privacy-toggle" aria-label="自动记账计划"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></button></header>
+<div class="app-content" id="app-content">
+<section class="screen active" id="screen-home">
+<div class="total"><div class="total-label">总资产 <span class="tag">CNY</span></div><div class="total-value"><span class="currency">¥</span><span data-value="total">286,400.00</span></div><button class="text-btn change" id="open-composition">本月变化 <b data-value="change">+11,800.00</b> <span> · 查看构成 ›</span></button><div class="tiny">统计截至 10月20日 · 部分基金净值截至 10月16日</div></div>
+<section class="chart-panel"><div class="section-head"><h2>总资产趋势</h2><div class="range" aria-label="趋势时间范围"><button data-range="month">近1月</button><button data-range="quarter">近3月</button><button data-range="year" class="active">今年</button><button data-range="all">全部</button></div></div><div class="chart-readout"><span id="chart-date">2026年10月20日</span><b id="chart-value">¥286,400.00</b></div><svg class="chart" id="asset-chart" viewBox="0 0 320 145" role="img" aria-label="总资产历史趋势，可点选日期"><g id="chart-grid"></g><path id="chart-area" fill="#f1f4f8"></path><path id="chart-line" fill="none" stroke="#526f92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><line id="chart-cursor" stroke="#a7b4c4" stroke-dasharray="3 3" y1="12" y2="112"></line><circle id="chart-dot" r="4" fill="#fff" stroke="#526f92" stroke-width="2"></circle><g id="chart-labels"></g></svg><div class="chart-note"><span>点选日期查看历史总额</span><button class="text-btn" style="padding:0;font-size:10px" id="open-chart-help">统计口径 ⓘ</button></div></section>
+<div class="section-head"><h2>资产分类</h2><span class="tiny">4 类资产</span></div><div class="asset-grid"><button class="asset" data-asset="cash"><div class="asset-top">现金<span class="asset-mark">¥</span></div><b data-value="cash">23,400.00</b><small>统一余额</small></button><button class="asset" data-asset="fund"><div class="asset-top">基金<span class="asset-mark">↗</span></div><b data-value="fund">168,000.00</b><small>含待确认投资 300.00</small></button><button class="asset" data-asset="provident"><div class="asset-top">公积金<span class="asset-mark">住</span></div><b data-value="provident">68,000.00</b><small id="home-pf-note">本月缴存 +5,200.00</small></button><button class="asset" data-asset="gold"><div class="asset-top">积存金<span class="asset-mark">金</span></div><b data-value="gold">27,000.00</b><small id="home-gold-note">持有 30.0000 克</small></button></div>
+<div class="section-head"><h2>本月收支</h2><button class="text-btn" data-go="ledger">查看账本 ›</button></div><section class="month-card"><div class="three-cols"><div><span>收入</span><b data-value="income">12,000</b></div><div><span>支出</span><b data-value="expense">6,800</b></div><div><span>结余</span><b data-value="surplus">5,200</b></div></div><div class="card-foot">公积金缴存、内部转账、投资买卖单独记录</div></section>
+<div class="section-head"><h2>自动记账</h2><button class="text-btn" data-go="plans">管理计划 ›</button></div><div class="list-box" id="home-plan-preview"></div><div class="tiny">计划执行异常会在这里显示，并保留处理入口。</div>
+</section>
+<section class="screen" id="screen-ledger"><header class="shark-header"><div class="ledger-titlebar"><button class="shark-icon home-link" onclick="go('home')" aria-label="返回资产总览">‹ 总览</button><strong>我的账本</strong><div class="ledger-tools"><button class="shark-icon" onclick="openLedgerSearch()" aria-label="搜索账单"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5"/></svg></button><button class="shark-icon" onclick="openCalendar()" aria-label="收支日历"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h2M13 14h2M7 18h2M13 18h2"/></svg></button></div></div><div class="shark-overview"><button class="shark-period" onclick="openLedgerPeriod()" aria-label="选择账本周期"><small id="ledger-period-year">2026年</small><b id="ledger-period-label">10月⌄</b></button><div class="shark-metric"><small>收入</small><b id="ledger-income"></b></div><div class="shark-metric"><small>支出</small><b id="ledger-expense"></b></div></div><div class="ledger-surplus-line"><span>结余 <b id="ledger-surplus"></b></span><span id="ledger-summary-context">本月日常收支</span></div></header><nav class="shark-tabs" aria-label="账本视图"><button data-ledger-view="records" onclick="setLedgerView('records')">明细</button><button data-ledger-view="stats" onclick="setLedgerView('stats')">图表</button></nav><div id="ledger-body" class="shark-body"></div></section>
+<section class="screen" id="screen-invest"></section><section class="screen" id="screen-fund-detail"></section><section class="screen" id="screen-invest-add"></section><section class="screen" id="screen-invest-import"></section><section class="screen" id="screen-invest-draft"></section><section class="screen" id="screen-entry"></section>
+<section class="screen" id="screen-cash"></section><section class="screen" id="screen-provident"></section><section class="screen" id="screen-gold"></section><section class="screen" id="screen-plans"></section>
+<section class="screen" id="screen-mine"><h1 class="view-title">我的</h1><p class="view-sub">个人账本与记录设置</p><div class="list-box"><button class="fund-row" data-go="plans"><span>自动记账计划</span><b id="my-plan-count">4 项 ›</b></button><button class="fund-row" id="open-category-settings"><span>收支分类</span><b>管理 ›</b></button><button class="fund-row" id="open-backup"><span>数据导出与恢复</span><b>查看 ›</b></button><button class="fund-row" id="open-data-status"><span>净值与报价更新</span><b>查看 ›</b></button></div><div class="timeline-note">线框稿当前仅演示页面结构，未连接账户、行情、识别或自动任务服务。</div></section>
+</div>
+<nav class="app-nav" aria-label="主导航"><button data-nav="home" class="active"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg>总览</button><button data-nav="ledger"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="15" height="18" rx="2"/><path d="M3 7h5M3 12h5M3 17h5M11 8h6M11 12h6"/></svg>账本</button><button class="add" id="add-entry" aria-label="记一笔">+</button><button data-nav="invest"><svg viewBox="0 0 24 24"><path d="M4 3v17h17M7 15l4-5 4 2 5-7"/></svg>投资</button><button data-nav="mine"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>我的</button></nav>
+<div class="overlay" id="overlay" hidden><section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-heading"><div class="handle"></div><div class="sheet-title"><h2 id="sheet-heading"></h2><button class="close" id="close-sheet" aria-label="关闭">×</button></div><div id="sheet-content"></div></section></div><div class="toast" id="toast" role="status" hidden></div>
+</div>
+  <p class="prototype-caption">手机端交互原型 · 虚构数据 · 刷新后重置</p>
+</main>
+</body>
+</html>

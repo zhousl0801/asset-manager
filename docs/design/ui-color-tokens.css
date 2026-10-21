@@ -1,0 +1,119 @@
+/* 资产管家 · 瓷白 + 克莱因蓝 · v1.0 · 2026-10-20
+ * 配套说明：UI配色规范.md。仅定义浅色主题，不自动跟随系统切换深色。
+ * 应用在页面或根容器设置 data-theme="porcelain" 后生效。
+ */
+[data-theme="porcelain"] {
+  color-scheme: light;
+
+  /* 原始色板：业务组件优先引用下方语义变量。 */
+  --palette-white: #FFFFFF;
+  --palette-blue-50: #F5F7FF;
+  --palette-blue-100: #EDF1FF;
+  --palette-blue-200: #DCE5FF;
+  --palette-blue-300: #B6C8FF;
+  --palette-blue-400: #7898ED;
+  --palette-blue-500: #315CD1;
+  --palette-blue-600: #002FA7;
+  --palette-blue-700: #00298F;
+  --palette-blue-800: #002276;
+  --palette-blue-900: #071D57;
+
+  --palette-gray-50: #F6F7FB;
+  --palette-gray-100: #F1F3F7;
+  --palette-gray-150: #E9EDF3;
+  --palette-gray-200: #E2E6EE;
+  --palette-gray-300: #D0D7E2;
+  --palette-gray-400: #7B8495;
+  --palette-gray-500: #7A879C;
+  --palette-gray-600: #626C80;
+  --palette-gray-900: #182033;
+
+  --palette-green: #18734E;
+  --palette-green-soft: #EAF6EF;
+  --palette-amber: #946200;
+  --palette-amber-soft: #FFF5DF;
+  --palette-red: #B93838;
+  --palette-red-hover: #A02D2D;
+  --palette-red-active: #862424;
+  --palette-red-soft: #FDEEEE;
+
+  /* 品牌与基础界面。 */
+  --color-brand: var(--palette-blue-600);
+  --color-brand-hover: var(--palette-blue-700);
+  --color-brand-active: var(--palette-blue-800);
+  --color-brand-soft: var(--palette-blue-100);
+  --color-brand-soft-hover: var(--palette-blue-200);
+  --color-on-brand: var(--palette-white);
+  --color-bg-page: var(--palette-gray-50);
+  --color-bg-surface: var(--palette-white);
+  --color-bg-subtle: var(--palette-gray-100);
+  --color-bg-hover: var(--palette-blue-50);
+  --color-bg-selected: var(--palette-blue-100);
+  --color-text-primary: var(--palette-gray-900);
+  --color-text-secondary: var(--palette-gray-600);
+  --color-text-placeholder: var(--palette-gray-600);
+  --color-text-link: var(--palette-blue-600);
+  --color-text-inverse: var(--palette-white);
+  --color-icon-default: var(--palette-gray-600);
+  --color-border-subtle: var(--palette-gray-200);
+  --color-border-default: var(--palette-gray-300);
+  --color-border-control: var(--palette-gray-500);
+  --color-border-hover: var(--palette-gray-600);
+  --color-border-focus: var(--palette-blue-600);
+  --color-focus-ring: var(--palette-blue-600);
+  --color-focus-gap: var(--palette-white);
+  --color-bg-disabled: var(--palette-gray-150);
+  --color-text-disabled: var(--palette-gray-400);
+  --color-border-disabled: var(--palette-gray-300);
+  --color-bg-readonly: var(--palette-gray-100);
+
+  /* 状态：文字、图标、实线边界用主色，背景用 soft。 */
+  --color-info: var(--palette-blue-600);
+  --color-info-bg: var(--palette-blue-100);
+  --color-success: var(--palette-green);
+  --color-success-bg: var(--palette-green-soft);
+  --color-warning: var(--palette-amber);
+  --color-warning-bg: var(--palette-amber-soft);
+  --color-error: var(--palette-red);
+  --color-error-bg: var(--palette-red-soft);
+  --color-danger: var(--palette-red);
+  --color-danger-hover: var(--palette-red-hover);
+  --color-danger-active: var(--palette-red-active);
+  --color-on-danger: var(--palette-white);
+
+  /* 财务：语义独立，即使当前复用相同原始色值也不能互换变量。 */
+  --color-finance-gain: var(--palette-red);
+  --color-finance-loss: var(--palette-green);
+  --color-finance-flat: var(--palette-gray-600);
+  --color-finance-income: var(--palette-green);
+  --color-finance-expense: var(--palette-gray-900);
+  --color-finance-transfer: var(--palette-blue-600);
+  --color-finance-net-change: var(--palette-gray-900);
+  --color-finance-liability: var(--palette-gray-900);
+
+  /* 图表分类：映射固定；文字标签统一使用 text-primary/secondary。 */
+  --color-chart-cash: var(--palette-blue-600);
+  --color-chart-investment: #6A4BC3;
+  --color-chart-property: #187E88;
+  --color-chart-receivable: #9B6B13;
+  --color-chart-other: #65748D;
+  --color-chart-liability: #8D4F70;
+  --color-chart-net-assets: var(--palette-blue-600);
+  --color-chart-total-assets: #187E88;
+  --color-chart-total-liabilities: #8D4F70;
+  --color-chart-grid: var(--palette-gray-200);
+  --color-chart-track: var(--palette-gray-150);
+  --color-chart-separator: var(--palette-white);
+  --color-chart-reference: var(--palette-gray-600);
+
+  /* 浮层与临时状态。 */
+  --color-bg-popover: var(--palette-white);
+  --color-bg-tooltip: var(--palette-gray-900);
+  --color-text-tooltip: var(--palette-white);
+  --color-overlay: rgba(24, 32, 51, 0.40);
+  --color-shadow: rgba(24, 32, 51, 0.08);
+  --color-skeleton-base: var(--palette-gray-150);
+  --color-skeleton-highlight: var(--palette-gray-100);
+  --color-text-selection-bg: var(--palette-blue-200);
+  --color-text-selection-fg: var(--palette-gray-900);
+}

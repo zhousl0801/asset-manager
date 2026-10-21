@@ -1,0 +1,33 @@
+# macOS / local editor state
+.DS_Store
+.idea/
+*.user
+*.suo
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
+TestResults/
+
+# Credentials and local environment values
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/appsettings.Local.json
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Local tooling output; curated design screenshots live in docs/design/
+.playwright-cli/
+playwright-report/
+test-results/
+output/
+*.log

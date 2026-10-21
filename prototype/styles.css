@@ -1,0 +1,133 @@
+/* Visual skin for the approved mobile Web App; business structure stays intact. */
+:root {
+  --line: var(--color-border-subtle); --muted: var(--color-text-secondary); --ink: var(--color-text-primary);
+  --accent: var(--color-brand); --tint: var(--color-brand-soft); --green: var(--color-finance-income);
+  color: var(--color-text-primary); background: var(--color-bg-page);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+body { background: var(--color-bg-page); color: var(--color-text-primary); }
+button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; box-shadow: 0 0 0 2px var(--color-focus-gap); }
+button:disabled { opacity: 1; color: var(--color-text-disabled); background: var(--color-bg-disabled); border-color: var(--color-border-disabled); }
+::selection { background: var(--color-text-selection-bg); color: var(--color-text-selection-fg); }
+.prototype-stage { width: 390px; max-width: 100%; margin: 32px auto 20px; }
+.prototype-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.prototype-heading > div > span { font-size: 11px; color: var(--color-text-secondary); letter-spacing: 1px; }
+.prototype-heading h1 { margin: 6px 0 0; font-size: 23px; font-weight: 600; letter-spacing: -.6px; }
+.preview-badge { font-size: 11px; color: var(--color-brand); border: 1px solid var(--color-border-subtle); padding: 6px 10px; border-radius: 5px; background: var(--color-bg-surface); }
+.prototype-caption { margin: 15px 0 0; text-align: center; font-size: 11px; color: var(--color-text-secondary); }
+.phone { width: 100%; height: 844px; min-height: 0; background: var(--color-bg-page); border: 1px solid var(--color-border-subtle); border-radius: 24px; box-shadow: 0 12px 36px var(--color-shadow); }
+.app-top { height: 76px; padding: 16px 21px; background: var(--color-bg-surface); border-bottom: 1px solid var(--color-border-subtle); }
+.app-name { display: flex; gap: 9px; align-items: center; font-size: 19px; font-weight: 650; letter-spacing: -.3px; }
+.app-name::before { content: ""; display: inline-block; width: 5px; height: 19px; border-radius: 2px; background: var(--color-brand); }
+.app-sub { color: var(--color-text-secondary); font-size: 11px; margin-top: 4px; }
+.icon-btn { color: var(--color-brand); border-color: var(--color-border-subtle); background: var(--color-bg-surface); min-height: 36px; min-width: 36px; border-radius: 9px; }
+.icon-btn:hover { background: var(--color-bg-hover); }
+.app-content { padding: 24px 19px 27px; scrollbar-width: none; background: var(--color-bg-page); }
+.app-content::-webkit-scrollbar { display: none; }
+.total { padding: 0 3px 24px; }
+.total-label { color: var(--color-text-secondary); font-size: 12px; gap: 8px; }
+.total-label .tag { font-size: 10px; border: 0; background: var(--color-bg-subtle); padding: 2px 5px; color: var(--color-text-secondary); }
+.total-value { color: var(--color-text-primary); font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-size: 43px; font-weight: 550; letter-spacing: -1.7px; line-height: 1.25; margin: 10px 0 12px; font-variant-numeric: tabular-nums; }
+.currency { font-size: 25px; padding-right: 5px; letter-spacing: 0; font-weight: 400; }
+.change { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.7; border-radius: 4px; }
+.change b { color: var(--color-finance-net-change); font-weight: 550; margin-left: 0; font-variant-numeric: tabular-nums; }
+.change > span { color: var(--color-brand); }
+.total > .tiny { margin-top: 6px; font-size: 10px; color: var(--color-text-secondary); line-height: 1.7; }
+.section-head { margin-bottom: 12px; }
+.section-head h2 { font-size: 14px; font-weight: 600; letter-spacing: -.2px; }
+.tiny { color: var(--color-text-secondary); font-size: 11px; }
+.text-btn { color: var(--color-brand); font-size: 11px; min-height: 28px; border-radius: 4px; }
+.text-btn:hover { color: var(--color-brand-hover); }
+.chart-panel { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 13px; padding: 17px 13px 11px; margin-bottom: 24px; }
+.chart-panel .section-head { gap: 5px; }
+.chart-panel .section-head h2 { font-size: 13px; }
+.range { gap: 1px; }
+.range button { font-size: 10px; padding: 5px 6px; color: var(--color-text-secondary); border-radius: 5px; min-height: 28px; }
+.range button:hover { background: var(--color-bg-hover); color: var(--color-brand); }
+.range button.active { background: var(--color-brand-soft); color: var(--color-brand); font-weight: 600; }
+.chart-readout { margin: 14px 1px 6px; min-height: 24px; color: var(--color-text-secondary); font-size: 10px; }
+.chart-readout b { color: var(--color-text-primary); font-size: 14px; font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-weight: 550; }
+.chart { height: 152px; }
+#chart-line { stroke: var(--color-brand); stroke-width: 2.2; }
+#chart-area { fill: var(--color-brand-soft); }
+#chart-dot { fill: var(--color-bg-surface); stroke: var(--color-brand); stroke-width: 2; }
+#chart-cursor { stroke: var(--color-border-control); }
+#chart-grid line { stroke: var(--color-chart-grid); stroke-dasharray: none; }
+#chart-grid text, #chart-labels text { fill: var(--color-text-secondary); font-size: 10px; font-family: inherit; }
+.chart-note { border-top: 1px solid var(--color-border-subtle); padding-top: 10px; margin-top: 7px; font-size: 10px; }
+.asset-grid { gap: 10px; margin-bottom: 25px; }
+.asset { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 12px; padding: 14px 13px 13px; min-height: 111px; }
+.asset:hover { border-color: var(--color-border-control); }
+.asset:active { background: var(--color-bg-selected); border-color: var(--color-brand); }
+.asset-top { color: var(--color-text-secondary); font-size: 12px; }
+.asset-mark { width: 25px; height: 25px; border-radius: 7px; background: var(--color-brand-soft); color: var(--color-brand); font-size: 12px; font-weight: 500; border: 0; }
+.asset b { color: var(--color-text-primary); font-size: 22px; font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-weight: 550; letter-spacing: -.5px; margin-top: 8px; }
+.asset small { color: var(--color-text-secondary); font-size: 10px; margin-top: 6px; line-height: 1.6; }
+.month-card { background: var(--color-bg-surface); border: 1px solid var(--color-border-subtle); border-radius: 12px; padding: 16px 13px 12px; margin-bottom: 25px; }
+.three-cols { gap: 10px; }
+.three-cols > div + div { border-left: 1px solid var(--color-border-subtle); padding-left: 12px; }
+.three-cols span { color: var(--color-text-secondary); font-size: 11px; }
+.three-cols b { color: var(--color-text-primary); font-size: 19px; font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-weight: 550; margin-top: 8px; }
+.three-cols [data-value="income"] { color: var(--color-finance-income); }
+.card-foot { color: var(--color-text-secondary); border-top: 1px solid var(--color-border-subtle); font-size: 10px; line-height: 1.7; padding-top: 11px; margin-top: 15px; }
+.list-box { border-color: var(--color-border-subtle); border-radius: 12px; background: var(--color-bg-surface); }
+#home-plan-preview { padding: 0 13px; margin-bottom: 8px; }
+#home-plan-preview .bare-btn + .bare-btn { border-top: 1px solid var(--color-border-subtle); }
+.task-row { padding: 15px 0; font-size: 11px; border-bottom: 0; }
+.task-row b { font-weight: 550; font-variant-numeric: tabular-nums; }
+.task-row small { font-size: 10px; color: var(--color-text-secondary); margin-top: 5px; line-height: 1.6; }
+.task-left { gap: 10px; }
+.date-box { color: var(--color-brand); background: var(--color-brand-soft); border: 0; border-radius: 7px; min-width: 40px; padding: 7px 8px; font-size: 10px; }
+.date-box b { color: var(--color-brand); font-size: 15px; margin-top: 3px; }
+.app-nav { height: 77px; background: var(--color-bg-surface); border-top: 1px solid var(--color-border-subtle); padding: 5px 8px 11px; }
+.app-nav button { min-height: 48px; color: var(--color-text-secondary); font-size: 10px; gap: 6px; }
+.app-nav button.active { color: var(--color-brand); font-weight: 600; }
+.app-nav button.active svg { stroke-width: 2; }
+.app-nav button.add { width: 45px; height: 45px; min-height: 45px; background: var(--color-brand); color: var(--color-on-brand); border-radius: 14px; margin-top: -8px; font-size: 29px; font-weight: 300; }
+.app-nav button.add:hover { background: var(--color-brand-hover); }
+.app-nav button.add:active { background: var(--color-brand-active); }
+.overlay { background: var(--color-overlay); }
+.sheet { background: var(--color-bg-popover); border-radius: 20px 20px 0 0; padding: 13px 21px 25px; }
+.sheet-title h2 { font-size: 18px; font-weight: 600; }
+.handle { background: var(--color-border-default); }
+.close { background: var(--color-bg-subtle); color: var(--color-text-secondary); }
+.description, .detail-line { font-size: 12px; line-height: 1.8; }
+.detail-line { border-color: var(--color-border-subtle); }
+.field { color: var(--color-text-secondary); font-size: 12px; }
+.field input, .field select { background: var(--color-bg-surface); color: var(--color-text-primary); border-color: var(--color-border-control); font-size: 16px; }
+.primary { background: var(--color-brand); color: var(--color-on-brand); border-color: var(--color-brand); }
+.primary:hover:not(:disabled) { background: var(--color-brand-hover); border-color: var(--color-brand-hover); }
+.primary:active:not(:disabled) { background: var(--color-brand-active); border-color: var(--color-brand-active); }
+.secondary { background: var(--color-bg-surface); color: var(--color-brand); border-color: var(--color-border-control); }
+.secondary:hover { background: var(--color-brand-soft); }
+.toast { background: var(--color-bg-tooltip); color: var(--color-text-tooltip); border-radius: 9px; font-size: 12px; }
+.block-note, .context-box { background: var(--color-bg-subtle); color: var(--color-text-secondary); }
+/* Other routes keep the approved wireframe and receive shared shell colors only. */
+.asset-page, .shark-header, .ledger-header, .entry-top { --asset-ink: var(--color-text-primary); --asset-tint: var(--color-brand-soft); }
+.asset-page .a-accent, .a-head button, .back-link { color: var(--color-brand); }
+.a-tabs button.active { color: var(--color-brand); border-color: var(--color-brand); }
+.shark-header, .ledger-header, .entry-top { background: var(--color-bg-surface); }
+.entry-mode-tabs button.active { color: var(--color-brand); border-color: var(--color-brand); }
+.entry-keypad .key-done { background: var(--color-brand); color: var(--color-on-brand); }
+.inflow { color: var(--color-finance-income); }
+@media (max-width: 520px) {
+  html, body { height: 100%; overflow: hidden; }
+  .prototype-stage { width: 100%; height: 100dvh; margin: 0; }
+  .prototype-heading, .prototype-caption { display: none; }
+  .phone { height: 100dvh; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .app-top { padding-top: max(16px, env(safe-area-inset-top)); height: calc(76px + env(safe-area-inset-top)); }
+  .app-content { padding: 24px 19px 27px; }
+  .app-nav { height: calc(77px + env(safe-area-inset-bottom)); padding-bottom: calc(11px + env(safe-area-inset-bottom)); }
+  .sheet { padding-bottom: calc(25px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 370px) {
+  .app-top { padding-left: 17px; padding-right: 17px; }
+  .app-content { padding-left: 14px; padding-right: 14px; }
+  .total-value { font-size: 39px; }
+  .asset { padding-left: 11px; padding-right: 11px; }
+  .asset b { font-size: 20px; }
+  .range button { font-size: 10px; padding-left: 4px; padding-right: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .app-content { scroll-behavior: auto; } }
