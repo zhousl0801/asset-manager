@@ -2,8 +2,11 @@ using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Plans;
+using AssetKeeper.Application.Provident;
 using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
+using AssetKeeper.Domain.Plans;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Tests.Ledgers;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +59,51 @@ public sealed class G2PostgresTests
         Assert.NotNull(overview);
         Assert.Equal(3300m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingAmount);
+    }
+
+    [PostgresFact]
+    public async Task AutoPlanExecution_PersistsSingleOccurrenceAndEntry()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using (var context = database.CreateContext())
+        {
+            var repository = new LedgerRepository(context);
+            var planRepository = new PlanRepository(context);
+            await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 1000m), CancellationToken.None);
+            var entries = new LedgerEntryService(repository, Dates);
+            var provident = new ProvidentFundService(repository, Dates);
+            var funds = new FundService(repository, Dates);
+            var plans = new PlanService(repository, planRepository, Dates);
+            var execution = new PlanExecutionService(repository, planRepository, Dates, entries, provident, funds);
+            var save = await plans.SaveAsync(
+                new SavePlanRequest(
+                    null,
+                    AutoPlanType.SalaryIncome,
+                    "工资",
+                    1000m,
+                    AutoPlanCycle.Monthly,
+                    Today.Day,
+                    null,
+                    new TimeOnly(9, 0),
+                    Today,
+                    null,
+                    Guid.NewGuid(),
+                    null),
+                CancellationToken.None);
+            Assert.Equal(AssetOperationStatus.Created, save.Status);
+
+            var first = await execution.RunDueAsync(CancellationToken.None);
+            var second = await execution.RunDueAsync(CancellationToken.None);
+
+            Assert.Equal(1, first.Completed);
+            Assert.Equal(0, second.Completed);
+        }
+
+        await using var readback = database.CreateContext();
+        Assert.Single(await readback.PlanOccurrences.ToListAsync());
+        Assert.Equal(PlanOccurrenceStatus.Completed, (await readback.PlanOccurrences.SingleAsync()).Status);
+        Assert.Single(await readback.LedgerEntries.ToListAsync());
+        Assert.Equal(2000m, (await readback.CashAccounts.SingleAsync()).Balance);
     }
 
     [PostgresFact]

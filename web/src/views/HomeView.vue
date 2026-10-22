@@ -88,7 +88,10 @@ onMounted(loadLedger)
       </div>
       <span class="currency-tag">{{ overview?.currency ?? 'CNY' }}</span>
     </header>
-    <RouterLink class="back-link history-entry-link" to="/history">历史核对与资产回看 ›</RouterLink>
+    <div class="home-links">
+      <RouterLink class="back-link history-entry-link" to="/history">历史核对与资产回看 ›</RouterLink>
+      <RouterLink class="back-link history-entry-link" to="/plans">自动记账与执行记录 ›</RouterLink>
+    </div>
 
     <p v-if="isLoading" class="state">正在读取账本…</p>
 
@@ -158,6 +161,12 @@ onMounted(loadLedger)
 </template>
 
 <style scoped>
+.home-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .total-panel {
   margin-bottom: 26px;
 }

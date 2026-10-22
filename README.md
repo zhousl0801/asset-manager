@@ -2,7 +2,7 @@
 
 个人资产观察与日常记账应用，统一记录现金、基金、公积金和平台积存金。
 
-当前已实现账本初始化、收支记账（新建、修改、撤销）、现金页与余额核对、公积金缴存与提取、基金持仓 / 买入待确认 / 买入确认 / 赎回申请 / 赎回确认 / 赎回到账、积存金持仓 / 买入 / 卖出待到账 / 到账、资产流转联动、本月汇总和分类 / 关键字筛选，以及独立资产起始日期、历史补录重放、更正 / 撤销预览、行情溯源、现金差额关联和基金净值 / 黄金参考报价获取。完整趋势图、截图识别、自动记账计划和后台任务尚未实现；原型全部使用虚构数据，刷新后重置。
+当前已实现账本初始化、收支记账（新建、修改、撤销）、现金页与余额核对、公积金缴存与提取、基金持仓 / 买入待确认 / 买入确认 / 赎回申请 / 赎回确认 / 赎回到账、积存金持仓 / 买入 / 卖出待到账 / 到账、工资 / 公积金 / 基金定投自动计划与后台执行、资产流转联动、本月汇总和分类 / 关键字筛选，以及独立资产起始日期、历史补录重放、更正 / 撤销预览、行情溯源、现金差额关联和基金净值 / 黄金参考报价获取。完整趋势图、截图识别和分类维护尚未实现；原型全部使用虚构数据，刷新后重置。
 
 当前分类使用固定默认列表，分类的新增、编辑和排序尚未实现。基金买入先计入待确认，确认后才转入份额与成本；赎回先冻结份额，确认后转为待到账，到账才进入现金；积存金卖出可直接到账，也可先计入待到账，收款后再进入现金。
 
@@ -14,7 +14,7 @@
 2. [应用形态与技术选型 V1.0](docs/architecture/资产管家-应用形态与技术选型-V1.0.md)：前后端框架、云端账本、PWA 和 AI 接入边界。
 3. [UI 设计索引](docs/design/README.md)：配色、整合线框、首页高保真演示及截图。
 
-开发记录先看[功能迭代总览](docs/development/README.md)；分轮详情：[现金闭环与资产流转](docs/development/2026-10-21-开发记录-现金闭环与资产流转.md)、[G0 正确性收口](docs/development/2026-10-21-开发记录-G0正确性收口.md)、[G1 业务事实与历史重算](docs/development/2026-10-22-开发记录-G1业务事实与历史重算.md)、[G2 基金买入待确认](docs/development/2026-10-22-开发记录-G2基金买入待确认.md)、[G2 基金赎回闭环](docs/development/2026-10-22-开发记录-G2基金赎回闭环.md)、[G2 积存金卖出待到账](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)、[真实行情接入](docs/development/2026-10-22-开发记录-真实行情接入.md)。
+开发记录先看[功能迭代总览](docs/development/README.md)；分轮详情：[现金闭环与资产流转](docs/development/2026-10-21-开发记录-现金闭环与资产流转.md)、[G0 正确性收口](docs/development/2026-10-21-开发记录-G0正确性收口.md)、[G1 业务事实与历史重算](docs/development/2026-10-22-开发记录-G1业务事实与历史重算.md)、[G2 基金买入待确认](docs/development/2026-10-22-开发记录-G2基金买入待确认.md)、[G2 基金赎回闭环](docs/development/2026-10-22-开发记录-G2基金赎回闭环.md)、[G2 积存金卖出待到账](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)、[真实行情接入](docs/development/2026-10-22-开发记录-真实行情接入.md)、[自动记账计划与后台任务](docs/development/2026-10-22-开发记录-自动记账计划与后台任务.md)。
 
 ## 技术基线
 
@@ -89,6 +89,14 @@ prototype/                     静态交互原型
 | POST | `/api/ledger/funds/quote` | 手动更新基金净值 |
 | POST | `/api/ledger/funds/{id}/quote/refresh` | 从天天基金获取并保存最近已披露净值 |
 | POST | `/api/ledger/gold/quote/refresh` | 获取并保存上期所黄金连续参考报价 |
+| GET | `/api/ledger/plans` | 读取自动计划、待处理期次和执行记录 |
+| POST | `/api/ledger/plans` | 新建或编辑自动计划 |
+| POST | `/api/ledger/plans/{id}/pause` | 暂停计划；暂停期间不追补 |
+| POST | `/api/ledger/plans/{id}/resume` | 恢复计划，从下一期继续 |
+| POST | `/api/ledger/plans/occurrences/{id}/retry` | 重新排队待处理期次 |
+| POST | `/api/ledger/plans/occurrences/{id}/skip` | 跳过本期 |
+| POST | `/api/ledger/plans/preview` | 按日期和试算现金只读试算 |
+| POST | `/api/ledger/plans/run` | 手动触发一次到期执行 |
 
 初始化请求：
 
@@ -209,7 +217,7 @@ dotnet tool restore
 dotnet ef database update --project src/AssetKeeper.Infrastructure --startup-project src/AssetKeeper.Api
 ```
 
-原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`；本轮使用更新后的 API 前已先备份并应用第 6 至 9 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
+原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；本轮使用更新后的 API 前已先备份并应用第 6 至 10 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
 
 ## 本地开发
 
@@ -229,6 +237,8 @@ npm run dev
 
 Vite 把 `/api` 代理到 `http://localhost:5069`；健康检查为 `GET /api/health`。账本接口需要可用的 PostgreSQL；只查看健康检查时无需建库。
 
+API 启动后会同时运行自动记账后台任务，默认每 60 秒检查一次到期计划，不依赖浏览器。可通过 `PlanScheduler:Enabled` 和 `PlanScheduler:IntervalSeconds` 调整；自动化测试默认关闭后台调度。
+
 常用检查：
 
 ```sh
@@ -237,9 +247,9 @@ dotnet test api/AssetKeeper.slnx
 cd web && npm run type-check && npm run test && npm run build
 ```
 
-真实行情接入后，后端 176 项（含 15 项真实 PostgreSQL）、前端 54 项测试通过，前端类型检查与生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键和事务回滚，不设置时这 15 项会明确跳过。执行方法见 [真实行情记录](docs/development/2026-10-22-开发记录-真实行情接入.md)。
+自动记账完成后，后端 186 项（含 16 项真实 PostgreSQL）、前端 56 项测试通过，前端类型检查与生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键和事务回滚，不设置时这 16 项会明确跳过。执行方法见 [自动记账记录](docs/development/2026-10-22-开发记录-自动记账计划与后台任务.md)。
 
-行情验收使用真实公开接口：基金 000001 返回 2026-10-21 净值 1.0640（天天基金），积存金参考价返回 2026-10-22 的 881.66 元/克（上期所黄金连续）；无效基金代码返回 502，原净值保留并显示最近失败原因。G0/G1/G2 的响应恢复、历史重算、在途交易与旧版本核对回归继续保留；验收使用独立临时服务和数据库。真实 iPhone/PWA 设备验收尚未执行。
+自动记账验收使用 5 秒后台调度：新建工资计划后未点击页面按钮，后台自动记账；公积金缴存、基金定投和超额现金定投同日执行，超额计划进入待处理且不阻断其他计划，试算与跳过均正常。G0/G1/G2、行情与历史核对回归继续保留；验收使用独立临时服务和数据库。真实 iPhone/PWA 设备验收尚未执行。
 
 ## 预览现有原型
 

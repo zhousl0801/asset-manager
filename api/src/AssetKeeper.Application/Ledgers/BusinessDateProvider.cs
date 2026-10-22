@@ -16,4 +16,12 @@ public sealed class BusinessDateProvider
     public DateTimeOffset UtcNow => _timeProvider.GetUtcNow();
 
     public DateOnly Today => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(UtcNow, BusinessTimeZone).DateTime);
+
+    public DateTimeOffset ToBusinessInstant(DateOnly date, TimeOnly time)
+    {
+        var local = DateTime.SpecifyKind(date.ToDateTime(time), DateTimeKind.Unspecified);
+        var utc = TimeZoneInfo.ConvertTimeToUtc(local, BusinessTimeZone);
+
+        return new DateTimeOffset(utc);
+    }
 }

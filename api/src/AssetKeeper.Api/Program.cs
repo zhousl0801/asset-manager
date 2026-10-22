@@ -4,7 +4,9 @@ using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.History;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
+using AssetKeeper.Api.Plans;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Plans;
 using AssetKeeper.Application.Provident;
 using AssetKeeper.Application.Quotes;
 using AssetKeeper.Infrastructure.Persistence;
@@ -37,6 +39,11 @@ builder.Services.AddScoped<ProvidentFundService>();
 builder.Services.AddScoped<GoldService>();
 builder.Services.AddScoped<FundService>();
 builder.Services.AddScoped<HistoryService>();
+builder.Services.AddScoped<IPlanRepository, PlanRepository>();
+builder.Services.AddScoped<PlanService>();
+builder.Services.AddScoped<PlanExecutionService>();
+builder.Services.Configure<PlanSchedulerOptions>(builder.Configuration.GetSection("PlanScheduler"));
+builder.Services.AddHostedService<PlanSchedulerService>();
 builder.Services.Configure<QuoteProviderOptions>(builder.Configuration.GetSection("QuoteProviders"));
 builder.Services.AddHttpClient<IFundQuoteProvider, EastmoneyFundQuoteProvider>((services, client) =>
 {
