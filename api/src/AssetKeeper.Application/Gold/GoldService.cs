@@ -2,6 +2,7 @@ using AssetKeeper.Application.Mutations;
 using AssetKeeper.Application.History;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
 
 namespace AssetKeeper.Application.Gold;
@@ -10,13 +11,23 @@ public sealed class GoldService
 {
     private readonly ILedgerRepository _ledgerRepository;
     private readonly BusinessDateProvider _businessDateProvider;
+    private readonly IGoldQuoteProvider? _quoteProvider;
 
     public GoldService(
         ILedgerRepository ledgerRepository,
         BusinessDateProvider businessDateProvider)
+        : this(ledgerRepository, businessDateProvider, null)
+    {
+    }
+
+    public GoldService(
+        ILedgerRepository ledgerRepository,
+        BusinessDateProvider businessDateProvider,
+        IGoldQuoteProvider? quoteProvider)
     {
         _ledgerRepository = ledgerRepository;
         _businessDateProvider = businessDateProvider;
+        _quoteProvider = quoteProvider;
     }
 
     public async Task<GoldOverviewDto?> GetOverviewAsync(CancellationToken cancellationToken)
@@ -77,7 +88,10 @@ public sealed class GoldService
             replay.Gold?.CanRebuild ?? true,
             replay.Gold?.Value is not null,
             pendingArrivalAmount,
-            pendingArrivals);
+            pendingArrivals,
+            holding?.LastQuoteAttemptAt,
+            holding?.LastQuoteSource,
+            holding?.LastQuoteError);
     }
 
     public Task<AssetOperationResult<GoldMutationResultDto>> BuyAsync(BuyGoldRequest request, CancellationToken cancellationToken)
@@ -395,6 +409,117 @@ public sealed class GoldService
         }
     }
 
+    public async Task<AssetOperationResult<GoldQuoteRefreshDto>> RefreshQuoteAsync(CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+
+        if (ledger is null)
+        {
+            return AssetOperationResult<GoldQuoteRefreshDto>.NotFound("账本尚未初始化。");
+        }
+
+        if (_quoteProvider is null)
+        {
+            return AssetOperationResult<GoldQuoteRefreshDto>.Unavailable("未配置黄金参考行情服务。");
+        }
+
+        var holding = await _ledgerRepository.GetGoldHoldingForUpdateAsync(ledger.Id, cancellationToken);
+        var now = _businessDateProvider.UtcNow;
+
+        try
+        {
+            var quote = await _quoteProvider.GetLatestAsync(cancellationToken);
+            var dateErrors = AssetValidation.ValidateValueDate(quote.EffectiveDate, _businessDateProvider.Today);
+
+            if (dateErrors.Count > 0 || quote.Quote <= 0)
+            {
+                throw new QuoteUnavailableException("行情服务返回的报价或有效日期无效。");
+            }
+
+            var latest = await _ledgerRepository.GetLatestPriceObservationAsync(
+                ledger.Id,
+                AssetType.Gold,
+                null,
+                cancellationToken);
+            var updated = latest is null
+                || latest.Price != quote.Quote
+                || latest.EffectiveDate != quote.EffectiveDate
+                || latest.Source != quote.Source;
+            var isNewHolding = holding is null;
+
+            holding ??= GoldHolding.Create(ledger.Id, 0m, 0m, quote.Quote, quote.EffectiveDate, now);
+
+            if (isNewHolding)
+            {
+                await _ledgerRepository.AddGoldHoldingAsync(holding, cancellationToken);
+            }
+
+            if (updated)
+            {
+                var transaction = AssetTransaction.CreateGoldQuote(
+                    ledger.Id,
+                    quote.Quote,
+                    quote.EffectiveDate,
+                    Guid.NewGuid(),
+                    now,
+                    quote.Source);
+
+                await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(
+                    ledger,
+                    transaction,
+                    quote.EffectiveDate,
+                    quote.EffectiveDate,
+                    null,
+                    cancellationToken);
+            }
+
+            holding.RecordQuoteSyncAttempt(now, quote.Source, null);
+            ledger.Touch(now);
+            await _ledgerRepository.SaveChangesAsync(cancellationToken);
+
+            return AssetOperationResult<GoldQuoteRefreshDto>.Success(new GoldQuoteRefreshDto(
+                updated,
+                quote.Source,
+                quote.Quote,
+                quote.EffectiveDate,
+                now,
+                now,
+                holding.Value,
+                ledger.CashAccount?.Balance ?? 0m));
+        }
+        catch (Exception exception) when (exception is QuoteUnavailableException or HttpRequestException or TaskCanceledException
+            or ArgumentException or InvalidOperationException or HistoryValidationException)
+        {
+            if (holding is not null)
+            {
+                holding.RecordQuoteSyncAttempt(now, null, Shorten(exception.Message));
+                ledger.Touch(now);
+
+                try
+                {
+                    await _ledgerRepository.SaveChangesAsync(cancellationToken);
+                }
+                catch (ConcurrencyConflictException)
+                {
+                    _ledgerRepository.DiscardChanges();
+                    return AssetOperationResult<GoldQuoteRefreshDto>.Conflict("数据已被其他操作修改，请刷新后重试。");
+                }
+            }
+
+            return AssetOperationResult<GoldQuoteRefreshDto>.Unavailable(exception.Message);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            _ledgerRepository.DiscardChanges();
+            return AssetOperationResult<GoldQuoteRefreshDto>.Conflict("数据已被其他操作修改，请刷新后重试。");
+        }
+    }
+
+    private static string Shorten(string message)
+    {
+        return message.Length <= 300 ? message : message[..300];
+    }
+
     public Task<AssetOperationResult<GoldMutationResultDto>> UpdateQuoteAsync(UpdateGoldQuoteRequest request, CancellationToken cancellationToken)
     {
         return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
@@ -446,7 +571,8 @@ public sealed class GoldService
                 request.Quote,
                 request.QuoteDate,
                 request.RequestId,
-                now);
+                now,
+                "manual");
 
             if (holding is null)
             {
@@ -462,6 +588,7 @@ public sealed class GoldService
 
 
             await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.QuoteDate, request.QuoteDate, null, cancellationToken);
+            holding.RecordQuoteSyncAttempt(now, "manual", null);
 
 
             return AssetOperationResult<GoldMutationResultDto>.Success(

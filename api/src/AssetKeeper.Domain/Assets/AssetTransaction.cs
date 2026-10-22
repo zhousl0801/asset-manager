@@ -9,6 +9,7 @@ public sealed class AssetTransaction
     public const decimal MaximumPrice = 1_000_000_000m;
     public const int MaximumSubjectLength = 100;
     public const int MaximumNoteLength = 200;
+    public const int MaximumQuoteSourceLength = 40;
 
     private AssetTransaction()
     {
@@ -37,6 +38,8 @@ public sealed class AssetTransaction
     public decimal Fee { get; private set; }
 
     public decimal? Price { get; private set; }
+
+    public string? QuoteSource { get; private set; }
 
     public string? Subject { get; private set; }
 
@@ -482,9 +485,10 @@ public sealed class AssetTransaction
         string subject,
         DateOnly netValueDate,
         Guid requestId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? source = null)
     {
-        return Create(
+        var transaction = Create(
             ledgerId,
             requestId,
             AssetType.Fund,
@@ -498,6 +502,9 @@ public sealed class AssetTransaction
             null,
             netValueDate,
             now);
+        transaction.QuoteSource = NormalizeQuoteSource(source);
+
+        return transaction;
     }
 
     public static AssetTransaction CreateGoldBuy(
@@ -625,9 +632,10 @@ public sealed class AssetTransaction
         decimal quote,
         DateOnly quoteDate,
         Guid requestId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? source = null)
     {
-        return Create(
+        var transaction = Create(
             ledgerId,
             requestId,
             AssetType.Gold,
@@ -641,6 +649,9 @@ public sealed class AssetTransaction
             null,
             quoteDate,
             now);
+        transaction.QuoteSource = NormalizeQuoteSource(source);
+
+        return transaction;
     }
 
     public static AssetTransaction CreateGoldCorrection(
@@ -855,5 +866,17 @@ public sealed class AssetTransaction
     private static string? Normalize(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeQuoteSource(string? source)
+    {
+        var value = Normalize(source);
+
+        if (value is not null && value.Length > MaximumQuoteSourceLength)
+        {
+            throw new ArgumentException($"行情来源不能超过 {MaximumQuoteSourceLength} 个字符。", nameof(source));
+        }
+
+        return value;
     }
 }

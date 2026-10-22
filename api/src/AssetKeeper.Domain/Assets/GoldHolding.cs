@@ -26,6 +26,12 @@ public sealed class GoldHolding
 
     public decimal RealizedProfit { get; private set; }
 
+    public DateTimeOffset? LastQuoteAttemptAt { get; private set; }
+
+    public string? LastQuoteSource { get; private set; }
+
+    public string? LastQuoteError { get; private set; }
+
     public DateTimeOffset UpdatedAt { get; private set; }
 
     public int Version { get; private set; }
@@ -43,6 +49,15 @@ public sealed class GoldHolding
         RealizedProfit = realizedProfit;
         Quote = quote;
         QuoteDate = quoteDate;
+        UpdatedAt = now;
+        Version++;
+    }
+
+    public void RecordQuoteSyncAttempt(DateTimeOffset now, string? source, string? error)
+    {
+        LastQuoteAttemptAt = now;
+        LastQuoteSource = Normalize(source);
+        LastQuoteError = Normalize(error);
         UpdatedAt = now;
         Version++;
     }
@@ -257,5 +272,10 @@ public sealed class GoldHolding
         {
             throw new ArgumentException("日期无效。", paramName);
         }
+    }
+
+    private static string? Normalize(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

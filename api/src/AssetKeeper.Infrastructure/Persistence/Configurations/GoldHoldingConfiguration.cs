@@ -45,6 +45,18 @@ internal sealed class GoldHoldingConfiguration : IEntityTypeConfiguration<GoldHo
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(holding => holding.LastQuoteAttemptAt)
+            .HasColumnName("last_quote_attempt_at")
+            .HasColumnType("timestamptz");
+
+        builder.Property(holding => holding.LastQuoteSource)
+            .HasColumnName("last_quote_source")
+            .HasMaxLength(AssetTransaction.MaximumQuoteSourceLength);
+
+        builder.Property(holding => holding.LastQuoteError)
+            .HasColumnName("last_quote_error")
+            .HasMaxLength(300);
+
         builder.Property(holding => holding.UpdatedAt)
             .HasColumnName("updated_at")
             .HasColumnType("timestamptz")

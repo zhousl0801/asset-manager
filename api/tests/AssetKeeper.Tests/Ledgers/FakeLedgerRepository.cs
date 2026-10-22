@@ -59,6 +59,22 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         return Task.CompletedTask;
     }
 
+    public Task<PriceObservation?> GetLatestPriceObservationAsync(
+        Guid ledgerId,
+        AssetType assetType,
+        Guid? positionId,
+        CancellationToken cancellationToken)
+    {
+        var price = _prices
+            .Where(item => item.LedgerId == ledgerId && item.AssetType == assetType
+                && item.FundPositionId == positionId && !item.IsSuperseded)
+            .OrderByDescending(item => item.EffectiveDate)
+            .ThenByDescending(item => item.RevisionOrder)
+            .FirstOrDefault();
+
+        return Task.FromResult(price);
+    }
+
     public void DiscardChanges()
     {
         foreach (var item in _saved)

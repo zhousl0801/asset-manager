@@ -24,6 +24,19 @@ export interface FundPosition {
   value: number
   holdingProfit: number
   realizedProfit: number
+  lastQuoteAttemptAt: string | null
+  lastQuoteSource: string | null
+  lastQuoteError: string | null
+}
+
+export interface FundQuoteRefreshResult {
+  position: FundPosition
+  updated: boolean
+  source: string
+  netValue: number
+  effectiveDate: string
+  obtainedAt: string
+  lastAttemptAt: string
 }
 
 export interface PendingFundBuy {

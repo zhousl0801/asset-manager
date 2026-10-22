@@ -38,6 +38,12 @@ public sealed class FundPosition
 
     public decimal RealizedProfit { get; private set; }
 
+    public DateTimeOffset? LastQuoteAttemptAt { get; private set; }
+
+    public string? LastQuoteSource { get; private set; }
+
+    public string? LastQuoteError { get; private set; }
+
     public DateTimeOffset UpdatedAt { get; private set; }
 
     public int Version { get; private set; }
@@ -57,6 +63,15 @@ public sealed class FundPosition
         RealizedProfit = realizedProfit;
         NetValue = netValue;
         NetValueDate = netValueDate;
+        UpdatedAt = now;
+        Version++;
+    }
+
+    public void RecordQuoteSyncAttempt(DateTimeOffset now, string? source, string? error)
+    {
+        LastQuoteAttemptAt = now;
+        LastQuoteSource = Normalize(source);
+        LastQuoteError = Normalize(error);
         UpdatedAt = now;
         Version++;
     }

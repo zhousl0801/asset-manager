@@ -2,6 +2,7 @@ using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Tests.Ledgers;
@@ -55,6 +56,38 @@ public sealed class G2PostgresTests
         Assert.NotNull(overview);
         Assert.Equal(3300m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingAmount);
+    }
+
+    [PostgresFact]
+    public async Task QuoteRefresh_PersistsSourceAndSyncStatus()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        Guid positionId;
+
+        await using (var context = database.CreateContext())
+        {
+            var repository = new LedgerRepository(context);
+            await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
+            var funds = new FundService(repository, Dates, new StubFundQuoteProvider());
+            var position = await funds.CreatePositionAsync(
+                new("基金", "000001", null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
+                CancellationToken.None);
+            positionId = position.Result!.Position.Id;
+            var refresh = await funds.RefreshQuoteAsync(positionId, CancellationToken.None);
+            Assert.Equal(AssetOperationStatus.Success, refresh.Status);
+        }
+
+        await using var readback = database.CreateContext();
+        var positionRow = await readback.FundPositions.SingleAsync();
+        var quoteRow = await readback.AssetTransactions.SingleAsync(transaction => transaction.Kind == AssetTransactionKind.FundQuote);
+
+        Assert.Equal(positionId, positionRow.Id);
+        Assert.Equal(1.25m, positionRow.NetValue);
+        Assert.Equal("eastmoney", positionRow.LastQuoteSource);
+        Assert.Null(positionRow.LastQuoteError);
+        Assert.NotNull(positionRow.LastQuoteAttemptAt);
+        Assert.Equal("eastmoney", quoteRow.QuoteSource);
+        Assert.Contains(await readback.PriceObservations.ToListAsync(), price => price.Source == "eastmoney");
     }
 
     [PostgresFact]
@@ -150,5 +183,13 @@ public sealed class G2PostgresTests
         Assert.Equal(900m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingArrivalAmount);
         Assert.Empty(overview.PendingArrivals!);
+    }
+
+    private sealed class StubFundQuoteProvider : IFundQuoteProvider
+    {
+        public Task<ExternalFundQuote> GetLatestAsync(string code, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new ExternalFundQuote(code, 1.25m, Today, "eastmoney", DateTimeOffset.UtcNow));
+        }
     }
 }

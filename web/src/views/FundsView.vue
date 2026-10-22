@@ -9,6 +9,7 @@ import {
   confirmFundSell,
   createFundPosition,
   fetchFundOverview,
+  refreshFundQuote,
   sellFund,
   updateFundQuote
 } from '../api/funds'
@@ -50,6 +51,7 @@ const formError = ref('')
 const confirmingPendingId = ref<string | null>(null)
 const confirmingSellId = ref<string | null>(null)
 const arrivingConfirmId = ref<string | null>(null)
+const refreshingQuote = ref(false)
 const form = reactive({
   positionId: '',
   name: '',
@@ -658,6 +660,42 @@ function positionLabel(position: FundPosition): string {
   return position.shareClass ? `${position.name} ${position.shareClass}` : position.name
 }
 
+function quoteSourceLabel(source: string | null): string {
+  switch (source) {
+    case 'eastmoney':
+      return '天天基金'
+    case 'manual':
+      return '手动录入'
+    default:
+      return source ?? '手动录入'
+  }
+}
+
+async function refreshQuote(): Promise<void> {
+  const position = selectedPosition.value
+
+  if (!position) {
+    formError.value = '请选择基金持仓。'
+    return
+  }
+
+  refreshingQuote.value = true
+  formError.value = ''
+
+  try {
+    const result = await refreshFundQuote(position.id)
+    notice.value = result.updated
+      ? `已获取最新净值 ${formatQuantity(result.netValue)}（${formatBusinessDate(result.effectiveDate)}，${quoteSourceLabel(result.source)}）。`
+      : `净值已是最新 ${formatQuantity(result.netValue)}（${formatBusinessDate(result.effectiveDate)}）。`
+    sheet.value = null
+    await loadOverview()
+  } catch (error) {
+    formError.value = getApiErrorMessage(error, '获取净值失败，已保留最近有效值。')
+  } finally {
+    refreshingQuote.value = false
+  }
+}
+
 function activityTitle(activity: FundActivity): string {
   switch (activity.type) {
     case 'opening':
@@ -717,7 +755,7 @@ function activityAmountText(activity: FundActivity): string {
   }
 
   if (activity.type === 'quote') {
-    return `净值 ${formatMoney(activity.netValue)}`
+    return `净值 ${formatQuantity(activity.netValue)}`
   }
 
   if (activity.type === 'buyConfirmed' || activity.type === 'sellApply') {
@@ -737,7 +775,7 @@ function activityMeta(activity: FundActivity): string {
   }
 
   const shares = activity.shares === null ? '' : `${formatQuantity(activity.shares)} 份`
-  const value = activity.netValue === null ? '' : `净值 ${formatMoney(activity.netValue)}`
+  const value = activity.netValue === null ? '' : `净值 ${formatQuantity(activity.netValue)}`
   const fee = activity.fee > 0 ? ` · 费用 ${formatMoney(activity.fee)}` : ''
   const details = [shares, value].filter(Boolean).join(' · ')
 
@@ -921,9 +959,10 @@ function goBack(): void {
             </div>
           </div>
           <footer>
-            <template v-if="position.hasEffectiveQuote">净值 {{ formatMoney(position.netValue) }} · {{ formatBusinessDate(position.netValueDate) }}</template><template v-else>行情依据不足</template>
+            <template v-if="position.hasEffectiveQuote">净值 {{ formatQuantity(position.netValue) }} · {{ formatBusinessDate(position.netValueDate) }} · {{ quoteSourceLabel(position.lastQuoteSource) }}</template><template v-else>行情依据不足</template>
             <span>已实现 {{ formatSignedMoney(position.realizedProfit) }}</span>
           </footer>
+          <small v-if="position.lastQuoteError" class="quote-error">最近获取失败：{{ position.lastQuoteError }}</small>
         </article>
       </section>
 
@@ -1172,6 +1211,16 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
+        <button
+          v-if="sheet === 'quote'"
+          type="button"
+          class="secondary-button"
+          :disabled="isSaving || refreshingQuote || !selectedPosition?.code"
+          @click="refreshQuote"
+        >
+          {{ refreshingQuote ? '获取中…' : '获取最新净值' }}
+        </button>
+        <small v-if="sheet === 'quote' && !selectedPosition?.code" class="form-note">该基金未填写基金代码，无法自动获取净值，可继续手动录入。</small>
         <CashAdjustmentLink v-if="sheet === 'buy'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="-(parseAmount(form.amount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
@@ -1512,6 +1561,14 @@ function goBack(): void {
   margin-top: 11px;
   color: var(--color-text-secondary);
   font-size: 9px;
+}
+
+.quote-error {
+  display: block;
+  margin-top: 7px;
+  color: var(--color-finance-loss);
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .empty-state {

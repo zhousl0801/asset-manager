@@ -2,7 +2,7 @@
 
 个人资产观察与日常记账应用，统一记录现金、基金、公积金和平台积存金。
 
-当前已实现账本初始化、收支记账（新建、修改、撤销）、现金页与余额核对、公积金缴存与提取、基金持仓 / 买入待确认 / 买入确认 / 赎回申请 / 赎回确认 / 赎回到账、积存金持仓 / 买入 / 卖出待到账 / 到账、资产流转联动、本月汇总和分类 / 关键字筛选，以及独立资产起始日期、历史补录重放、更正 / 撤销预览、行情溯源和现金差额关联。真实行情、截图识别、自动记账计划和后台任务尚未实现；原型全部使用虚构数据，刷新后重置。
+当前已实现账本初始化、收支记账（新建、修改、撤销）、现金页与余额核对、公积金缴存与提取、基金持仓 / 买入待确认 / 买入确认 / 赎回申请 / 赎回确认 / 赎回到账、积存金持仓 / 买入 / 卖出待到账 / 到账、资产流转联动、本月汇总和分类 / 关键字筛选，以及独立资产起始日期、历史补录重放、更正 / 撤销预览、行情溯源、现金差额关联和基金净值 / 黄金参考报价获取。完整趋势图、截图识别、自动记账计划和后台任务尚未实现；原型全部使用虚构数据，刷新后重置。
 
 当前分类使用固定默认列表，分类的新增、编辑和排序尚未实现。基金买入先计入待确认，确认后才转入份额与成本；赎回先冻结份额，确认后转为待到账，到账才进入现金；积存金卖出可直接到账，也可先计入待到账，收款后再进入现金。
 
@@ -14,7 +14,7 @@
 2. [应用形态与技术选型 V1.0](docs/architecture/资产管家-应用形态与技术选型-V1.0.md)：前后端框架、云端账本、PWA 和 AI 接入边界。
 3. [UI 设计索引](docs/design/README.md)：配色、整合线框、首页高保真演示及截图。
 
-开发记录先看[功能迭代总览](docs/development/README.md)；分轮详情：[现金闭环与资产流转](docs/development/2026-10-21-开发记录-现金闭环与资产流转.md)、[G0 正确性收口](docs/development/2026-10-21-开发记录-G0正确性收口.md)、[G1 业务事实与历史重算](docs/development/2026-10-22-开发记录-G1业务事实与历史重算.md)、[G2 基金买入待确认](docs/development/2026-10-22-开发记录-G2基金买入待确认.md)、[G2 基金赎回闭环](docs/development/2026-10-22-开发记录-G2基金赎回闭环.md)、[G2 积存金卖出待到账](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)。
+开发记录先看[功能迭代总览](docs/development/README.md)；分轮详情：[现金闭环与资产流转](docs/development/2026-10-21-开发记录-现金闭环与资产流转.md)、[G0 正确性收口](docs/development/2026-10-21-开发记录-G0正确性收口.md)、[G1 业务事实与历史重算](docs/development/2026-10-22-开发记录-G1业务事实与历史重算.md)、[G2 基金买入待确认](docs/development/2026-10-22-开发记录-G2基金买入待确认.md)、[G2 基金赎回闭环](docs/development/2026-10-22-开发记录-G2基金赎回闭环.md)、[G2 积存金卖出待到账](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)、[真实行情接入](docs/development/2026-10-22-开发记录-真实行情接入.md)。
 
 ## 技术基线
 
@@ -86,7 +86,9 @@ prototype/                     静态交互原型
 | POST | `/api/ledger/funds/sells` | 申请赎回，冻结份额；不改变现金和持仓成本 |
 | POST | `/api/ledger/funds/sells/{id}/confirm` | 确认赎回，减少份额 / 成本并转入待到账 |
 | POST | `/api/ledger/funds/sells/{id}/arrival` | 赎回到账，等额转入现金 |
-| POST | `/api/ledger/funds/quote` | 更新基金净值 |
+| POST | `/api/ledger/funds/quote` | 手动更新基金净值 |
+| POST | `/api/ledger/funds/{id}/quote/refresh` | 从天天基金获取并保存最近已披露净值 |
+| POST | `/api/ledger/gold/quote/refresh` | 获取并保存上期所黄金连续参考报价 |
 
 初始化请求：
 
@@ -173,6 +175,8 @@ G0 请求约定：收支新建、修改、撤销、现金核对和资产变更�
 
 历史数据或行情依据不足时，不声明完整总资产；首页展示部分资产合计，历史页返回 `totalAssets: null` 并解释覆盖缺口。
 
+行情来源：基金净值取天天基金公开接口的最近已披露值；积存金自动获取的是上期所黄金连续期货参考价，不是平台积存金报价，页面会明确标注并保留手动录入入口。行情失败时保留最近有效值和有效日期，并在基金 / 积存金持仓上显示最近一次失败原因。接口地址可通过 `QuoteProviders:FundBaseUrl`、`QuoteProviders:GoldBaseUrl` 和 `QuoteProviders:TimeoutSeconds` 覆盖，不需要凭据；接口不可用时不生成推算值。
+
 ## 数据库
 
 默认连接串为 `Host=localhost;Port=5432;Database=asset_keeper`，不包含凭据。需要指定用户名、口令或云端地址时，通过环境变量覆盖：
@@ -205,7 +209,7 @@ dotnet tool restore
 dotnet ef database update --project src/AssetKeeper.Infrastructure --startup-project src/AssetKeeper.Api
 ```
 
-原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`；本轮使用更新后的 API 前已先备份并应用第 6、7、8 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
+原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`；本轮使用更新后的 API 前已先备份并应用第 6 至 9 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
 
 ## 本地开发
 
@@ -233,9 +237,9 @@ dotnet test api/AssetKeeper.slnx
 cd web && npm run type-check && npm run test && npm run build
 ```
 
-G2 在途交易闭环完成后，后端 167 项（含 14 项真实 PostgreSQL）、前端 52 项测试通过，前端类型检查与生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键和事务回滚，不设置时这 14 项会明确跳过。执行方法见 [积存金待到账记录](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)。
+真实行情接入后，后端 176 项（含 15 项真实 PostgreSQL）、前端 54 项测试通过，前端类型检查与生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键和事务回滚，不设置时这 15 项会明确跳过。执行方法见 [真实行情记录](docs/development/2026-10-22-开发记录-真实行情接入.md)。
 
-G2 还完成真实 PostgreSQL + 浏览器验证：买入待确认不改份额、确认不二次扣款、赎回申请冻结份额、确认转待到账、到账进入现金、积存金待到账与到账、首页 / 现金页统计，以及已确认 / 已到账记录拒绝直接撤销。G0、G1 的响应恢复、历史重算与旧版本核对回归继续保留；验收使用独立临时服务和数据库。真实 iPhone/PWA 设备验收尚未执行。
+行情验收使用真实公开接口：基金 000001 返回 2026-10-21 净值 1.0640（天天基金），积存金参考价返回 2026-10-22 的 881.66 元/克（上期所黄金连续）；无效基金代码返回 502，原净值保留并显示最近失败原因。G0/G1/G2 的响应恢复、历史重算、在途交易与旧版本核对回归继续保留；验收使用独立临时服务和数据库。真实 iPhone/PWA 设备验收尚未执行。
 
 ## 预览现有原型
 

@@ -2,6 +2,7 @@ using AssetKeeper.Application.Mutations;
 using AssetKeeper.Application.History;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
 
 namespace AssetKeeper.Application.Funds;
@@ -10,13 +11,23 @@ public sealed class FundService
 {
     private readonly ILedgerRepository _ledgerRepository;
     private readonly BusinessDateProvider _businessDateProvider;
+    private readonly IFundQuoteProvider? _quoteProvider;
 
     public FundService(
         ILedgerRepository ledgerRepository,
         BusinessDateProvider businessDateProvider)
+        : this(ledgerRepository, businessDateProvider, null)
+    {
+    }
+
+    public FundService(
+        ILedgerRepository ledgerRepository,
+        BusinessDateProvider businessDateProvider,
+        IFundQuoteProvider? quoteProvider)
     {
         _ledgerRepository = ledgerRepository;
         _businessDateProvider = businessDateProvider;
+        _quoteProvider = quoteProvider;
     }
 
     public async Task<FundOverviewDto?> GetOverviewAsync(CancellationToken cancellationToken)
@@ -822,6 +833,120 @@ public sealed class FundService
         }
     }
 
+    public async Task<AssetOperationResult<FundQuoteRefreshDto>> RefreshQuoteAsync(
+        Guid positionId,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+
+        if (ledger is null)
+        {
+            return AssetOperationResult<FundQuoteRefreshDto>.NotFound("账本尚未初始化。");
+        }
+
+        var position = await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, positionId, cancellationToken);
+
+        if (position is null)
+        {
+            return AssetOperationResult<FundQuoteRefreshDto>.NotFound("基金持仓不存在。");
+        }
+
+        if (_quoteProvider is null)
+        {
+            return AssetOperationResult<FundQuoteRefreshDto>.Unavailable("未配置基金净值行情服务。");
+        }
+
+        if (string.IsNullOrWhiteSpace(position.Code))
+        {
+            return AssetOperationResult<FundQuoteRefreshDto>.Invalid(new[] { "该基金未填写基金代码，无法获取净值。" });
+        }
+
+        var now = _businessDateProvider.UtcNow;
+
+        try
+        {
+            var quote = await _quoteProvider.GetLatestAsync(position.Code, cancellationToken);
+            var dateErrors = AssetValidation.ValidateValueDate(quote.EffectiveDate, _businessDateProvider.Today);
+
+            if (dateErrors.Count > 0 || quote.NetValue <= 0)
+            {
+                throw new QuoteUnavailableException("行情服务返回的净值或有效日期无效。");
+            }
+
+            var latest = await _ledgerRepository.GetLatestPriceObservationAsync(
+                ledger.Id,
+                AssetType.Fund,
+                position.Id,
+                cancellationToken);
+            var updated = latest is null
+                || latest.Price != quote.NetValue
+                || latest.EffectiveDate != quote.EffectiveDate
+                || latest.Source != quote.Source;
+
+            if (updated)
+            {
+                var transaction = AssetTransaction.CreateFundQuote(
+                    ledger.Id,
+                    position.Id,
+                    quote.NetValue,
+                    position.DisplayName,
+                    quote.EffectiveDate,
+                    Guid.NewGuid(),
+                    now,
+                    quote.Source);
+
+                await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(
+                    ledger,
+                    transaction,
+                    quote.EffectiveDate,
+                    quote.EffectiveDate,
+                    null,
+                    cancellationToken);
+            }
+
+            position.RecordQuoteSyncAttempt(now, quote.Source, null);
+            ledger.Touch(now);
+            await _ledgerRepository.SaveChangesAsync(cancellationToken);
+
+            return AssetOperationResult<FundQuoteRefreshDto>.Success(new FundQuoteRefreshDto(
+                Map(position),
+                updated,
+                quote.Source,
+                quote.NetValue,
+                quote.EffectiveDate,
+                now,
+                now));
+        }
+        catch (Exception exception) when (exception is QuoteUnavailableException or HttpRequestException or TaskCanceledException
+            or ArgumentException or InvalidOperationException or HistoryValidationException)
+        {
+            position.RecordQuoteSyncAttempt(now, null, Shorten(exception.Message));
+            ledger.Touch(now);
+
+            try
+            {
+                await _ledgerRepository.SaveChangesAsync(cancellationToken);
+            }
+            catch (ConcurrencyConflictException)
+            {
+                _ledgerRepository.DiscardChanges();
+                return AssetOperationResult<FundQuoteRefreshDto>.Conflict("数据已被其他操作修改，请刷新后重试。");
+            }
+
+            return AssetOperationResult<FundQuoteRefreshDto>.Unavailable(exception.Message);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            _ledgerRepository.DiscardChanges();
+            return AssetOperationResult<FundQuoteRefreshDto>.Conflict("数据已被其他操作修改，请刷新后重试。");
+        }
+    }
+
+    private static string Shorten(string message)
+    {
+        return message.Length <= 300 ? message : message[..300];
+    }
+
     public Task<AssetOperationResult<FundMutationResultDto>> UpdateQuoteAsync(UpdateFundQuoteRequest request, CancellationToken cancellationToken)
     {
         return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
@@ -884,10 +1009,12 @@ public sealed class FundService
                 position.DisplayName,
                 request.NetValueDate,
                 request.RequestId,
-                now);
+                now,
+                "manual");
 
 
             await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.NetValueDate, request.NetValueDate, null, cancellationToken);
+            position.RecordQuoteSyncAttempt(now, "manual", null);
 
 
             return AssetOperationResult<FundMutationResultDto>.Success(
@@ -920,7 +1047,10 @@ public sealed class FundService
             position.NetValueDate,
             position.Value,
             position.HoldingProfit,
-            position.RealizedProfit);
+            position.RealizedProfit,
+            LastQuoteAttemptAt: position.LastQuoteAttemptAt,
+            LastQuoteSource: position.LastQuoteSource,
+            LastQuoteError: position.LastQuoteError);
     }
 
     private static FundActivityDto Map(

@@ -14,4 +14,7 @@ public sealed record FundPositionDto(
     decimal HoldingProfit,
     decimal RealizedProfit,
     bool HistoryConfirmed = true,
-    bool HasEffectiveQuote = true);
+    bool HasEffectiveQuote = true,
+    DateTimeOffset? LastQuoteAttemptAt = null,
+    string? LastQuoteSource = null,
+    string? LastQuoteError = null);

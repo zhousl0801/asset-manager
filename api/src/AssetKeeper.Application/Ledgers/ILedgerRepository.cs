@@ -13,6 +13,12 @@ public interface ILedgerRepository
 
     Task AddPriceObservationAsync(PriceObservation price, CancellationToken cancellationToken);
 
+    Task<PriceObservation?> GetLatestPriceObservationAsync(
+        Guid ledgerId,
+        AssetType assetType,
+        Guid? positionId,
+        CancellationToken cancellationToken);
+
     void DiscardChanges();
 
     Task<MutationReceipt?> FindMutationReceiptAsync(Guid ledgerId, Guid requestId, CancellationToken cancellationToken);

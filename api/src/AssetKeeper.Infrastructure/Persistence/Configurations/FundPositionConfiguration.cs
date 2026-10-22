@@ -62,6 +62,18 @@ internal sealed class FundPositionConfiguration : IEntityTypeConfiguration<FundP
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(position => position.LastQuoteAttemptAt)
+            .HasColumnName("last_quote_attempt_at")
+            .HasColumnType("timestamptz");
+
+        builder.Property(position => position.LastQuoteSource)
+            .HasColumnName("last_quote_source")
+            .HasMaxLength(AssetTransaction.MaximumQuoteSourceLength);
+
+        builder.Property(position => position.LastQuoteError)
+            .HasColumnName("last_quote_error")
+            .HasMaxLength(300);
+
         builder.Property(position => position.UpdatedAt)
             .HasColumnName("updated_at")
             .HasColumnType("timestamptz")

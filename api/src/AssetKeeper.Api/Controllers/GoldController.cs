@@ -68,6 +68,18 @@ public sealed class GoldController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("quote/refresh")]
+    [ProducesResponseType<GoldQuoteRefreshDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> RefreshQuote(CancellationToken cancellationToken)
+    {
+        var result = await _goldService.RefreshQuoteAsync(cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     [HttpPost("quote")]
     [ProducesResponseType<GoldMutationResultDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

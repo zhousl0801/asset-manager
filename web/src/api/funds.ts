@@ -5,6 +5,7 @@ import type {
   CreateFundPositionInput,
   FundMutationResult,
   FundOverview,
+  FundQuoteRefreshResult,
   FundSellArrivalInput,
   SellFundInput,
   UpdateFundQuoteInput
@@ -54,6 +55,12 @@ export function arriveFundSell(transactionId: string, input: FundSellArrivalInpu
   return apiRequest<FundMutationResult>(`/api/ledger/funds/sells/${encodeURIComponent(transactionId)}/arrival`, {
     method: 'POST',
     body: JSON.stringify(input)
+  })
+}
+
+export function refreshFundQuote(positionId: string): Promise<FundQuoteRefreshResult> {
+  return apiRequest<FundQuoteRefreshResult>(`/api/ledger/funds/${encodeURIComponent(positionId)}/quote/refresh`, {
+    method: 'POST'
   })
 }
 

@@ -2,7 +2,7 @@
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { arriveGoldSell, buyGold, fetchGoldOverview, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
+import { arriveGoldSell, buyGold, fetchGoldOverview, refreshGoldQuote, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
@@ -33,6 +33,7 @@ const isSaving = ref(false)
 const expectedVersion = ref(0)
 const formError = ref('')
 const arrivingPendingId = ref<string | null>(null)
+const refreshingQuote = ref(false)
 const form = reactive({
   grams: '',
   amount: '',
@@ -492,6 +493,35 @@ function activityMeta(activity: GoldActivity): string {
   return `${formatQuantity(activity.grams)} 克 · ${formatBusinessDate(activity.businessDate)}`
 }
 
+function quoteSourceLabel(source: string | null): string {
+  switch (source) {
+    case 'sina_shfe_au0':
+      return '上期所黄金连续（参考）'
+    case 'manual':
+      return '手动录入'
+    default:
+      return source ?? '手动录入'
+  }
+}
+
+async function refreshQuote(): Promise<void> {
+  refreshingQuote.value = true
+  formError.value = ''
+
+  try {
+    const result = await refreshGoldQuote()
+    notice.value = result.updated
+      ? `已获取参考报价 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
+      : `参考报价已是最新 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
+    sheet.value = null
+    await loadOverview()
+  } catch (error) {
+    formError.value = getApiErrorMessage(error, '获取参考报价失败，已保留最近有效值。')
+  } finally {
+    refreshingQuote.value = false
+  }
+}
+
 function goBack(): void {
   void router.push({ name: 'home' })
 }
@@ -584,8 +614,9 @@ function goBack(): void {
         <div>
           <span>估值报价</span>
           <b>{{ overview.hasEffectiveQuote ? `¥${formatMoney(overview.quote)} / 克` : '行情待补' }}</b>
-          <small v-if="overview.hasEffectiveQuote && overview.quoteDate">{{ formatBusinessDate(overview.quoteDate) }} · 已保存报价</small>
+          <small v-if="overview.hasEffectiveQuote && overview.quoteDate">{{ formatBusinessDate(overview.quoteDate) }} · {{ quoteSourceLabel(overview.lastQuoteSource) }}</small>
           <small v-else>尚未设置报价</small>
+          <small v-if="overview.lastQuoteError" class="quote-error">最近获取失败：{{ overview.lastQuoteError }}</small>
         </div>
         <div>
           <span>平均持仓成本</span>
@@ -593,6 +624,7 @@ function goBack(): void {
           <small>已实现盈亏 {{ formatSignedMoney(overview.realizedProfit) }}</small>
         </div>
       </div>
+      <p class="summary-note">自动获取的是上期所黄金连续参考价，不是平台积存金报价；可继续手动录入平台报价。</p>
 
       <p v-if="!overview.isConfigured" class="hint">
         尚未记录积存金持仓。可先录入已有持仓，或直接记录买入。
@@ -808,6 +840,15 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
+        <button
+          v-if="sheet === 'quote'"
+          type="button"
+          class="secondary-button"
+          :disabled="isSaving || refreshingQuote"
+          @click="refreshQuote"
+        >
+          {{ refreshingQuote ? '获取中…' : '获取参考报价' }}
+        </button>
         <CashAdjustmentLink v-if="sheet === 'buy' || (sheet === 'sell' && form.settlement === 'received')" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
@@ -1054,6 +1095,13 @@ function goBack(): void {
 .meta {
   color: var(--color-text-secondary);
   font-size: 10px;
+}
+
+.quote-error {
+  display: block;
+  color: var(--color-finance-loss);
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .pending-list {

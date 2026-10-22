@@ -31,11 +31,18 @@ public sealed class PriceObservation
     public void Supersede() => IsSuperseded = true;
 
     public static PriceObservation Create(Guid ledgerId, AssetType assetType, Guid? positionId, Guid? transactionId,
-        decimal price, DateOnly effectiveDate, DateTimeOffset now, long revisionOrder)
+        decimal price, DateOnly effectiveDate, DateTimeOffset now, long revisionOrder, string? source = null)
     {
         if (price <= 0 || price > AssetTransaction.MaximumPrice || decimal.Round(price, 4) != price || effectiveDate == default)
         {
             throw new ArgumentException("行情价格或有效日期无效。");
+        }
+
+        var normalizedSource = string.IsNullOrWhiteSpace(source) ? "manual" : source.Trim();
+
+        if (normalizedSource.Length > AssetTransaction.MaximumQuoteSourceLength)
+        {
+            throw new ArgumentException("行情来源过长。", nameof(source));
         }
 
         return new PriceObservation
@@ -47,6 +54,7 @@ public sealed class PriceObservation
             SourceTransactionId = transactionId,
             Price = price,
             EffectiveDate = effectiveDate,
+            Source = normalizedSource,
             ObtainedAt = now,
             RevisionOrder = revisionOrder
         };

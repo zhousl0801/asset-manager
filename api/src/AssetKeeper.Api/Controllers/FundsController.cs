@@ -112,6 +112,21 @@ public sealed class FundsController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("{positionId:guid}/quote/refresh")]
+    [ProducesResponseType<FundQuoteRefreshDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> RefreshQuote(
+        Guid positionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.RefreshQuoteAsync(positionId, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     [HttpPost("quote")]
     [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

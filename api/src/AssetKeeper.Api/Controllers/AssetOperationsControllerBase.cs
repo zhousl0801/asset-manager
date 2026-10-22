@@ -26,6 +26,12 @@ public abstract class AssetOperationsControllerBase : ControllerBase
                 Detail = result.Errors[0],
                 Status = StatusCodes.Status409Conflict
             }),
+            AssetOperationStatus.Unavailable => StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            {
+                Title = "行情服务暂不可用",
+                Detail = result.Errors[0],
+                Status = StatusCodes.Status502BadGateway
+            }),
             _ => throw new InvalidOperationException("未知的操作结果。")
         };
     }

@@ -106,6 +106,11 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("quantity");
 
+                    b.Property<string>("QuoteSource")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("quote_source");
+
                     b.Property<Guid?>("RelatedCashAdjustmentId")
                         .HasColumnType("uuid")
                         .HasColumnName("related_cash_adjustment_id");
@@ -155,6 +160,20 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("cost");
+
+                    b.Property<DateTimeOffset?>("LastQuoteAttemptAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_quote_attempt_at");
+
+                    b.Property<string>("LastQuoteError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("last_quote_error");
+
+                    b.Property<string>("LastQuoteSource")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("last_quote_source");
 
                     b.Property<Guid>("LedgerId")
                         .HasColumnType("uuid")
@@ -228,6 +247,20 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("grams");
+
+                    b.Property<DateTimeOffset?>("LastQuoteAttemptAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_quote_attempt_at");
+
+                    b.Property<string>("LastQuoteError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("last_quote_error");
+
+                    b.Property<string>("LastQuoteSource")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("last_quote_source");
 
                     b.Property<Guid>("LedgerId")
                         .HasColumnType("uuid")

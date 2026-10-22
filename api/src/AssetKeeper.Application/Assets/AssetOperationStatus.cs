@@ -6,5 +6,6 @@ public enum AssetOperationStatus
     Created,
     NotFound,
     Invalid,
-    Conflict
+    Conflict,
+    Unavailable
 }

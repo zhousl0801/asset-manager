@@ -16,4 +16,7 @@ public sealed record GoldOverviewDto(
     bool HistoryConfirmed = true,
     bool HasEffectiveQuote = true,
     decimal PendingArrivalAmount = 0m,
-    IReadOnlyList<PendingGoldArrivalDto>? PendingArrivals = null);
+    IReadOnlyList<PendingGoldArrivalDto>? PendingArrivals = null,
+    DateTimeOffset? LastQuoteAttemptAt = null,
+    string? LastQuoteSource = null,
+    string? LastQuoteError = null);

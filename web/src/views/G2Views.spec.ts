@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   sell: vi.fn(),
   confirmSell: vi.fn(),
   arriveSell: vi.fn(),
-  quote: vi.fn()
+  quote: vi.fn(),
+  refresh: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -22,7 +23,8 @@ vi.mock('../api/funds', () => ({
   sellFund: mocks.sell,
   confirmFundSell: mocks.confirmSell,
   arriveFundSell: mocks.arriveSell,
-  updateFundQuote: mocks.quote
+  updateFundQuote: mocks.quote,
+  refreshFundQuote: mocks.refresh
 }))
 
 const overview = {
@@ -47,7 +49,10 @@ const overview = {
     netValueDate: '2026-10-20',
     value: 1200,
     holdingProfit: 200,
-    realizedProfit: 0
+    realizedProfit: 0,
+    lastQuoteAttemptAt: null,
+    lastQuoteSource: 'manual',
+    lastQuoteError: null
   }],
   activities: [],
   pendingAmount: 300,
@@ -130,6 +135,33 @@ test('buy only records the paid amount and defers shares to confirmation', async
   expect(mocks.buy).toHaveBeenCalledTimes(1)
   expect(mocks.buy.mock.calls[0]![0]).toMatchObject({ positionId: 'p1', amount: 300 })
   expect(mocks.buy.mock.calls[0]![0]).not.toHaveProperty('shares')
+  view.unmount()
+})
+
+test('quote sheet can fetch the latest fund nav from the provider', async () => {
+  mocks.refresh.mockResolvedValue({
+    position: overview.positions[0],
+    updated: true,
+    source: 'eastmoney',
+    netValue: 13,
+    effectiveDate: '2026-10-21',
+    obtainedAt: '2026-10-21T02:00:00Z',
+    lastAttemptAt: '2026-10-21T02:00:00Z'
+  })
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+
+  const quoteButton = view.findAll('button').find((button) => button.text() === '更新净值')!
+  await quoteButton.trigger('click')
+  await flushPromises()
+
+  const fetchButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.sheet button'))
+    .find((button) => button.textContent?.includes('获取最新净值'))!
+  fetchButton.click()
+  await flushPromises()
+
+  expect(mocks.refresh).toHaveBeenCalledWith('p1')
+  expect(view.find('.notice').text()).toContain('已获取最新净值 13.00')
   view.unmount()
 })
 

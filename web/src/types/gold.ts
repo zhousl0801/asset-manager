@@ -37,6 +37,20 @@ export interface GoldOverview {
   activities: GoldActivity[]
   pendingArrivalAmount: number
   pendingArrivals: PendingGoldArrival[]
+  lastQuoteAttemptAt: string | null
+  lastQuoteSource: string | null
+  lastQuoteError: string | null
+}
+
+export interface GoldQuoteRefreshResult {
+  updated: boolean
+  source: string
+  quote: number
+  quoteDate: string
+  obtainedAt: string
+  lastAttemptAt: string
+  value: number
+  cashBalance: number
 }
 
 export interface GoldMutationResult {

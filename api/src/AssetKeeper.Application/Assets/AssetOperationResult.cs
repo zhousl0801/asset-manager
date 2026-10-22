@@ -30,4 +30,9 @@ public sealed record AssetOperationResult<T>(
     {
         return new AssetOperationResult<T>(AssetOperationStatus.Conflict, null, new[] { message });
     }
+
+    public static AssetOperationResult<T> Unavailable(string message)
+    {
+        return new AssetOperationResult<T>(AssetOperationStatus.Unavailable, null, new[] { message });
+    }
 }

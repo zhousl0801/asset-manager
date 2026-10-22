@@ -49,6 +49,21 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.PriceObservations.AddAsync(price, cancellationToken);
     }
 
+    public Task<PriceObservation?> GetLatestPriceObservationAsync(
+        Guid ledgerId,
+        AssetType assetType,
+        Guid? positionId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.PriceObservations
+            .AsNoTracking()
+            .Where(price => price.LedgerId == ledgerId && price.AssetType == assetType
+                && price.FundPositionId == positionId && !price.IsSuperseded)
+            .OrderByDescending(price => price.EffectiveDate)
+            .ThenByDescending(price => price.RevisionOrder)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public void DiscardChanges() => _dbContext.ChangeTracker.Clear();
 
     public Task<MutationReceipt?> FindMutationReceiptAsync(Guid ledgerId, Guid requestId, CancellationToken cancellationToken)

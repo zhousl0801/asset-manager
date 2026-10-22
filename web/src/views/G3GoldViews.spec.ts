@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   sell: vi.fn(),
   arrive: vi.fn(),
   quote: vi.fn(),
-  holding: vi.fn()
+  holding: vi.fn(),
+  refresh: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -18,7 +19,8 @@ vi.mock('../api/gold', () => ({
   sellGold: mocks.sell,
   arriveGoldSell: mocks.arrive,
   updateGoldQuote: mocks.quote,
-  saveGoldHolding: mocks.holding
+  saveGoldHolding: mocks.holding,
+  refreshGoldQuote: mocks.refresh
 }))
 
 const overview = {
@@ -37,7 +39,10 @@ const overview = {
   cashBalance: 10000,
   activities: [] as unknown[],
   pendingArrivalAmount: 0,
-  pendingArrivals: [] as unknown[]
+  pendingArrivals: [] as unknown[],
+  lastQuoteAttemptAt: null,
+  lastQuoteSource: 'manual',
+  lastQuoteError: null
 }
 
 beforeEach(() => {
@@ -83,6 +88,34 @@ test('gold sale can be recorded as pending arrival without cash', async () => {
     settlement: 'pendingArrival',
     relatedCashAdjustmentId: null
   })
+  view.unmount()
+})
+
+test('quote sheet can fetch the reference gold quote', async () => {
+  mocks.refresh.mockResolvedValue({
+    updated: true,
+    source: 'sina_shfe_au0',
+    quote: 910,
+    quoteDate: '2026-10-21',
+    obtainedAt: '2026-10-21T02:00:00Z',
+    lastAttemptAt: '2026-10-21T02:00:00Z',
+    value: 27300,
+    cashBalance: 10000
+  })
+  const view = mount(GoldView, { attachTo: document.body })
+  await flushPromises()
+
+  const quoteButton = view.findAll('button').find((button) => button.text() === '更新报价')!
+  await quoteButton.trigger('click')
+  await flushPromises()
+
+  const fetchButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.sheet button'))
+    .find((button) => button.textContent?.includes('获取参考报价'))!
+  fetchButton.click()
+  await flushPromises()
+
+  expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  expect(view.find('.notice').text()).toContain('已获取参考报价 910.00')
   view.unmount()
 })
 

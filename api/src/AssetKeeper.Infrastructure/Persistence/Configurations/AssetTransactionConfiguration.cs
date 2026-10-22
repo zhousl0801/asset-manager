@@ -72,6 +72,10 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
             .HasColumnName("price")
             .HasPrecision(18, 4);
 
+        builder.Property(transaction => transaction.QuoteSource)
+            .HasColumnName("quote_source")
+            .HasMaxLength(AssetTransaction.MaximumQuoteSourceLength);
+
         builder.Property(transaction => transaction.Subject)
             .HasColumnName("subject")
             .HasMaxLength(AssetTransaction.MaximumSubjectLength);

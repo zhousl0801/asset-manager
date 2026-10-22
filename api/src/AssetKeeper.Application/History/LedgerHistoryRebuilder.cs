@@ -41,7 +41,8 @@ public sealed class LedgerHistoryRebuilder
         if (transaction.Price is decimal price && transaction.PriceDate is DateOnly priceDate && !transaction.IsReversed)
         {
             await _repository.AddPriceObservationAsync(PriceObservation.Create(ledger.Id, transaction.AssetType,
-                transaction.FundPositionId, transaction.Id, price, priceDate, _dates.UtcNow, ledger.AllocateFactSequence()), cancellationToken);
+                transaction.FundPositionId, transaction.Id, price, priceDate, _dates.UtcNow, ledger.AllocateFactSequence(),
+                transaction.QuoteSource), cancellationToken);
         }
     }
 
