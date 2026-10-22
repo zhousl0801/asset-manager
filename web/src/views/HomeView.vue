@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
+import { fetchAssetTrend } from '../api/ledger'
+import AssetTrendChart from '../components/AssetTrendChart.vue'
 import { useLedgerStore } from '../stores/ledger'
 import { formatBusinessDate, formatMoney } from '../utils/format'
+import type { AssetTrend, TrendRange } from '../types/trend'
 
 interface AssetCard {
   key: string
@@ -18,6 +21,16 @@ interface AssetCard {
 const router = useRouter()
 const ledgerStore = useLedgerStore()
 const { overview, isLoading, errorMessage } = storeToRefs(ledgerStore)
+const trend = ref<AssetTrend | null>(null)
+const trendRange = ref<TrendRange>('month')
+const trendLoading = ref(false)
+const trendError = ref('')
+const rangeOptions: { value: TrendRange; label: string }[] = [
+  { value: 'month', label: '近1月' },
+  { value: 'quarter', label: '近3月' },
+  { value: 'year', label: '今年' },
+  { value: 'all', label: '全部' }
+]
 
 const assetCards = computed<AssetCard[]>(() => {
   const ledger = overview.value
@@ -73,6 +86,26 @@ async function loadLedger(): Promise<void> {
 
   if (status === 'missing') {
     await router.replace({ name: 'setup' })
+    return
+  }
+
+  if (status === 'ready') {
+    await loadTrend(trendRange.value)
+  }
+}
+
+async function loadTrend(range: TrendRange): Promise<void> {
+  trendRange.value = range
+  trendLoading.value = true
+  trendError.value = ''
+
+  try {
+    trend.value = await fetchAssetTrend(range)
+  } catch {
+    trend.value = null
+    trendError.value = '趋势暂时无法读取，请稍后重试。'
+  } finally {
+    trendLoading.value = false
   }
 }
 
@@ -110,6 +143,53 @@ onMounted(loadLedger)
         <p v-if="!overview.isComplete" class="meta">{{ hasUnconfiguredAssets ? '部分资产尚未录入，点击资产卡片补充。' : '持仓日期或行情依据待确认，请前往历史核对。' }}</p>
       </section>
 
+      <section class="trend-panel">
+        <div class="section-head">
+          <h2>总资产趋势</h2>
+          <span class="meta">{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}</span>
+        </div>
+        <div class="range-tabs" role="tablist" aria-label="趋势范围">
+          <button
+            v-for="option in rangeOptions"
+            :key="option.value"
+            type="button"
+            class="range-tab"
+            :class="{ active: trendRange === option.value }"
+            :disabled="trendLoading"
+            @click="loadTrend(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <p v-if="trendLoading && !trend" class="hint">正在读取趋势…</p>
+        <p v-else-if="trendError" class="hint">{{ trendError }}</p>
+        <AssetTrendChart v-else-if="trend && trend.points.length" :trend="trend" />
+        <p v-else class="hint">还没有可展示的趋势数据。</p>
+        <p v-for="note in trend?.notes ?? []" :key="note" class="hint">{{ note }}</p>
+        <p class="hint">完整总资产为空白表示该日依据不足；虚线为已有依据的部分资产合计，不作为完整总额。</p>
+      </section>
+
+      <div class="section-head">
+        <h2>资产分类</h2>
+        <span class="meta">4 类资产</span>
+      </div>
+      <div class="asset-grid">
+        <RouterLink
+          v-for="asset in assetCards"
+          :key="asset.key"
+          :to="asset.to"
+          class="asset-card"
+          :class="{ unset: !asset.isConfigured }"
+        >
+          <div class="asset-head">
+            <span>{{ asset.label }}</span>
+            <span class="asset-mark">{{ asset.mark }}</span>
+          </div>
+          <b>{{ asset.isConfigured ? (asset.amount === null ? '依据不足' : formatMoney(asset.amount)) : '未录入' }}</b>
+          <small>{{ asset.note }}</small>
+        </RouterLink>
+      </div>
+
       <section class="month-panel">
         <div class="section-head">
           <h2>本月收支</h2>
@@ -135,27 +215,6 @@ onMounted(loadLedger)
           本月还没有收支记录。<RouterLink class="text-link" :to="{ name: 'entry' }">去记一笔 ›</RouterLink>
         </p>
       </section>
-
-      <div class="section-head">
-        <h2>资产分类</h2>
-        <span class="meta">4 类资产</span>
-      </div>
-      <div class="asset-grid">
-        <RouterLink
-          v-for="asset in assetCards"
-          :key="asset.key"
-          :to="asset.to"
-          class="asset-card"
-          :class="{ unset: !asset.isConfigured }"
-        >
-          <div class="asset-head">
-            <span>{{ asset.label }}</span>
-            <span class="asset-mark">{{ asset.mark }}</span>
-          </div>
-          <b>{{ asset.isConfigured ? (asset.amount === null ? '依据不足' : formatMoney(asset.amount)) : '未录入' }}</b>
-          <small>{{ asset.note }}</small>
-        </RouterLink>
-      </div>
     </template>
   </main>
 </template>
@@ -169,6 +228,37 @@ onMounted(loadLedger)
 
 .total-panel {
   margin-bottom: 26px;
+}
+
+.trend-panel {
+  margin-bottom: 22px;
+}
+
+.range-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.range-tab {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.range-tab.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-weight: 550;
+}
+
+.range-tab:disabled {
+  opacity: 0.6;
 }
 
 .total-label {

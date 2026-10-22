@@ -9,10 +9,12 @@ namespace AssetKeeper.Api.Controllers;
 public sealed class LedgerController : ControllerBase
 {
     private readonly LedgerService _ledgerService;
+    private readonly TrendService _trendService;
 
-    public LedgerController(LedgerService ledgerService)
+    public LedgerController(LedgerService ledgerService, TrendService trendService)
     {
         _ledgerService = ledgerService;
+        _trendService = trendService;
     }
 
     [HttpGet]
@@ -33,6 +35,28 @@ public sealed class LedgerController : ControllerBase
         }
 
         return Ok(overview);
+    }
+
+    [HttpGet("trend")]
+    [ProducesResponseType<AssetTrendDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTrend(
+        [FromQuery] TrendRange range,
+        CancellationToken cancellationToken)
+    {
+        var trend = await _trendService.GetAsync(range, cancellationToken);
+
+        if (trend is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "账本尚未初始化",
+                Detail = "请先设置账本起始日期和现金余额。",
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+
+        return Ok(trend);
     }
 
     [HttpPost("initialize")]

@@ -33,6 +33,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddScoped<ILedgerRepository, LedgerRepository>();
 builder.Services.AddScoped<LedgerService>();
+builder.Services.AddScoped<TrendService>();
 builder.Services.AddScoped<LedgerEntryService>();
 builder.Services.AddScoped<CashService>();
 builder.Services.AddScoped<ProvidentFundService>();
