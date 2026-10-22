@@ -14,6 +14,7 @@ import {
   updateFundQuote
 } from '../api/funds'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
   formatBusinessDate,
@@ -788,7 +789,7 @@ function goBack(): void {
 </script>
 
 <template>
-  <main class="page funds-page">
+  <main class="page funds-page with-nav">
     <header class="funds-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>基金</h1>
@@ -1235,6 +1236,7 @@ function goBack(): void {
         </div>
       </form>
     </BottomSheet>
+    <AppNav />
   </main>
 </template>
 

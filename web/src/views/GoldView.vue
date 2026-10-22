@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { arriveGoldSell, buyGold, fetchGoldOverview, refreshGoldQuote, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
   formatBusinessDate,
@@ -528,7 +529,7 @@ function goBack(): void {
 </script>
 
 <template>
-  <main class="page gold-page">
+  <main class="page gold-page with-nav">
     <header class="gold-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>平台积存金</h1>
@@ -863,6 +864,7 @@ function goBack(): void {
         </div>
       </form>
     </BottomSheet>
+    <AppNav />
   </main>
 </template>
 

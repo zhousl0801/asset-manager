@@ -10,11 +10,16 @@ public sealed class LedgerController : ControllerBase
 {
     private readonly LedgerService _ledgerService;
     private readonly TrendService _trendService;
+    private readonly MonthChangeService _monthChangeService;
 
-    public LedgerController(LedgerService ledgerService, TrendService trendService)
+    public LedgerController(
+        LedgerService ledgerService,
+        TrendService trendService,
+        MonthChangeService monthChangeService)
     {
         _ledgerService = ledgerService;
         _trendService = trendService;
+        _monthChangeService = monthChangeService;
     }
 
     [HttpGet]
@@ -57,6 +62,26 @@ public sealed class LedgerController : ControllerBase
         }
 
         return Ok(trend);
+    }
+
+    [HttpGet("month-change")]
+    [ProducesResponseType<MonthChangeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMonthChange(CancellationToken cancellationToken)
+    {
+        var change = await _monthChangeService.GetAsync(cancellationToken);
+
+        if (change is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "账本尚未初始化",
+                Detail = "请先设置账本起始日期和现金余额。",
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+
+        return Ok(change);
     }
 
     [HttpPost("initialize")]

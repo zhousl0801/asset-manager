@@ -56,6 +56,40 @@ public sealed class LedgerEndpointsTests
     }
 
     [Fact]
+    public async Task GetMonthChange_BeforeInitialization_ReturnsNotFound()
+    {
+        using var factory = new AssetKeeperApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/ledger/month-change");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMonthChange_WithoutCompleteAssets_ReturnsEmptyChangeAndNotes()
+    {
+        using var factory = new AssetKeeperApiFactory();
+        using var client = factory.CreateClient();
+
+        await client.PostAsJsonAsync("/api/ledger/initialize", new
+        {
+            startDate = "2026-10-01",
+            cashBalance = 100m
+        });
+        var response = await client.GetAsync("/api/ledger/month-change");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var change = await response.Content.ReadFromJsonAsync<MonthChangeDto>();
+        Assert.NotNull(change);
+        Assert.False(change.IsComplete);
+        Assert.Null(change.TotalChange);
+        Assert.Null(change.InvestmentProfit);
+        Assert.NotEmpty(change.Notes);
+    }
+
+    [Fact]
     public async Task Initialize_WhenLedgerExists_ReturnsConflict()
     {
         using var factory = new AssetKeeperApiFactory();

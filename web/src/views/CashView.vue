@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchCashOverview, reconcileCash } from '../api/cash'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import type { CashActivity, CashActivityType, CashOverview } from '../types/cash'
@@ -260,7 +261,7 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <main class="page cash-page">
+  <main class="page cash-page with-nav">
     <header class="cash-header">
       <button type="button" class="back-link" @click="router.push({ name: 'home' })">‹ 总览</button>
       <h1>现金</h1>
@@ -452,6 +453,7 @@ function handleKeydown(event: KeyboardEvent): void {
         </section>
       </div>
     </Teleport>
+    <AppNav />
   </main>
 </template>
 

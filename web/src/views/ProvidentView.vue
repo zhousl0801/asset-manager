@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { depositProvident, fetchProvidentOverview, withdrawProvident, setProvidentOpening } from '../api/provident'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
@@ -145,7 +146,7 @@ function goBack(): void {
 </script>
 
 <template>
-  <main class="page provident-page">
+  <main class="page provident-page with-nav">
     <header class="provident-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>公积金</h1>
@@ -273,6 +274,7 @@ function goBack(): void {
         </div>
       </form>
     </BottomSheet>
+    <AppNav />
   </main>
 </template>
 

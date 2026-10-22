@@ -49,6 +49,10 @@ summary:focus-visible {
   padding: max(20px, env(safe-area-inset-top)) 19px calc(28px + env(safe-area-inset-bottom));
 }
 
+.page.with-nav {
+  padding-bottom: calc(97px + env(safe-area-inset-bottom));
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -141,6 +145,10 @@ summary:focus-visible {
 .text-link:hover {
   color: var(--color-brand-hover);
   text-decoration: underline;
+}
+
+a.back-link {
+  text-decoration: none;
 }
 
 .form-stack {

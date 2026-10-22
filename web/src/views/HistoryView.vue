@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { fetchHistory, previewHistory, confirmHistory } from '../api/history'
 import { getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import type { BusinessFact, HistoryChange, HistoryOverview, HistoryPreview, ReplayResult } from '../types/history'
@@ -139,7 +140,7 @@ function auditSummary(json: string | null): string {
 </script>
 
 <template>
-  <main class="page history-page">
+  <main class="page history-page with-nav">
     <header class="history-header"><RouterLink to="/" class="back-link">‹ 总览</RouterLink><h1>历史核对</h1></header>
     <p class="form-note">按业务日期与同日顺序重算。持仓起点与行情有效日期分别记录，依据不足时保留待确认状态。</p>
     <form class="history-date" @submit.prevent="load"><label class="form-field"><span>查看资产日期</span><input v-model="date" type="date" :max="today" required /></label><button class="secondary-button" :disabled="busy">查看</button></form>
@@ -201,6 +202,7 @@ function auditSummary(json: string | null): string {
         <button type="button" class="primary-button" :disabled="busy" @click="confirm">确认保存历史变更</button>
       </section>
     </BottomSheet>
+    <AppNav />
   </main>
 </template>
 

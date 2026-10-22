@@ -13,6 +13,7 @@ import {
 } from '../api/plans'
 import { fetchFundOverview } from '../api/funds'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import { createRequestId } from '../utils/request'
 import {
@@ -329,7 +330,7 @@ function goBack(): void {
 </script>
 
 <template>
-  <main class="page plan-page">
+  <main class="page plan-page with-nav">
     <header class="plan-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>自动记账</h1>
@@ -573,6 +574,7 @@ function goBack(): void {
         </div>
       </form>
     </BottomSheet>
+    <AppNav />
   </main>
 </template>
 

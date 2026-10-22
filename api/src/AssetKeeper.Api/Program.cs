@@ -34,6 +34,7 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped<ILedgerRepository, LedgerRepository>();
 builder.Services.AddScoped<LedgerService>();
 builder.Services.AddScoped<TrendService>();
+builder.Services.AddScoped<MonthChangeService>();
 builder.Services.AddScoped<LedgerEntryService>();
 builder.Services.AddScoped<CashService>();
 builder.Services.AddScoped<ProvidentFundService>();

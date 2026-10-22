@@ -22,6 +22,11 @@ const router = createRouter({
       component: () => import('../views/LedgerView.vue')
     },
     {
+      path: '/mine',
+      name: 'mine',
+      component: () => import('../views/MineView.vue')
+    },
+    {
       path: '/cash',
       name: 'cash',
       component: () => import('../views/CashView.vue')

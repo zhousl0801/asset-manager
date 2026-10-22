@@ -26,6 +26,18 @@ export interface LedgerOverview {
   month: MonthSummary
 }
 
+export interface MonthChange {
+  from: string
+  to: string
+  totalChange: number | null
+  livingSurplus: number
+  providentDeposit: number
+  investmentProfit: number | null
+  reconciliationDifference: number
+  isComplete: boolean
+  notes: string[]
+}
+
 export interface InitializeLedgerInput {
   cashAsOfDate?: string
   startDate: string

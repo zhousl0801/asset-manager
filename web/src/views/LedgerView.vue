@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchEntryPeriod } from '../api/entries'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppNav from '../components/AppNav.vue'
 import { ExpenseCategories, IncomeCategories } from '../constants/categories'
 import { formatBusinessDate, formatMoney, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel, periodStart, shiftAnchor } from '../utils/period'
@@ -171,7 +172,7 @@ function goBack(): void {
 </script>
 
 <template>
-  <main class="page ledger-page">
+  <main class="page ledger-page with-nav">
     <header class="ledger-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>账本</h1>
@@ -307,6 +308,7 @@ function goBack(): void {
       <p class="list-note">{{ summary?.entries.length ?? 0 }} 笔日常收支</p>
     </template>
   <button v-if="summary && summary.entries.length < summary.totalCount" type="button" class="secondary-button" :disabled="isLoading" @click="loadEntries(true)">加载更多（已显示 {{ summary.entries.length }} / {{ summary.totalCount }}）</button>
+    <AppNav />
   </main>
 </template>
 
