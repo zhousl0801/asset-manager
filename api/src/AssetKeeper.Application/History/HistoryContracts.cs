@@ -19,7 +19,8 @@ public sealed record HistoryChangeRequest(
     string? Category,
     string? Note,
     string Reason,
-    Guid? RelatedCashAdjustmentId = null);
+    Guid? RelatedCashAdjustmentId = null,
+    decimal? Fee = null);
 
 public sealed record ConfirmHistoryChangeRequest(HistoryChangeRequest Change, string PreviewToken);
 

@@ -50,13 +50,18 @@ public sealed class LedgerService
         var monthDeposit = providentTransactions
             .Where(transaction => transaction.Kind == AssetTransactionKind.ProvidentDeposit)
             .Sum(transaction => transaction.Amount);
+        var data = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
+        var snapshot = new LedgerReplayCalculator().Calculate(data, BusinessFact.From(data), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
+        var pendingFund = snapshot.Funds.Sum(item => item.PendingAmount);
         var notConfigured = new AssetOverviewDto(false, null, "尚未录入");
         var fund = fundPositions.Count == 0
             ? notConfigured
             : new AssetOverviewDto(
                 true,
-                fundPositions.Sum(position => position.Value),
-                $"持有 {fundPositions.Count} 只基金");
+                fundPositions.Sum(position => position.Value) + pendingFund,
+                pendingFund > 0
+                    ? $"持有 {fundPositions.Count} 只基金 · 待确认 {pendingFund.ToString("N2", CultureInfo.InvariantCulture)}"
+                    : $"持有 {fundPositions.Count} 只基金");
         var provident = providentAccount is null
             ? notConfigured
             : new AssetOverviewDto(
@@ -69,9 +74,6 @@ public sealed class LedgerService
                 true,
                 goldHolding.Value,
                 $"持有 {goldHolding.Grams:0.####} 克");
-
-        var data = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
-        var snapshot = new LedgerReplayCalculator().Calculate(data, BusinessFact.From(data), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
 
         if (fundPositions.Count > 0 && snapshot.Funds.Any(item => item.Value is null))
         {

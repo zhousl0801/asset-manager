@@ -56,6 +56,11 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
 
+                    b.Property<decimal>("Fee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("fee");
+
                     b.Property<Guid?>("FundPositionId")
                         .HasColumnType("uuid")
                         .HasColumnName("fund_position_id");
@@ -73,6 +78,10 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("LedgerId")
                         .HasColumnType("uuid")
                         .HasColumnName("ledger_id");
+
+                    b.Property<Guid?>("LinkedTransactionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_transaction_id");
 
                     b.Property<bool>("NeedsDateConfirmation")
                         .HasColumnType("boolean")
@@ -120,6 +129,8 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.HasIndex("FundPositionId");
 
                     b.HasIndex("LedgerId", "BusinessDate");
+
+                    b.HasIndex("LedgerId", "LinkedTransactionId");
 
                     b.HasIndex("LedgerId", "RequestId")
                         .IsUnique();

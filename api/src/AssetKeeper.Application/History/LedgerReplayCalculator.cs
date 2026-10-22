@@ -26,6 +26,7 @@ public sealed class LedgerReplayCalculator
 
         var allAnchors = facts.Where(fact => fact.Source == "adjustment").ToDictionary(fact => fact.Id);
         ValidateLinks(active, allAnchors);
+        var pendingBuys = ValidateFundBuyLinks(active);
         var fundStates = data.Positions.ToDictionary(position => position.Id, position => new MutableHolding());
         var goldState = data.Gold is null ? null : new MutableHolding();
         var unknownFunds = active.Where(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Fund)
@@ -82,12 +83,12 @@ public sealed class LedgerReplayCalculator
 
             if (fact.AssetType == AssetType.Fund && fact.PositionId is not null && !unknownFunds.Contains(fact.PositionId))
             {
-                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, false);
+                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, false);
             }
 
             if (fact.AssetType == AssetType.Gold && goldState is not null && !unknownGold)
             {
-                ApplyHolding(goldState, fact, facts, true);
+                ApplyHolding(goldState, fact, facts, pendingBuys, true);
             }
         }
 
@@ -100,7 +101,8 @@ public sealed class LedgerReplayCalculator
             var quote = Latest(observations, AssetType.Fund, position.Id);
             return new HoldingReplay(position.Id, known ? state.Quantity : position.Shares, known ? state.Cost : position.Cost,
                 known ? state.Realized : position.RealizedProfit, known ? state.CoverageFrom : null, known,
-                (known ? state.CoverageFrom is null : asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source);
+                (known ? state.CoverageFrom is null : asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
+                known ? state.PendingAmount : 0m);
         }).ToList();
         HoldingReplay? gold = null;
 
@@ -138,16 +140,31 @@ public sealed class LedgerReplayCalculator
             providentStart is null ? null : provident, providentStart, providentDate, funds, gold, adjustments, issues);
     }
 
-    private static void ApplyHolding(MutableHolding state, BusinessFact fact, IReadOnlyList<BusinessFact> allFacts, bool gold)
+    private static void ApplyHolding(MutableHolding state, BusinessFact fact, IReadOnlyList<BusinessFact> allFacts,
+        IReadOnlyDictionary<Guid, BusinessFact> pendingBuys, bool gold)
     {
         if (fact.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote)
         {
             return;
         }
 
+        if (fact.Kind == AssetTransactionKind.FundBuyPending)
+        {
+            state.PendingAmount += fact.Amount;
+            Ensure(state.PendingAmount >= 0m && state.PendingAmount <= AssetTransaction.MaximumAmount, fact, "待确认买入金额无效");
+            return;
+        }
+
+        if (fact.Kind == AssetTransactionKind.FundBuyConfirm)
+        {
+            var pending = pendingBuys[fact.LinkedTransactionId!.Value];
+            Ensure(state.PendingAmount >= pending.Amount, fact, "待确认买入已被确认，不能重复结转");
+            state.PendingAmount -= pending.Amount;
+        }
+
         var opening = fact.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening;
         var correction = fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection;
-        var buy = fact.Kind is AssetTransactionKind.FundBuy or AssetTransactionKind.GoldBuy;
+        var buy = fact.Kind is AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyConfirm or AssetTransactionKind.GoldBuy;
 
         if (opening)
         {
@@ -185,6 +202,48 @@ public sealed class LedgerReplayCalculator
 
         Ensure(state.Quantity >= 0m && state.Quantity <= AssetTransaction.MaximumQuantity
             && state.Cost >= 0m && state.Cost <= AssetTransaction.MaximumAmount && (state.Quantity != 0m || state.Cost == 0m), fact, "持仓数量或成本无效");
+    }
+
+    private static IReadOnlyDictionary<Guid, BusinessFact> ValidateFundBuyLinks(IReadOnlyList<BusinessFact> active)
+    {
+        var pendingBuys = active.Where(fact => fact.Kind == AssetTransactionKind.FundBuyPending)
+            .ToDictionary(fact => fact.Id);
+
+        foreach (var confirm in active.Where(fact => fact.Kind == AssetTransactionKind.FundBuyConfirm))
+        {
+            if (confirm.LinkedTransactionId is not Guid pendingId || !pendingBuys.TryGetValue(pendingId, out var pending))
+            {
+                throw new HistoryValidationException("买入确认关联的待确认记录不存在、已撤销或已结转。");
+            }
+
+            if (active.Any(fact => fact.Id != confirm.Id && fact.Kind == AssetTransactionKind.FundBuyConfirm
+                && fact.LinkedTransactionId == pendingId))
+            {
+                throw new HistoryValidationException("同一笔买入待确认只能确认一次。");
+            }
+
+            if (pending.AssetType != AssetType.Fund || pending.PositionId != confirm.PositionId)
+            {
+                throw new HistoryValidationException("买入确认与待确认记录的基金持仓不一致。");
+            }
+
+            if (pending.Quantity is not null || pending.Price is not null)
+            {
+                throw new HistoryValidationException("买入待确认记录不能包含份额或成交净值。");
+            }
+
+            if (confirm.Amount != pending.Amount)
+            {
+                throw new HistoryValidationException("买入确认金额必须与待确认金额一致；如需修改扣款金额，请先撤销确认。");
+            }
+
+            if (confirm.Date < pending.Date || (confirm.Date == pending.Date && confirm.Sequence <= pending.Sequence))
+            {
+                throw new HistoryValidationException("买入确认必须晚于对应的待确认记录。");
+            }
+        }
+
+        return pendingBuys;
     }
 
     private static void ValidateLinks(IReadOnlyList<BusinessFact> active, IReadOnlyDictionary<Guid, BusinessFact> anchors)
@@ -238,6 +297,8 @@ public sealed class LedgerReplayCalculator
         public decimal Cost { get; set; }
 
         public decimal Realized { get; set; }
+
+        public decimal PendingAmount { get; set; }
 
         public DateOnly? CoverageFrom { get; set; }
     }

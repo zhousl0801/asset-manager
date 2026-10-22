@@ -53,6 +53,21 @@ public sealed class FundsController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("buys/{transactionId:guid}/confirm")]
+    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmBuy(
+        Guid transactionId,
+        [FromBody] ConfirmFundBuyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.ConfirmBuyAsync(transactionId, request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     [HttpPost("sells")]
     [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

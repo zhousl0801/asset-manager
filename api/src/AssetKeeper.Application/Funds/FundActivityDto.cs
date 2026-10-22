@@ -11,4 +11,6 @@ public sealed record FundActivityDto(
     decimal? NetValue,
     DateOnly BusinessDate,
     string? Note,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    decimal Fee = 0m,
+    Guid? LinkedTransactionId = null);

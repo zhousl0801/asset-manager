@@ -28,7 +28,9 @@ public sealed class G1ServiceTests
         var id = opening.Result!.Position.Id;
         await funds.SellAsync(new(id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
 
-        var result = await funds.BuyAsync(new(id, 100m, 2000m, 20m, Today.AddDays(-11), Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
+        var pending = await funds.BuyAsync(new(id, 2000m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
+        var result = await funds.ConfirmBuyAsync(pending.Result!.Activity.Id,
+            new ConfirmFundBuyRequest(100m, 20m, Today.AddDays(-11), 0m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         var position = (await funds.GetOverviewAsync(CancellationToken.None))!.Positions.Single();
@@ -186,7 +188,7 @@ public sealed class G1ServiceTests
         Assert.False(past.Snapshot.Funds.Single().CanRebuild);
         Assert.Equal(EntryOperationStatus.Created, (await new LedgerEntryService(context.Repository, context.Dates)
             .CreateAsync(new(LedgerEntryKind.Income, "工资", 10m, Today, null, Guid.NewGuid()), CancellationToken.None)).Status);
-        Assert.Equal(AssetOperationStatus.Invalid, (await funds.BuyAsync(new(opening.Result!.Position.Id, 1m, 10m, 10m, Today, Today, null, Guid.NewGuid()), CancellationToken.None)).Status);
+        Assert.Equal(AssetOperationStatus.Invalid, (await funds.BuyAsync(new(opening.Result!.Position.Id, 10m, Today, null, Guid.NewGuid()), CancellationToken.None)).Status);
         var history = (await service.GetAsync(null, CancellationToken.None))!;
         var request = Change(history, history.Facts.Single(item => item.Id == fact.Id));
         var preview = await service.PreviewAsync(request, CancellationToken.None);

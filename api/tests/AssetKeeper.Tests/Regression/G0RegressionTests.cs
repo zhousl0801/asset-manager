@@ -54,7 +54,9 @@ public sealed class G0RegressionTests
         var id = opening.Result!.Position.Id;
         await service.SellAsync(new(id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
 
-        var result = await service.BuyAsync(new(id, 100m, 2000m, 20m, Today.AddDays(-11), Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
+        var pending = await service.BuyAsync(new(id, 2000m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
+        var result = await service.ConfirmBuyAsync(pending.Result!.Activity.Id,
+            new ConfirmFundBuyRequest(100m, 20m, Today.AddDays(-11), 0m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         var position = (await service.GetOverviewAsync(CancellationToken.None))!.Positions.Single();

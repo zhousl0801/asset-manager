@@ -9,4 +9,6 @@ public sealed record FundOverviewDto(
     IReadOnlyList<FundPositionDto> Positions,
     IReadOnlyList<FundActivityDto> Activities,
     bool HistoryConfirmed = true,
-    bool HasEffectiveQuotes = true);
+    bool HasEffectiveQuotes = true,
+    decimal PendingAmount = 0m,
+    IReadOnlyList<PendingFundBuyDto>? PendingBuys = null);

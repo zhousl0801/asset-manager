@@ -100,13 +100,21 @@ public sealed class AssetEndpointsTests
         var fundBuyResponse = await client.PostAsJsonAsync("/api/ledger/funds/buys", new
         {
             positionId = position.Position.Id,
-            shares = 10m,
             amount = 130m,
-            netValue = 13m,
-            netValueDate = date,
-            holdingDate = date,
             businessDate = date,
             note = "加仓",
+            requestId = Guid.NewGuid()
+        });
+        var fundBuy = await fundBuyResponse.Content.ReadFromJsonAsync<FundMutationResultDto>(JsonOptions);
+        Assert.NotNull(fundBuy);
+        var fundConfirmResponse = await client.PostAsJsonAsync($"/api/ledger/funds/buys/{fundBuy.Activity.Id}/confirm", new
+        {
+            shares = 10m,
+            netValue = 13m,
+            netValueDate = date,
+            fee = 0m,
+            businessDate = date,
+            note = "确认",
             requestId = Guid.NewGuid()
         });
         var fundSellResponse = await client.PostAsJsonAsync("/api/ledger/funds/sells", new
@@ -126,6 +134,7 @@ public sealed class AssetEndpointsTests
         Assert.Equal(HttpStatusCode.OK, goldSellResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, positionResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, fundBuyResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, fundConfirmResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, fundSellResponse.StatusCode);
 
         var provident = await client.GetFromJsonAsync<ProvidentOverviewDto>(
@@ -151,7 +160,7 @@ public sealed class AssetEndpointsTests
         Assert.NotNull(funds);
         Assert.Equal(1300m, funds.TotalValue);
         Assert.Single(funds.Positions);
-        Assert.Equal(3, funds.Activities.Count);
+        Assert.Equal(4, funds.Activities.Count);
 
         Assert.NotNull(cash);
         Assert.Equal(12018m, cash.Balance);
@@ -161,7 +170,7 @@ public sealed class AssetEndpointsTests
         Assert.Equal(5, cash.Activities.Count);
         Assert.All(cash.Activities, activity => Assert.Equal(CashActivityType.AssetTransfer, activity.Type));
         Assert.Contains(cash.Activities, activity => activity.Title == "公积金提取");
-        Assert.Contains(cash.Activities, activity => activity.Title == "基金买入");
+        Assert.Contains(cash.Activities, activity => activity.Title == "基金买入待确认");
         Assert.Contains(cash.Activities, activity => activity.Title == "积存金卖出");
 
         Assert.NotNull(home);

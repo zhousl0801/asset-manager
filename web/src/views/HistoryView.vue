@@ -24,10 +24,12 @@ const formError = ref('')
 let draftRevision = 0
 const rows = computed(() => history.value ? [history.value.cashOpening, ...history.value.facts] : [])
 const isQuote = computed(() => selected.value?.kind?.endsWith('Quote') ?? false)
+const isConfirmedBuy = computed(() => selected.value?.kind === 'FundBuyConfirm')
 const hasQuantity = computed(() => selected.value?.source === 'asset' && selected.value.quantity !== null)
 const canLink = computed(() => selected.value?.source === 'entry' || (selected.value?.cashEffect ?? 0) !== 0)
 const kindNames: Record<string, string> = {
-  fundOpening: '基金起始持仓', fundBuy: '基金买入', fundSell: '基金卖出', fundQuote: '基金净值', fundCorrection: '基金持仓核对',
+  fundOpening: '基金起始持仓', fundBuy: '基金买入', fundBuyPending: '买入待确认', fundBuyConfirm: '买入确认',
+  fundSell: '基金卖出', fundQuote: '基金净值', fundCorrection: '基金持仓核对',
   goldOpening: '积存金起始持仓', goldCorrection: '积存金持仓核对', goldBuy: '积存金买入', goldSell: '积存金卖出', goldQuote: '积存金报价',
   providentOpening: '起始公积金', providentDeposit: '公积金缴存', providentWithdrawal: '公积金提取'
 }
@@ -57,7 +59,7 @@ function edit(fact: BusinessFact, action: 'correct' | 'reverse'): void {
     source: fact.source, factId: fact.id, expectedFactVersion: fact.version, action,
     date: fact.date, sequence: fact.sequence, amount: fact.targetBalance ?? fact.amount,
     quantity: fact.quantity, price: fact.priceDate ? fact.price : null, priceDate: fact.priceDate,
-    entryKind: fact.entryKind, category: fact.category, note: fact.note, reason: '', relatedCashAdjustmentId: fact.relatedCashAdjustmentId
+    fee: fact.fee, entryKind: fact.entryKind, category: fact.category, note: fact.note, reason: '', relatedCashAdjustmentId: fact.relatedCashAdjustmentId
   })
 }
 async function showPreview(): Promise<void> {
@@ -97,6 +99,7 @@ function impacts(value: ReplayResult): { key: string; label: string; value: stri
       { key: `f${index}r`, label: `基金 ${index + 1} 已实现收益`, value: money(fund.realizedProfit) },
       { key: `f${index}p`, label: `基金 ${index + 1} 净值`, value: fund.price == null ? '依据不足' : formatQuantity(fund.price) },
       { key: `f${index}d`, label: `基金 ${index + 1} 行情日`, value: fund.priceDate ?? '依据不足' },
+      { key: `f${index}t`, label: `基金 ${index + 1} 待确认`, value: money(fund.pendingAmount) },
       { key: `f${index}v`, label: `基金 ${index + 1} 估值`, value: money(fund.value) }
     ]),
     ...(value.gold ? [
@@ -143,6 +146,7 @@ function auditSummary(json: string | null): string {
         <div v-for="(fund, index) in history.snapshot.funds" :key="fund.positionId ?? index" class="history-holding">
           <strong>基金 {{ index + 1 }} · {{ money(fund.value) }}</strong>
           <small>{{ fund.canRebuild ? `起始 ${fund.coverageFrom ?? '未覆盖'} · 份额 ${formatQuantity(fund.quantity)} · 成本 ${money(fund.cost)}` : '持仓日期待确认，当前缓存仅供核对' }}</small>
+          <small v-if="fund.pendingAmount > 0">买入待确认 {{ money(fund.pendingAmount) }}</small>
           <small>行情 {{ fund.priceDate ?? '无该时点行情' }} · {{ fund.priceSource === 'manual' ? '手动录入' : fund.priceSource ?? '未取得' }}</small>
         </div>
         <div v-if="history.snapshot.gold" class="history-holding"><strong>积存金 · {{ money(history.snapshot.gold.value) }}</strong><small>起始 {{ history.snapshot.gold.coverageFrom ?? '待确认' }} · {{ formatQuantity(history.snapshot.gold.quantity) }} 克 · 成本 {{ money(history.snapshot.gold.cost) }}</small><small>行情 {{ history.snapshot.gold.priceDate ?? '未取得' }} · {{ history.snapshot.gold.priceSource === 'manual' ? '手动录入' : history.snapshot.gold.priceSource ?? '无依据' }}</small></div>
@@ -153,6 +157,7 @@ function auditSummary(json: string | null): string {
           <div><strong>{{ title(fact) }}</strong><span v-if="fact.needsDateConfirmation" class="history-warning">日期待确认</span><span v-if="fact.isReversed"> · 已撤销</span></div>
           <p>{{ fact.date }} · 同日顺序 {{ fact.sequence }} · {{ money(fact.targetBalance ?? fact.amount) }}<template v-if="fact.quantity !== null"> · {{ formatQuantity(fact.quantity) }} {{ fact.assetType === 'gold' ? '克' : '份' }}</template></p>
           <small v-if="fact.priceDate">行情有效日期 {{ fact.priceDate }} · 价格 {{ formatQuantity(fact.price) }}</small>
+          <small v-if="fact.fee > 0">费用 {{ money(fact.fee) }}</small>
           <small v-if="fact.relatedCashAdjustmentId">已关联此前现金核对差额</small><small v-if="fact.note">{{ fact.note }}</small>
           <div v-if="!fact.isReversed" class="history-fact-actions"><button class="back-link" @click="edit(fact, 'correct')">{{ fact.needsDateConfirmation ? '确认原始日期' : '更正' }}</button><button v-if="fact.source !== 'cashOpening'" class="back-link" @click="edit(fact, 'reverse')">撤销</button></div>
         </article>
@@ -167,8 +172,9 @@ function auditSummary(json: string | null): string {
           <label class="form-field"><span>业务日期</span><input v-model="draft.date" type="date" :max="today" required /></label>
           <label v-if="draft.source !== 'cashOpening'" class="form-field"><span>同日业务顺序</span><input v-model.number="draft.sequence" type="number" min="1" step="1" required /><small>数字越小越先发生；须使用其他业务未占用的顺序。</small></label>
           <template v-if="draft.source === 'entry'"><label class="form-field"><span>收支方向</span><select v-model="draft.entryKind"><option value="income">收入</option><option value="expense">支出</option></select></label><label class="form-field"><span>分类</span><input v-model="draft.category" maxlength="20" required /></label></template>
-          <label v-if="!isQuote" class="form-field"><span>{{ draft.source === 'adjustment' ? '当时核对的实际余额（元）' : '金额 / 持仓成本（元）' }}</span><input v-model.number="draft.amount" type="number" min="0" step="0.01" required /></label>
+          <label v-if="!isQuote" class="form-field"><span>{{ draft.source === 'adjustment' ? '当时核对的实际余额（元）' : '金额 / 持仓成本（元）' }}</span><input v-model.number="draft.amount" type="number" min="0" step="0.01" :disabled="isConfirmedBuy" required /><small v-if="isConfirmedBuy">确认金额由对应的待确认记录决定；修改扣款金额请先撤销确认。</small></label>
           <label v-if="hasQuantity" class="form-field"><span>份额 / 克数</span><input v-model.number="draft.quantity" type="number" min="0" step="0.0001" required /></label>
+          <label v-if="isConfirmedBuy" class="form-field"><span>费用（元）</span><input v-model.number="draft.fee" type="number" min="0" step="0.01" /><small>费用包含在原扣款金额内，不产生额外现金变动。</small></label>
           <template v-if="selected.price !== null"><label class="form-field"><span>价格（选填，行情更新必填）</span><input v-model.number="draft.price" type="number" min="0.0001" step="0.0001" :required="isQuote" /></label><label v-if="!isQuote" class="form-field"><span>行情有效日期（有价格时必填）</span><input v-model="draft.priceDate" type="date" :max="today" /></label></template>
           <label class="form-field"><span>备注</span><input v-model="draft.note" maxlength="100" /></label>
           <CashAdjustmentLink v-if="canLink" v-model="draft.relatedCashAdjustmentId" :business-date="draft.date" :cash-effect="draft.source === 'entry' ? (draft.entryKind === 'income' ? draft.amount : -draft.amount) : Math.sign(selected.cashEffect) * draft.amount" :disabled="busy" />

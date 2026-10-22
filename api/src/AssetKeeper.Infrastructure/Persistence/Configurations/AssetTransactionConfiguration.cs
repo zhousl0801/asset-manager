@@ -46,6 +46,9 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
         builder.Property(transaction => transaction.FundPositionId)
             .HasColumnName("fund_position_id");
 
+        builder.Property(transaction => transaction.LinkedTransactionId)
+            .HasColumnName("linked_transaction_id");
+
         builder.Property(transaction => transaction.Quantity)
             .HasColumnName("quantity")
             .HasPrecision(18, 4);
@@ -57,6 +60,11 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
 
         builder.Property(transaction => transaction.CashEffect)
             .HasColumnName("cash_effect")
+            .HasPrecision(18, 2)
+            .IsRequired();
+
+        builder.Property(transaction => transaction.Fee)
+            .HasColumnName("fee")
             .HasPrecision(18, 2)
             .IsRequired();
 
@@ -88,6 +96,8 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
 
         builder.HasIndex(transaction => new { transaction.LedgerId, transaction.RequestId })
             .IsUnique();
+
+        builder.HasIndex(transaction => new { transaction.LedgerId, transaction.LinkedTransactionId });
 
         builder.HasOne(transaction => transaction.Ledger)
             .WithMany()

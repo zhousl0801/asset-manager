@@ -31,30 +31,137 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task BuyAsync_ReducesCashAndAddsSharesAndCost()
+    public async Task BuyAsync_ReducesCashAndRecordsPendingWithoutAddingShares()
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
 
         var result = await context.Funds.BuyAsync(
-            new BuyFundRequest(
-                position.Id,
-                10m,
-                130m,
-                13m,
-                BusinessToday,
-                BusinessToday,
-                "加仓",
-                Guid.NewGuid()),
+            new BuyFundRequest(position.Id, 130m, BusinessToday, "加仓", Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(100m, result.Result.Position.Shares);
+        Assert.Equal(1000m, result.Result.Position.Cost);
+        Assert.Equal(9870m, result.Result.CashBalance);
+        Assert.Equal(-130m, result.Result.Activity.CashEffect);
+        Assert.Equal(FundActivityType.BuyPending, result.Result.Activity.Type);
+        Assert.Null(result.Result.Activity.Shares);
+
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(130m, overview.PendingAmount);
+        Assert.Single(overview.PendingBuys!);
+        Assert.Equal(1330m, overview.TotalValue);
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_MovesPendingIntoSharesWithoutSecondCashDeduction()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(10m, 13m, 0m),
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         Assert.NotNull(result.Result);
         Assert.Equal(110m, result.Result.Position.Shares);
         Assert.Equal(1130m, result.Result.Position.Cost);
-        Assert.Equal(1430m, result.Result.Position.Value);
         Assert.Equal(9870m, result.Result.CashBalance);
-        Assert.Equal(-130m, result.Result.Activity.CashEffect);
+        Assert.Equal(0m, result.Result.Activity.CashEffect);
+        Assert.Equal(FundActivityType.BuyConfirmed, result.Result.Activity.Type);
+        Assert.Equal(0m, result.Result.Activity.Fee);
+
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(0m, overview.PendingAmount);
+        Assert.Empty(overview.PendingBuys!);
+        Assert.Equal(1430m, overview.TotalValue);
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_WithFee_KeepsPaidAmountAsCostAndRecordsFee()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(10m, 12.8m, 2m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(1130m, result.Result.Position.Cost);
+        Assert.Equal(2m, result.Result.Activity.Fee);
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_WithDuplicateRequestId_DoesNotConfirmTwice()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+        var request = ConfirmRequest(10m, 13m, 0m);
+
+        var first = await context.Funds.ConfirmBuyAsync(pending.Id, request, CancellationToken.None);
+        var second = await context.Funds.ConfirmBuyAsync(pending.Id, request, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, first.Status);
+        Assert.Equal(AssetOperationStatus.Success, second.Status);
+        Assert.NotNull(second.Result);
+        Assert.Equal(110m, second.Result.Position.Shares);
+        Assert.Equal(9870m, second.Result.CashBalance);
+        Assert.Equal(1130m, context.Repository.FundPositions[0].Cost);
+        Assert.Equal(3, context.Repository.AssetTransactions.Count);
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_WhenAlreadyConfirmed_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+        await context.Funds.ConfirmBuyAsync(pending.Id, ConfirmRequest(10m, 13m, 0m), CancellationToken.None);
+
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(10m, 13m, 0m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_BeforeBuyDate_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync(startDate: BusinessToday.AddDays(-5));
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(10m, 13m, 0m) with { BusinessDate = BusinessToday.AddDays(-1), NetValueDate = BusinessToday.AddDays(-1) },
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("确认日期不能早于买入日期"));
+    }
+
+    [Fact]
+    public async Task ConfirmBuyAsync_WithUnknownPending_ReturnsNotFound()
+    {
+        var context = await CreateContextAsync();
+
+        var result = await context.Funds.ConfirmBuyAsync(Guid.NewGuid(), ConfirmRequest(10m, 13m, 0m), CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.NotFound, result.Status);
     }
 
     [Fact]
@@ -63,15 +170,7 @@ public sealed class FundServiceTests
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
         var requestId = Guid.NewGuid();
-        var request = new BuyFundRequest(
-            position.Id,
-            10m,
-            130m,
-            13m,
-            BusinessToday,
-            BusinessToday,
-            null,
-            requestId);
+        var request = new BuyFundRequest(position.Id, 130m, BusinessToday, null, requestId);
 
         var first = await context.Funds.BuyAsync(request, CancellationToken.None);
         var second = await context.Funds.BuyAsync(request, CancellationToken.None);
@@ -79,9 +178,8 @@ public sealed class FundServiceTests
         Assert.Equal(AssetOperationStatus.Created, first.Status);
         Assert.Equal(AssetOperationStatus.Success, second.Status);
         Assert.NotNull(second.Result);
-        Assert.Equal(110m, second.Result.Position.Shares);
+        Assert.Equal(100m, second.Result.Position.Shares);
         Assert.Equal(9870m, second.Result.CashBalance);
-        Assert.Equal(110m, context.Repository.FundPositions[0].Shares);
         Assert.Equal(2, context.Repository.AssetTransactions.Count);
     }
 
@@ -90,9 +188,7 @@ public sealed class FundServiceTests
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
-        await context.Funds.BuyAsync(
-            new BuyFundRequest(position.Id, 10m, 130m, 13m, BusinessToday, BusinessToday, null, Guid.NewGuid()),
-            CancellationToken.None);
+        await BuyAndConfirmAsync(context, position.Id, 130m, 10m, 13m);
 
         var result = await context.Funds.SellAsync(
             new SellFundRequest(position.Id, 10m, 150m, BusinessToday, "赎回", Guid.NewGuid()),
@@ -129,12 +225,13 @@ public sealed class FundServiceTests
         var position = await CreatePositionAsync(context);
 
         var result = await context.Funds.BuyAsync(
-            new BuyFundRequest(position.Id, 1m, 101m, 12m, BusinessToday, BusinessToday, null, Guid.NewGuid()),
+            new BuyFundRequest(position.Id, 101m, BusinessToday, null, Guid.NewGuid()),
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Invalid, result.Status);
         Assert.Contains(result.Errors, error => error.Contains("现金余额不足"));
         Assert.Equal(100m, context.Repository.FundPositions[0].Shares);
+        Assert.Single(context.Repository.AssetTransactions);
     }
 
     [Fact]
@@ -160,7 +257,7 @@ public sealed class FundServiceTests
         var context = await CreateContextAsync();
 
         var result = await context.Funds.BuyAsync(
-            new BuyFundRequest(Guid.NewGuid(), 1m, 10m, 10m, BusinessToday, BusinessToday, null, Guid.NewGuid()),
+            new BuyFundRequest(Guid.NewGuid(), 10m, BusinessToday, null, Guid.NewGuid()),
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.NotFound, result.Status);
@@ -183,9 +280,7 @@ public sealed class FundServiceTests
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
-        await context.Funds.BuyAsync(
-            new BuyFundRequest(position.Id, 10m, 130m, 13m, BusinessToday, BusinessToday, null, Guid.NewGuid()),
-            CancellationToken.None);
+        await BuyAndConfirmAsync(context, position.Id, 130m, 10m, 13m);
         await context.Funds.SellAsync(
             new SellFundRequest(position.Id, 10m, 150m, BusinessToday, null, Guid.NewGuid()),
             CancellationToken.None);
@@ -200,12 +295,27 @@ public sealed class FundServiceTests
         Assert.Equal(20m, cash.NetChange);
         Assert.Equal(2, cash.Activities.Count);
         Assert.All(cash.Activities, activity => Assert.Equal(CashActivityType.AssetTransfer, activity.Type));
-        Assert.Contains(cash.Activities, activity => activity.Title == "基金买入");
+        Assert.Contains(cash.Activities, activity => activity.Title == "基金买入待确认");
         Assert.Contains(cash.Activities, activity => activity.Title == "基金卖出");
         Assert.NotNull(home);
         Assert.True(home.Fund.IsConfigured);
         Assert.Equal(1300m, home.Fund.Amount);
         Assert.Equal(11320m, home.TotalAssets);
+    }
+
+    [Fact]
+    public async Task HomeOverview_IncludesPendingBuyWithoutChangingTotalAssets()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        await BuyPendingAsync(context, position.Id, 130m);
+
+        var home = await context.Ledger.GetOverviewAsync(CancellationToken.None);
+
+        Assert.NotNull(home);
+        Assert.Equal(1330m, home.Fund.Amount);
+        Assert.Equal(11200m, home.TotalAssets);
+        Assert.Contains("待确认", home.Fund.Note);
     }
 
     [Fact]
@@ -218,6 +328,39 @@ public sealed class FundServiceTests
         var overview = await service.GetOverviewAsync(CancellationToken.None);
 
         Assert.Null(overview);
+    }
+
+    private static async Task<FundActivityDto> BuyPendingAsync(TestContext context, Guid positionId, decimal amount)
+    {
+        var result = await context.Funds.BuyAsync(
+            new BuyFundRequest(positionId, amount, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+
+        return result.Result.Activity;
+    }
+
+    private static async Task BuyAndConfirmAsync(
+        TestContext context,
+        Guid positionId,
+        decimal amount,
+        decimal shares,
+        decimal netValue)
+    {
+        var pending = await BuyPendingAsync(context, positionId, amount);
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(shares, netValue, 0m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+    }
+
+    private static ConfirmFundBuyRequest ConfirmRequest(decimal shares, decimal netValue, decimal fee)
+    {
+        return new ConfirmFundBuyRequest(shares, netValue, BusinessToday, fee, BusinessToday, null, Guid.NewGuid());
     }
 
     private static async Task<FundPosition> CreatePositionAsync(TestContext context)
@@ -246,13 +389,13 @@ public sealed class FundServiceTests
             HoldingDate: BusinessToday);
     }
 
-    private static async Task<TestContext> CreateContextAsync(decimal cashBalance = 10000m)
+    private static async Task<TestContext> CreateContextAsync(decimal cashBalance = 10000m, DateOnly? startDate = null)
     {
         var repository = new FakeLedgerRepository();
         var provider = new BusinessDateProvider(new FixedTimeProvider(Now));
         var ledgerService = new LedgerService(repository, provider);
         await ledgerService.InitializeAsync(
-            new InitializeLedgerRequest(BusinessToday, cashBalance),
+            new InitializeLedgerRequest(startDate ?? BusinessToday, cashBalance),
             CancellationToken.None);
 
         return new TestContext(

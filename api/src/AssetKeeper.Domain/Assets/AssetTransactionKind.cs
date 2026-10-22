@@ -6,6 +6,8 @@ public enum AssetTransactionKind
     ProvidentWithdrawal,
     FundOpening,
     FundBuy,
+    FundBuyPending,
+    FundBuyConfirm,
     FundSell,
     FundQuote,
     GoldBuy,

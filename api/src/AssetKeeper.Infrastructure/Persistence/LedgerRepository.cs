@@ -323,6 +323,17 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.AssetTransactions.AddAsync(transaction, cancellationToken);
     }
 
+    public Task<AssetTransaction?> GetAssetTransactionForUpdateAsync(
+        Guid ledgerId,
+        Guid transactionId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.AssetTransactions
+            .SingleOrDefaultAsync(
+                transaction => transaction.Id == transactionId && transaction.LedgerId == ledgerId,
+                cancellationToken);
+    }
+
     public Task<AssetTransaction?> FindAssetTransactionByRequestIdAsync(
         Guid ledgerId,
         Guid requestId,

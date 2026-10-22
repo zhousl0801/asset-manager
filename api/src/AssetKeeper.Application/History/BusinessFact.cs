@@ -33,6 +33,10 @@ public sealed record BusinessFact
 
     public DateOnly? PriceDate { get; init; }
 
+    public decimal Fee { get; init; }
+
+    public Guid? LinkedTransactionId { get; init; }
+
     public bool IsReversed { get; init; }
 
     public bool NeedsDateConfirmation { get; init; }
@@ -92,6 +96,8 @@ public sealed record BusinessFact
             Subject = transaction.Subject,
             Price = transaction.Price,
             PriceDate = transaction.PriceDate,
+            Fee = transaction.Fee,
+            LinkedTransactionId = transaction.LinkedTransactionId,
             Note = transaction.Note,
             IsReversed = transaction.IsReversed,
             NeedsDateConfirmation = transaction.NeedsDateConfirmation,

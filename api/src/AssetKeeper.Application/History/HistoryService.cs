@@ -167,7 +167,7 @@ public sealed class HistoryService
                     }
                     else
                     {
-                        transaction.Correct(change.Quantity, change.Amount, change.Price, change.Date, change.PriceDate, change.Sequence, change.Note);
+                        transaction.Correct(change.Quantity, change.Amount, change.Price, change.Date, change.PriceDate, change.Sequence, change.Note, change.Fee);
                         transaction.LinkCashAdjustment(change.RelatedCashAdjustmentId);
                         await rebuilder.AddPriceAsync(ledger, transaction, cancellationToken);
                     }
@@ -217,6 +217,8 @@ public sealed class HistoryService
         {
             throw new HistoryValidationException("请先确认该资产原始持仓记录的日期。");
         }
+
+        ValidateFundBuyChange(original, facts, request);
 
         if (request.Action == "reverse")
         {
@@ -291,7 +293,8 @@ public sealed class HistoryService
             TargetBalance = original.Source == "adjustment" ? request.Amount : null,
             NeedsDateConfirmation = false,
             RelatedCashAdjustmentId = request.RelatedCashAdjustmentId,
-            Note = request.Note
+            Note = request.Note,
+            Fee = original.Source == "asset" ? request.Fee ?? original.Fee : original.Fee
         };
         facts[facts.IndexOf(original)] = replacement;
         var prices = data.Prices.Where(price => price.SourceTransactionId != original.Id).ToList();
@@ -303,6 +306,38 @@ public sealed class HistoryService
         }
 
         return new LedgerReplayCalculator().Calculate(data, facts, _dates.Today, prices, currentDate: _dates.Today);
+    }
+
+    private static void ValidateFundBuyChange(BusinessFact original, IReadOnlyList<BusinessFact> facts, HistoryChangeRequest request)
+    {
+        if (original.Source != "asset")
+        {
+            return;
+        }
+
+        var linkedConfirm = facts.FirstOrDefault(fact => !fact.IsReversed
+            && fact.Kind == AssetTransactionKind.FundBuyConfirm
+            && fact.LinkedTransactionId == original.Id);
+
+        if (original.Kind == AssetTransactionKind.FundBuyPending && linkedConfirm is not null)
+        {
+            throw new HistoryValidationException("该买入已确认，请先撤销买入确认，再处理待确认记录。");
+        }
+
+        if (original.Kind != AssetTransactionKind.FundBuyConfirm)
+        {
+            return;
+        }
+
+        if (request.Action == "correct" && request.Amount != original.Amount)
+        {
+            throw new HistoryValidationException("买入确认金额由对应的待确认记录决定；如需修改扣款金额，请先撤销确认。");
+        }
+
+        if (request.Action == "correct" && request.Fee is not null && (request.Fee < 0 || request.Fee > original.Amount))
+        {
+            throw new HistoryValidationException("买入确认费用必须在 0 与买入金额之间。");
+        }
     }
 
     private static string Sign(HistoryChangeRequest request)

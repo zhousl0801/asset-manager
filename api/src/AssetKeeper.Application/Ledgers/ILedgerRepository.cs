@@ -98,6 +98,11 @@ public interface ILedgerRepository
 
     Task AddAssetTransactionAsync(AssetTransaction transaction, CancellationToken cancellationToken);
 
+    Task<AssetTransaction?> GetAssetTransactionForUpdateAsync(
+        Guid ledgerId,
+        Guid transactionId,
+        CancellationToken cancellationToken);
+
     Task<AssetTransaction?> FindAssetTransactionByRequestIdAsync(
         Guid ledgerId,
         Guid requestId,

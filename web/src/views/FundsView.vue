@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   buyFund,
+  confirmFundBuy,
   createFundPosition,
   fetchFundOverview,
   sellFund,
@@ -23,9 +24,9 @@ import {
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
-import type { FundActivity, FundOverview, FundPosition } from '../types/fund'
+import type { FundActivity, FundOverview, FundPosition, PendingFundBuy } from '../types/fund'
 
-type SheetKind = 'opening' | 'buy' | 'sell' | 'quote'
+type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'quote'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -37,6 +38,7 @@ const sheet = ref<SheetKind | null>(null)
 const requestId = ref(createRequestId())
 const isSaving = ref(false)
 const formError = ref('')
+const confirmingPendingId = ref<string | null>(null)
 const form = reactive({
   positionId: '',
   name: '',
@@ -49,6 +51,7 @@ const form = reactive({
   netAmount: '',
   netValue: '',
   netValueDate: today,
+  fee: '0',
   businessDate: today,
   note: '',
   relatedCashAdjustmentId: null as string | null
@@ -56,12 +59,16 @@ const form = reactive({
 
 const selectedPosition = computed<FundPosition | null>(() =>
   overview.value?.positions.find((position) => position.id === form.positionId) ?? null)
+const selectedPending = computed<PendingFundBuy | null>(() =>
+  overview.value?.pendingBuys.find((pending) => pending.transactionId === confirmingPendingId.value) ?? null)
 const sheetTitle = computed(() => {
   switch (sheet.value) {
     case 'opening':
       return '录入基金持仓'
     case 'buy':
       return '记录基金买入'
+    case 'confirm':
+      return '确认基金买入'
     case 'sell':
       return '记录基金卖出'
     case 'quote':
@@ -75,7 +82,9 @@ const sheetSubtitle = computed(() => {
     case 'opening':
       return '用于已有持仓，不扣现金'
     case 'buy':
-      return '现金减少，份额与成本增加'
+      return '现金减少，买入待确认增加'
+    case 'confirm':
+      return '待确认转为持仓，不再次扣款'
     case 'sell':
       return '份额减少，净回款转入现金'
     case 'quote':
@@ -89,7 +98,9 @@ const sheetNote = computed(() => {
     case 'opening':
       return '录入已有持仓不会从现金扣除购买成本，也不产生生活收支。'
     case 'buy':
-      return '买入金额包含费用；实际扣款与份额估值不同时，差额体现在持有收益中。'
+      return '先按实际扣款计入买入待确认，总资产不变；确认份额和净值后再转入持仓。'
+    case 'confirm':
+      return '确认沿用原扣款金额，不再扣现金；费用从已扣款金额中列示，成交差额体现在持有收益中。'
     case 'sell':
       return '按卖出份额比例结转成本；卖出净回款与成本差额计入已实现收益。'
     case 'quote':
@@ -110,10 +121,13 @@ const canSubmit = computed(() => {
         && parseAmount(form.cost) !== null
         && parsePrice(form.netValue) !== null
     case 'buy':
-      return form.positionId !== ''
+      return form.positionId !== '' && (parseAmount(form.amount) ?? 0) > 0
+    case 'confirm':
+      return confirmingPendingId.value !== null
         && parseQuantity(form.shares) !== null
-        && (parseAmount(form.amount) ?? 0) > 0
         && parsePrice(form.netValue) !== null
+        && parseAmount(form.fee) !== null
+        && (parseAmount(form.fee) ?? 0) >= 0
     case 'sell':
       return form.positionId !== ''
         && parseQuantity(form.shares) !== null
@@ -130,7 +144,7 @@ watch(
   (positionId) => {
     const position = overview.value?.positions.find((item) => item.id === positionId)
 
-    if (!position || (sheet.value !== 'buy' && sheet.value !== 'quote')) {
+    if (!position || sheet.value !== 'quote') {
       return
     }
 
@@ -167,6 +181,7 @@ async function loadOverview(): Promise<void> {
 
 function openSheet(kind: SheetKind, positionId?: string): void {
   sheet.value = kind
+  confirmingPendingId.value = null
   requestId.value = createRequestId()
   formError.value = ''
   form.note = ''
@@ -176,6 +191,7 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   form.cost = ''
   form.amount = ''
   form.netAmount = ''
+  form.fee = '0'
   form.name = ''
   form.code = ''
   form.shareClass = ''
@@ -193,6 +209,15 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   const position = selectedPosition.value
   form.netValue = position ? String(position.netValue) : ''
   form.netValueDate = position?.netValueDate ?? today
+}
+
+function openConfirmSheet(pending: PendingFundBuy): void {
+  openSheet('confirm', pending.positionId)
+  confirmingPendingId.value = pending.transactionId
+  form.netValue = ''
+  form.netValueDate = today
+  form.businessDate = today
+  form.note = pending.note ?? ''
 }
 
 function closeSheet(): void {
@@ -213,6 +238,8 @@ async function submit(): Promise<void> {
       await submitOpening()
     } else if (sheet.value === 'buy') {
       await submitBuy()
+    } else if (sheet.value === 'confirm') {
+      await submitConfirm()
     } else if (sheet.value === 'sell') {
       await submitSell()
     } else {
@@ -276,25 +303,69 @@ async function submitOpening(): Promise<void> {
 
 async function submitBuy(): Promise<void> {
   const position = selectedPosition.value
-  const shares = parseQuantity(form.shares)
   const amount = parseAmount(form.amount)
-  const netValue = parsePrice(form.netValue)
 
   if (!position) {
     formError.value = '请选择基金持仓。'
     return
   }
 
-  if (shares === null || amount === null || amount <= 0 || netValue === null) {
-    formError.value = '请填写有效的份额、扣款金额和净值。'
+  if (amount === null || amount <= 0) {
+    formError.value = '请填写有效的扣款金额。'
     return
   }
-
 
   const businessDateError = validateBusinessDate()
 
   if (businessDateError) {
     formError.value = businessDateError
+    return
+  }
+
+  isSaving.value = true
+  const result = await buyFund({
+    positionId: position.id,
+    amount,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
+    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
+    requestId: requestId.value
+  })
+  notice.value = `已记录买入待确认 ¥${formatMoney(result.activity.amount)}，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitConfirm(): Promise<void> {
+  const pending = selectedPending.value
+  const shares = parseQuantity(form.shares)
+  const netValue = parsePrice(form.netValue)
+  const fee = parseAmount(form.fee)
+
+  if (!pending) {
+    formError.value = '买入待确认记录不存在，请刷新后重试。'
+    return
+  }
+
+  if (shares === null || netValue === null || fee === null || fee < 0) {
+    formError.value = '请填写有效的确认份额、净值和费用。'
+    return
+  }
+
+  if (fee > pending.amount) {
+    formError.value = '费用不能超过原扣款金额。'
+    return
+  }
+
+  const businessDateError = validateBusinessDate()
+
+  if (businessDateError) {
+    formError.value = businessDateError
+    return
+  }
+
+  if (form.businessDate < pending.businessDate) {
+    formError.value = '确认日期不能早于买入日期。'
     return
   }
 
@@ -305,19 +376,22 @@ async function submitBuy(): Promise<void> {
     return
   }
 
+  if (form.netValueDate > form.businessDate) {
+    formError.value = '净值日期不能晚于确认日期。'
+    return
+  }
+
   isSaving.value = true
-  const result = await buyFund({
-    positionId: position.id,
+  const result = await confirmFundBuy(pending.transactionId, {
     shares,
-    amount,
     netValue,
     netValueDate: form.netValueDate,
+    fee,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
     requestId: requestId.value
   })
-  notice.value = `已买入 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  notice.value = `已确认 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
   sheet.value = null
   await loadOverview()
 }
@@ -427,6 +501,10 @@ function activityTitle(activity: FundActivity): string {
       return '录入持仓'
     case 'buy':
       return '基金买入'
+    case 'buyPending':
+      return '买入待确认'
+    case 'buyConfirmed':
+      return '买入确认'
     case 'sell':
       return '基金卖出'
     case 'quote':
@@ -446,6 +524,10 @@ function activityNote(activity: FundActivity): string {
       return '已有持仓，不扣现金'
     case 'buy':
       return '现金 → 基金持仓'
+    case 'buyPending':
+      return '现金 → 买入待确认'
+    case 'buyConfirmed':
+      return '买入待确认 → 基金持仓'
     case 'sell':
       return '基金持仓 → 现金'
     default:
@@ -454,12 +536,16 @@ function activityNote(activity: FundActivity): string {
 }
 
 function activityAmountText(activity: FundActivity): string {
-  if (activity.type === 'buy' || activity.type === 'sell') {
+  if (activity.type === 'buy' || activity.type === 'buyPending' || activity.type === 'sell') {
     return formatSignedMoney(activity.cashEffect)
   }
 
   if (activity.type === 'quote') {
     return `净值 ${formatMoney(activity.netValue)}`
+  }
+
+  if (activity.type === 'buyConfirmed') {
+    return `${formatQuantity(activity.shares)} 份`
   }
 
   return `成本 ${formatMoney(activity.amount)}`
@@ -470,10 +556,12 @@ function activityMeta(activity: FundActivity): string {
     return `${activity.positionName} · ${formatBusinessDate(activity.businessDate)}`
   }
 
-  const shares = activity.shares === null ? '—' : `${formatQuantity(activity.shares)} 份`
-  const value = activity.netValue === null ? '' : ` · 净值 ${formatMoney(activity.netValue)}`
+  const shares = activity.shares === null ? '' : `${formatQuantity(activity.shares)} 份`
+  const value = activity.netValue === null ? '' : `净值 ${formatMoney(activity.netValue)}`
+  const fee = activity.fee > 0 ? ` · 费用 ${formatMoney(activity.fee)}` : ''
+  const details = [shares, value].filter(Boolean).join(' · ')
 
-  return `${activity.positionName} · ${shares}${value}`
+  return `${activity.positionName}${details ? ` · ${details}` : ''}${fee}`
 }
 
 function goBack(): void {
@@ -505,6 +593,7 @@ function goBack(): void {
         <h2 class="hero-balance"><span>¥</span>{{ overview.hasEffectiveQuotes ? formatMoney(overview.totalValue) : '行情待补' }}</h2>
         <p class="hero-meta">
           {{ overview.positions.length }} 只基金 · 持仓成本 {{ formatMoney(overview.totalCost) }}
+          <template v-if="overview.pendingAmount > 0"> · 含待确认 ¥{{ formatMoney(overview.pendingAmount) }}</template>
         </p>
         <div class="hero-metrics">
           <div>
@@ -553,6 +642,27 @@ function goBack(): void {
       </div>
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+
+      <template v-if="overview.pendingBuys.length">
+        <div class="section-head">
+          <h2>买入待确认</h2>
+          <span class="meta">{{ overview.pendingBuys.length }} 笔 · ¥{{ formatMoney(overview.pendingAmount) }}</span>
+        </div>
+        <section class="pending-list">
+          <article v-for="pending in overview.pendingBuys" :key="pending.transactionId" class="pending-card">
+            <div class="pending-copy">
+              <strong>{{ pending.positionName }}</strong>
+              <small>
+                {{ formatBusinessDate(pending.businessDate) }}<template v-if="pending.note"> · {{ pending.note }}</template>
+              </small>
+            </div>
+            <div class="pending-side">
+              <b>¥{{ formatMoney(pending.amount) }}</b>
+              <button type="button" class="confirm-button" @click="openConfirmSheet(pending)">确认份额</button>
+            </div>
+          </article>
+        </section>
+      </template>
 
       <div class="section-head">
         <h2>持仓</h2>
@@ -605,7 +715,7 @@ function goBack(): void {
 
       <section v-if="overview.activities.length" class="activity-card">
         <div v-for="activity in overview.activities" :key="activity.id" class="activity-row">
-          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'sell' ? '卖' : activity.type === 'quote' ? '净' : '录' }}</span>
+          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'quote' ? '净' : '录' }}</span>
           <span class="activity-copy">
             <strong>{{ activityTitle(activity) }}</strong>
             <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
@@ -639,6 +749,10 @@ function goBack(): void {
         <div v-if="selectedPosition" class="summary-line">
           <span>当前持仓</span>
           <b>{{ formatQuantity(selectedPosition.shares) }} 份</b>
+        </div>
+        <div v-if="selectedPending" class="summary-line">
+          <span>买入待确认</span>
+          <b>¥{{ formatMoney(selectedPending.amount) }}</b>
         </div>
       </div>
 
@@ -698,29 +812,41 @@ function goBack(): void {
               </option>
             </select>
           </label>
+          <label class="form-field">
+            <span>扣款金额（元）</span>
+            <input v-model="form.amount" type="text" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label class="form-field">
+            <span>业务日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
+        </template>
+
+        <template v-else-if="sheet === 'confirm'">
           <div class="form-row">
             <label class="form-field">
-              <span>买入份额</span>
+              <span>确认份额</span>
               <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
             </label>
-            <label class="form-field">
-              <span>扣款金额（元）</span>
-              <input v-model="form.amount" type="text" inputmode="decimal" placeholder="0.00" />
-            </label>
-          </div>
-          <div class="form-row">
             <label class="form-field">
               <span>成交净值</span>
               <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
             </label>
+          </div>
+          <div class="form-row">
             <label class="form-field">
               <span>净值日期</span>
               <input v-model="form.netValueDate" type="date" :max="today" />
             </label>
+            <label class="form-field">
+              <span>费用（元）</span>
+              <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
+            </label>
           </div>
           <label class="form-field">
-            <span>业务日期</span>
+            <span>确认日期</span>
             <input v-model="form.businessDate" type="date" :max="today" />
+            <small>确认日期不能早于买入日期，净值日期不能晚于确认日期。</small>
           </label>
         </template>
 
@@ -977,6 +1103,68 @@ function goBack(): void {
 .meta {
   color: var(--color-text-secondary);
   font-size: 10px;
+}
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pending-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px dashed var(--color-border-default);
+  border-radius: 12px;
+  background: var(--color-brand-soft);
+}
+
+.pending-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pending-copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.pending-side b {
+  font-size: 14px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.confirm-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-brand);
+  border-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: 10px;
+  font-weight: 550;
 }
 
 .position-list {

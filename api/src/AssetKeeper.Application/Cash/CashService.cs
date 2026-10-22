@@ -256,6 +256,7 @@ public sealed class CashService
         {
             AssetTransactionKind.ProvidentWithdrawal => "公积金提取",
             AssetTransactionKind.FundBuy => "基金买入",
+            AssetTransactionKind.FundBuyPending => "基金买入待确认",
             AssetTransactionKind.FundSell => "基金卖出",
             AssetTransactionKind.GoldBuy => "积存金买入",
             AssetTransactionKind.GoldSell => "积存金卖出",

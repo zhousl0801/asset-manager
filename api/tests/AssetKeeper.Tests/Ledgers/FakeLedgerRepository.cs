@@ -313,6 +313,15 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         return Task.CompletedTask;
     }
 
+    public Task<AssetTransaction?> GetAssetTransactionForUpdateAsync(
+        Guid ledgerId,
+        Guid transactionId,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_assetTransactions.SingleOrDefault(
+            transaction => transaction.LedgerId == ledgerId && transaction.Id == transactionId));
+    }
+
     public Task<AssetTransaction?> FindAssetTransactionByRequestIdAsync(
         Guid ledgerId,
         Guid requestId,

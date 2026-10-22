@@ -15,6 +15,8 @@ export interface BusinessFact {
   quantity: number | null
   price: number | null
   priceDate: string | null
+  fee: number
+  linkedTransactionId: string | null
   isReversed: boolean
   needsDateConfirmation: boolean
   relatedCashAdjustmentId: string | null
@@ -35,6 +37,7 @@ export interface HoldingReplay {
   price: number | null
   priceDate: string | null
   priceSource: string | null
+  pendingAmount: number
   value: number | null
 }
 
@@ -79,6 +82,7 @@ export interface HistoryChange {
   note: string | null
   reason: string
   relatedCashAdjustmentId: string | null
+  fee?: number | null
 }
 
 export interface HistoryPreview {

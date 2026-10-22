@@ -48,7 +48,7 @@ public sealed class G1PostgresTests
             var cash = await new LedgerEntryService(repository, Dates).CreateAsync(new(LedgerEntryKind.Income, "工资", 10m, Today, null, Guid.NewGuid()), CancellationToken.None);
             Assert.Equal(EntryOperationStatus.Created, cash.Status);
             Assert.Equal(100m, (await upgrade.FundPositions.SingleAsync()).Shares);
-            var buy = await new FundService(repository, Dates).BuyAsync(new(position.Id, 1m, 12m, 12m, Today, Today, null, Guid.NewGuid()), CancellationToken.None);
+            var buy = await new FundService(repository, Dates).BuyAsync(new(position.Id, 12m, Today, null, Guid.NewGuid()), CancellationToken.None);
             Assert.Equal(AssetOperationStatus.Invalid, buy.Status);
         }
     }
@@ -120,7 +120,7 @@ public sealed class G1PostgresTests
         await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 100m), CancellationToken.None);
         var funds = new FundService(repository, Dates);
         var opening = await funds.CreatePositionAsync(new("基金", null, null, null, 10m, 100m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
-        var result = await funds.BuyAsync(new(opening.Result!.Position.Id, 20m, 200m, 10m, Today, Today.AddDays(-1), null, Guid.NewGuid()), CancellationToken.None);
+        var result = await funds.BuyAsync(new(opening.Result!.Position.Id, 200m, Today.AddDays(-1), null, Guid.NewGuid()), CancellationToken.None);
         Assert.Equal(AssetOperationStatus.Invalid, result.Status);
         await using var readback = database.CreateContext();
         Assert.Equal(100m, (await readback.CashAccounts.SingleAsync()).Balance);
