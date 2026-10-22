@@ -7,5 +7,8 @@ public enum FundActivityType
     BuyPending,
     BuyConfirmed,
     Sell,
+    SellApply,
+    SellConfirm,
+    SellArrival,
     Quote
 }

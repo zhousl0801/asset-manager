@@ -184,38 +184,179 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task SellAsync_ReducesSharesAndCostAndAddsNetCash()
+    public async Task SellFlow_FreezesSharesThenMovesProceedsToPendingArrivalAndCash()
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(context, position.Id, 130m, 10m, 13m);
 
-        var result = await context.Funds.SellAsync(
-            new SellFundRequest(position.Id, 10m, 150m, BusinessToday, "赎回", Guid.NewGuid()),
+        var apply = await context.Funds.ApplySellAsync(
+            new SellFundRequest(position.Id, 10m, BusinessToday, "赎回", Guid.NewGuid()),
             CancellationToken.None);
 
-        Assert.Equal(AssetOperationStatus.Created, result.Status);
-        Assert.NotNull(result.Result);
-        Assert.Equal(100m, result.Result.Position.Shares);
-        Assert.Equal(1027.27m, result.Result.Position.Cost);
-        Assert.Equal(1300m, result.Result.Position.Value);
-        Assert.Equal(10020m, result.Result.CashBalance);
-        Assert.Equal(47.27m, result.Result.Position.RealizedProfit);
+        Assert.Equal(AssetOperationStatus.Created, apply.Status);
+        Assert.NotNull(apply.Result);
+        Assert.Equal(110m, apply.Result.Position.Shares);
+        Assert.Equal(9870m, apply.Result.CashBalance);
+        Assert.Equal(FundActivityType.SellApply, apply.Result.Activity.Type);
+
+        var applied = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(applied);
+        Assert.Single(applied.SellApplications!);
+        Assert.Equal(10m, applied.SellApplications![0].Shares);
+
+        var confirm = await context.Funds.ConfirmSellAsync(
+            apply.Result.Activity.Id,
+            new ConfirmFundSellRequest(10m, 13m, BusinessToday, 0m, 150m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, confirm.Status);
+        Assert.NotNull(confirm.Result);
+        Assert.Equal(100m, confirm.Result.Position.Shares);
+        Assert.Equal(1027.27m, confirm.Result.Position.Cost);
+        Assert.Equal(1300m, confirm.Result.Position.Value);
+        Assert.Equal(9870m, confirm.Result.CashBalance);
+        Assert.Equal(47.27m, confirm.Result.Position.RealizedProfit);
+        Assert.Equal(FundActivityType.SellConfirm, confirm.Result.Activity.Type);
+
+        var pending = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(pending);
+        Assert.Empty(pending.SellApplications!);
+        Assert.Single(pending.PendingArrivals!);
+        Assert.Equal(150m, pending.PendingArrivalAmount);
+        Assert.Equal(1450m, pending.TotalValue);
+
+        var homeBeforeArrival = await context.Ledger.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(homeBeforeArrival);
+        Assert.Equal(1450m, homeBeforeArrival.Fund.Amount);
+
+        var arrival = await context.Funds.ArriveSellAsync(
+            confirm.Result.Activity.Id,
+            new FundSellArrivalRequest(150m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, arrival.Status);
+        Assert.NotNull(arrival.Result);
+        Assert.Equal(10020m, arrival.Result.CashBalance);
+        Assert.Equal(FundActivityType.SellArrival, arrival.Result.Activity.Type);
+
+        var arrived = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(arrived);
+        Assert.Empty(arrived.PendingArrivals!);
+        Assert.Equal(0m, arrived.PendingArrivalAmount);
+        Assert.Equal(1300m, arrived.TotalValue);
     }
 
     [Fact]
-    public async Task SellAsync_WithMoreThanHeld_ReturnsInvalid()
+    public async Task ApplySellAsync_WithMoreThanHeld_ReturnsInvalid()
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
 
-        var result = await context.Funds.SellAsync(
-            new SellFundRequest(position.Id, 101m, 200m, BusinessToday, null, Guid.NewGuid()),
+        var result = await context.Funds.ApplySellAsync(
+            new SellFundRequest(position.Id, 101m, BusinessToday, null, Guid.NewGuid()),
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Invalid, result.Status);
-        Assert.Contains(result.Errors, error => error.Contains("超卖"));
+        Assert.Contains(result.Errors, error => error.Contains("超过"));
         Assert.Equal(100m, context.Repository.FundPositions[0].Shares);
+    }
+
+    [Fact]
+    public async Task ConfirmSellAsync_WithMoreThanApplied_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var apply = await context.Funds.ApplySellAsync(
+            new SellFundRequest(position.Id, 10m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        var result = await context.Funds.ConfirmSellAsync(
+            apply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(11m, 10m, BusinessToday, 0m, 110m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("确认份额不能超过"));
+    }
+
+    [Fact]
+    public async Task ArriveSellAsync_WithDifferentAmount_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var apply = await context.Funds.ApplySellAsync(
+            new SellFundRequest(position.Id, 10m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+        var confirm = await context.Funds.ConfirmSellAsync(
+            apply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(10m, 10m, BusinessToday, 0m, 100m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        var result = await context.Funds.ArriveSellAsync(
+            confirm.Result!.Activity.Id,
+            new FundSellArrivalRequest(99m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("到账金额必须与待到账金额一致"));
+    }
+
+    [Fact]
+    public async Task ConfirmSellAsync_WithFewerSharesThanApplied_UnfreezesRemainder()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var apply = await context.Funds.ApplySellAsync(
+            new SellFundRequest(position.Id, 30m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        var confirm = await context.Funds.ConfirmSellAsync(
+            apply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(20m, 10m, BusinessToday, 0m, 200m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, confirm.Status);
+        Assert.Equal(80m, confirm.Result!.Position.Shares);
+
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Empty(overview.SellApplications!);
+        Assert.Single(overview.PendingArrivals!);
+        Assert.Equal(20m, overview.PendingArrivals![0].Shares);
+        Assert.Equal(200m, overview.PendingArrivalAmount);
+    }
+
+    [Fact]
+    public async Task SellFlow_WithDuplicateRequestIds_DoesNotRepeatAnyStep()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var applyRequest = new SellFundRequest(position.Id, 10m, BusinessToday, null, Guid.NewGuid());
+
+        var apply = await context.Funds.ApplySellAsync(applyRequest, CancellationToken.None);
+        var duplicateApply = await context.Funds.ApplySellAsync(applyRequest, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, apply.Status);
+        Assert.Equal(AssetOperationStatus.Success, duplicateApply.Status);
+        Assert.Equal(100m, duplicateApply.Result!.Position.Shares);
+
+        var confirmRequest = new ConfirmFundSellRequest(10m, 10m, BusinessToday, 0m, 100m, BusinessToday, null, Guid.NewGuid());
+        var confirm = await context.Funds.ConfirmSellAsync(apply.Result!.Activity.Id, confirmRequest, CancellationToken.None);
+        var duplicateConfirm = await context.Funds.ConfirmSellAsync(apply.Result.Activity.Id, confirmRequest, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, confirm.Status);
+        Assert.Equal(AssetOperationStatus.Success, duplicateConfirm.Status);
+        Assert.Equal(90m, duplicateConfirm.Result!.Position.Shares);
+
+        var arrivalRequest = new FundSellArrivalRequest(100m, BusinessToday, null, Guid.NewGuid());
+        var arrival = await context.Funds.ArriveSellAsync(confirm.Result!.Activity.Id, arrivalRequest, CancellationToken.None);
+        var duplicateArrival = await context.Funds.ArriveSellAsync(confirm.Result.Activity.Id, arrivalRequest, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, arrival.Status);
+        Assert.Equal(AssetOperationStatus.Success, duplicateArrival.Status);
+        Assert.Equal(10100m, duplicateArrival.Result!.CashBalance);
+        Assert.Equal(4, context.Repository.AssetTransactions.Count);
     }
 
     [Fact]
@@ -281,9 +422,7 @@ public sealed class FundServiceTests
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(context, position.Id, 130m, 10m, 13m);
-        await context.Funds.SellAsync(
-            new SellFundRequest(position.Id, 10m, 150m, BusinessToday, null, Guid.NewGuid()),
-            CancellationToken.None);
+        await SellAndArriveAsync(context, position.Id, 10m, 13m, 150m);
 
         var cash = await context.Cash.GetOverviewAsync(CancellationToken.None);
         var home = await context.Ledger.GetOverviewAsync(CancellationToken.None);
@@ -296,7 +435,7 @@ public sealed class FundServiceTests
         Assert.Equal(2, cash.Activities.Count);
         Assert.All(cash.Activities, activity => Assert.Equal(CashActivityType.AssetTransfer, activity.Type));
         Assert.Contains(cash.Activities, activity => activity.Title == "基金买入待确认");
-        Assert.Contains(cash.Activities, activity => activity.Title == "基金卖出");
+        Assert.Contains(cash.Activities, activity => activity.Title == "基金赎回到账");
         Assert.NotNull(home);
         Assert.True(home.Fund.IsConfigured);
         Assert.Equal(1300m, home.Fund.Amount);
@@ -356,6 +495,29 @@ public sealed class FundServiceTests
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
+    }
+
+    private static async Task SellAndArriveAsync(
+        TestContext context,
+        Guid positionId,
+        decimal shares,
+        decimal netValue,
+        decimal netAmount)
+    {
+        var apply = await context.Funds.ApplySellAsync(
+            new SellFundRequest(positionId, shares, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+        Assert.Equal(AssetOperationStatus.Created, apply.Status);
+        var confirm = await context.Funds.ConfirmSellAsync(
+            apply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(shares, netValue, BusinessToday, 0m, netAmount, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+        Assert.Equal(AssetOperationStatus.Created, confirm.Status);
+        var arrival = await context.Funds.ArriveSellAsync(
+            confirm.Result!.Activity.Id,
+            new FundSellArrivalRequest(netAmount, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+        Assert.Equal(AssetOperationStatus.Created, arrival.Status);
     }
 
     private static ConfirmFundBuyRequest ConfirmRequest(decimal shares, decimal netValue, decimal fee)

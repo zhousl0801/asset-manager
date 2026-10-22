@@ -53,15 +53,26 @@ public sealed class LedgerService
         var data = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
         var snapshot = new LedgerReplayCalculator().Calculate(data, BusinessFact.From(data), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
         var pendingFund = snapshot.Funds.Sum(item => item.PendingAmount);
+        var pendingArrival = snapshot.Funds.Sum(item => item.PendingArrivalAmount);
+        var fundNote = $"持有 {fundPositions.Count} 只基金";
+
+        if (pendingFund > 0)
+        {
+            fundNote += $" · 待确认 {pendingFund.ToString("N2", CultureInfo.InvariantCulture)}";
+        }
+
+        if (pendingArrival > 0)
+        {
+            fundNote += $" · 待到账 {pendingArrival.ToString("N2", CultureInfo.InvariantCulture)}";
+        }
+
         var notConfigured = new AssetOverviewDto(false, null, "尚未录入");
         var fund = fundPositions.Count == 0
             ? notConfigured
             : new AssetOverviewDto(
                 true,
-                fundPositions.Sum(position => position.Value) + pendingFund,
-                pendingFund > 0
-                    ? $"持有 {fundPositions.Count} 只基金 · 待确认 {pendingFund.ToString("N2", CultureInfo.InvariantCulture)}"
-                    : $"持有 {fundPositions.Count} 只基金");
+                fundPositions.Sum(position => position.Value) + pendingFund + pendingArrival,
+                fundNote);
         var provident = providentAccount is null
             ? notConfigured
             : new AssetOverviewDto(

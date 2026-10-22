@@ -1,4 +1,13 @@
-export type FundActivityType = 'opening' | 'buy' | 'buyPending' | 'buyConfirmed' | 'sell' | 'quote'
+export type FundActivityType =
+  | 'opening'
+  | 'buy'
+  | 'buyPending'
+  | 'buyConfirmed'
+  | 'sell'
+  | 'sellApply'
+  | 'sellConfirm'
+  | 'sellArrival'
+  | 'quote'
 
 export interface FundPosition {
   historyConfirmed: boolean
@@ -21,6 +30,25 @@ export interface PendingFundBuy {
   transactionId: string
   positionId: string
   positionName: string
+  amount: number
+  businessDate: string
+  note: string | null
+}
+
+export interface PendingFundSell {
+  transactionId: string
+  positionId: string
+  positionName: string
+  shares: number
+  businessDate: string
+  note: string | null
+}
+
+export interface PendingFundArrival {
+  transactionId: string
+  positionId: string
+  positionName: string
+  shares: number
   amount: number
   businessDate: string
   note: string | null
@@ -54,6 +82,9 @@ export interface FundOverview {
   activities: FundActivity[]
   pendingAmount: number
   pendingBuys: PendingFundBuy[]
+  pendingArrivalAmount: number
+  sellApplications: PendingFundSell[]
+  pendingArrivals: PendingFundArrival[]
 }
 
 export interface FundMutationResult {
@@ -96,10 +127,26 @@ export interface ConfirmFundBuyInput {
 }
 
 export interface SellFundInput {
-  relatedCashAdjustmentId?: string | null
   positionId: string
   shares: number
+  businessDate: string
+  note: string
+  requestId: string
+}
+
+export interface ConfirmFundSellInput {
+  shares: number
+  netValue: number
+  netValueDate: string
+  fee: number
   netAmount: number
+  businessDate: string
+  note: string
+  requestId: string
+}
+
+export interface FundSellArrivalInput {
+  amount: number
   businessDate: string
   note: string
   requestId: string

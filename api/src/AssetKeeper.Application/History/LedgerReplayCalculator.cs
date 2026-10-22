@@ -27,6 +27,7 @@ public sealed class LedgerReplayCalculator
         var allAnchors = facts.Where(fact => fact.Source == "adjustment").ToDictionary(fact => fact.Id);
         ValidateLinks(active, allAnchors);
         var pendingBuys = ValidateFundBuyLinks(active);
+        var (sellApplies, sellConfirms) = ValidateFundSellLinks(active);
         var fundStates = data.Positions.ToDictionary(position => position.Id, position => new MutableHolding());
         var goldState = data.Gold is null ? null : new MutableHolding();
         var unknownFunds = active.Where(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Fund)
@@ -83,12 +84,12 @@ public sealed class LedgerReplayCalculator
 
             if (fact.AssetType == AssetType.Fund && fact.PositionId is not null && !unknownFunds.Contains(fact.PositionId))
             {
-                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, false);
+                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, sellApplies, sellConfirms, false);
             }
 
             if (fact.AssetType == AssetType.Gold && goldState is not null && !unknownGold)
             {
-                ApplyHolding(goldState, fact, facts, pendingBuys, true);
+                ApplyHolding(goldState, fact, facts, pendingBuys, sellApplies, sellConfirms, true);
             }
         }
 
@@ -102,7 +103,7 @@ public sealed class LedgerReplayCalculator
             return new HoldingReplay(position.Id, known ? state.Quantity : position.Shares, known ? state.Cost : position.Cost,
                 known ? state.Realized : position.RealizedProfit, known ? state.CoverageFrom : null, known,
                 (known ? state.CoverageFrom is null : asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
-                known ? state.PendingAmount : 0m);
+                known ? state.PendingAmount : 0m, known ? state.AppliedShares : 0m, known ? state.PendingArrivalAmount : 0m);
         }).ToList();
         HoldingReplay? gold = null;
 
@@ -141,7 +142,8 @@ public sealed class LedgerReplayCalculator
     }
 
     private static void ApplyHolding(MutableHolding state, BusinessFact fact, IReadOnlyList<BusinessFact> allFacts,
-        IReadOnlyDictionary<Guid, BusinessFact> pendingBuys, bool gold)
+        IReadOnlyDictionary<Guid, BusinessFact> pendingBuys, IReadOnlyDictionary<Guid, BusinessFact> sellApplies,
+        IReadOnlyDictionary<Guid, BusinessFact> sellConfirms, bool gold)
     {
         if (fact.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote)
         {
@@ -162,6 +164,38 @@ public sealed class LedgerReplayCalculator
             state.PendingAmount -= pending.Amount;
         }
 
+        if (fact.Kind == AssetTransactionKind.FundSellApply)
+        {
+            state.AppliedShares += fact.Quantity ?? 0m;
+            Ensure(state.AppliedShares >= 0m && state.AppliedShares <= state.Quantity, fact, "申请赎回份额超过该时点持有份额");
+            return;
+        }
+
+        if (fact.Kind == AssetTransactionKind.FundSellConfirm)
+        {
+            var apply = sellApplies[fact.LinkedTransactionId!.Value];
+            Ensure(state.AppliedShares >= apply.Quantity, fact, "赎回申请已被确认，不能重复结转");
+            state.AppliedShares -= apply.Quantity!.Value;
+            var quantity = fact.Quantity ?? 0m;
+            Ensure(quantity > 0m && quantity <= state.Quantity, fact, "赎回确认份额超过该时点持有份额");
+            var reducedCost = quantity == state.Quantity ? state.Cost : decimal.Round(state.Cost * quantity / state.Quantity, 2);
+            state.Quantity -= quantity;
+            state.Cost -= reducedCost;
+            state.Realized += fact.Amount - reducedCost;
+            state.PendingArrivalAmount += fact.Amount;
+            Ensure(state.Quantity >= 0m && state.Cost >= 0m && state.PendingArrivalAmount <= AssetTransaction.MaximumAmount,
+                fact, "赎回确认后的持仓或待到账金额无效");
+            return;
+        }
+
+        if (fact.Kind == AssetTransactionKind.FundSellArrival)
+        {
+            var confirm = sellConfirms[fact.LinkedTransactionId!.Value];
+            Ensure(state.PendingArrivalAmount >= confirm.Amount, fact, "赎回到账金额超过待到账金额");
+            state.PendingArrivalAmount -= confirm.Amount;
+            return;
+        }
+
         var opening = fact.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening;
         var correction = fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection;
         var buy = fact.Kind is AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyConfirm or AssetTransactionKind.GoldBuy;
@@ -176,6 +210,7 @@ public sealed class LedgerReplayCalculator
             state.Quantity = fact.Quantity ?? 0m;
             state.Cost = fact.Amount;
             state.CoverageFrom ??= fact.Date;
+            Ensure(state.AppliedShares <= state.Quantity, fact, "起始持仓或核对数量低于已申请赎回份额");
         }
         else if (buy)
         {
@@ -198,6 +233,7 @@ public sealed class LedgerReplayCalculator
             state.Quantity -= quantity;
             state.Cost -= reducedCost;
             state.Realized += fact.Amount - reducedCost;
+            Ensure(state.AppliedShares <= state.Quantity, fact, "卖出份额与已申请赎回份额冲突");
         }
 
         Ensure(state.Quantity >= 0m && state.Quantity <= AssetTransaction.MaximumQuantity
@@ -244,6 +280,86 @@ public sealed class LedgerReplayCalculator
         }
 
         return pendingBuys;
+    }
+
+    private static (IReadOnlyDictionary<Guid, BusinessFact> Applies, IReadOnlyDictionary<Guid, BusinessFact> Confirms)
+        ValidateFundSellLinks(IReadOnlyList<BusinessFact> active)
+    {
+        var applies = active.Where(fact => fact.Kind == AssetTransactionKind.FundSellApply)
+            .ToDictionary(fact => fact.Id);
+        var confirms = active.Where(fact => fact.Kind == AssetTransactionKind.FundSellConfirm)
+            .ToDictionary(fact => fact.Id);
+
+        foreach (var confirm in confirms.Values)
+        {
+            if (confirm.LinkedTransactionId is not Guid applyId || !applies.TryGetValue(applyId, out var apply))
+            {
+                throw new HistoryValidationException("赎回确认关联的申请不存在、已撤销或已确认。");
+            }
+
+            if (active.Any(fact => fact.Id != confirm.Id && fact.Kind == AssetTransactionKind.FundSellConfirm
+                && fact.LinkedTransactionId == applyId))
+            {
+                throw new HistoryValidationException("同一笔赎回申请只能确认一次。");
+            }
+
+            if (apply.AssetType != AssetType.Fund || apply.PositionId != confirm.PositionId)
+            {
+                throw new HistoryValidationException("赎回确认与申请记录的基金持仓不一致。");
+            }
+
+            if (apply.Quantity is null || apply.Quantity <= 0m || confirm.Quantity is null
+                || confirm.Quantity <= 0m || confirm.Quantity > apply.Quantity)
+            {
+                throw new HistoryValidationException("赎回确认份额必须大于 0 且不超过申请份额。");
+            }
+
+            if (confirm.Amount <= 0m)
+            {
+                throw new HistoryValidationException("赎回确认必须提供大于 0 的净到账金额。");
+            }
+
+            if (confirm.Date < apply.Date || (confirm.Date == apply.Date && confirm.Sequence <= apply.Sequence))
+            {
+                throw new HistoryValidationException("赎回确认必须晚于对应的赎回申请。");
+            }
+        }
+
+        foreach (var arrival in active.Where(fact => fact.Kind == AssetTransactionKind.FundSellArrival))
+        {
+            if (arrival.LinkedTransactionId is not Guid confirmId || !confirms.TryGetValue(confirmId, out var confirm))
+            {
+                throw new HistoryValidationException("赎回到账关联的确认记录不存在、已撤销或已到账。");
+            }
+
+            if (active.Any(fact => fact.Id != arrival.Id && fact.Kind == AssetTransactionKind.FundSellArrival
+                && fact.LinkedTransactionId == confirmId))
+            {
+                throw new HistoryValidationException("同一笔赎回确认只能到账一次。");
+            }
+
+            if (confirm.AssetType != AssetType.Fund || confirm.PositionId != arrival.PositionId)
+            {
+                throw new HistoryValidationException("赎回到账与确认记录的基金持仓不一致。");
+            }
+
+            if (arrival.Quantity is not null || arrival.Amount <= 0m)
+            {
+                throw new HistoryValidationException("赎回到账只能记录到账金额。");
+            }
+
+            if (arrival.Amount != confirm.Amount)
+            {
+                throw new HistoryValidationException("赎回到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。");
+            }
+
+            if (arrival.Date < confirm.Date || (arrival.Date == confirm.Date && arrival.Sequence <= confirm.Sequence))
+            {
+                throw new HistoryValidationException("赎回到账必须晚于对应的赎回确认。");
+            }
+        }
+
+        return (applies, confirms);
     }
 
     private static void ValidateLinks(IReadOnlyList<BusinessFact> active, IReadOnlyDictionary<Guid, BusinessFact> anchors)
@@ -299,6 +415,10 @@ public sealed class LedgerReplayCalculator
         public decimal Realized { get; set; }
 
         public decimal PendingAmount { get; set; }
+
+        public decimal AppliedShares { get; set; }
+
+        public decimal PendingArrivalAmount { get; set; }
 
         public DateOnly? CoverageFrom { get; set; }
     }

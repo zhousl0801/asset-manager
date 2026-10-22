@@ -77,7 +77,37 @@ public sealed class FundsController : AssetOperationsControllerBase
         [FromBody] SellFundRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _fundService.SellAsync(request, cancellationToken);
+        var result = await _fundService.ApplySellAsync(request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
+    [HttpPost("sells/{transactionId:guid}/confirm")]
+    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmSell(
+        Guid transactionId,
+        [FromBody] ConfirmFundSellRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.ConfirmSellAsync(transactionId, request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
+    [HttpPost("sells/{transactionId:guid}/arrival")]
+    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArriveSell(
+        Guid transactionId,
+        [FromBody] FundSellArrivalRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.ArriveSellAsync(transactionId, request, cancellationToken);
 
         return ToActionResult(result);
     }

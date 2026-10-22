@@ -26,7 +26,9 @@ public sealed class G1ServiceTests
         var funds = new FundService(context.Repository, context.Dates);
         var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
         var id = opening.Result!.Position.Id;
-        await funds.SellAsync(new(id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        var sellApply = await funds.ApplySellAsync(new(id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
 
         var pending = await funds.BuyAsync(new(id, 2000m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
         var result = await funds.ConfirmBuyAsync(pending.Result!.Activity.Id,
@@ -82,7 +84,9 @@ public sealed class G1ServiceTests
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
         var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
-        await funds.SellAsync(new(opening.Result!.Position.Id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        var sellApply = await funds.ApplySellAsync(new(opening.Result!.Position.Id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         var service = new HistoryService(context.Repository, context.Dates);
         var history = (await service.GetAsync(null, CancellationToken.None))!;
         var fact = history.Facts.Single(item => item.Kind == AssetTransactionKind.FundOpening);
@@ -127,14 +131,16 @@ public sealed class G1ServiceTests
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
         var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
-        await funds.SellAsync(new(opening.Result!.Position.Id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        var sellApply = await funds.ApplySellAsync(new(opening.Result!.Position.Id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         var service = new HistoryService(context.Repository, context.Dates);
         var history = (await service.GetAsync(null, CancellationToken.None))!;
         var fact = history.Facts.Single(item => item.Kind == AssetTransactionKind.FundOpening);
         var preview = await service.PreviewAsync(Change(history, fact) with { Action = "reverse" }, CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Invalid, preview.Status);
-        Assert.Contains(preview.Errors, error => error.Contains("超卖"));
+        Assert.Contains(preview.Errors, error => error.Contains("超过"));
         Assert.False((await context.Db.AssetTransactions.SingleAsync(item => item.Id == fact.Id)).IsReversed);
     }
 

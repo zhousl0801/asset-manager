@@ -55,4 +55,56 @@ public sealed class G2PostgresTests
         Assert.Equal(3300m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingAmount);
     }
+
+    [PostgresFact]
+    public async Task SellApplyConfirmAndArrival_PersistLinksAndCash()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        Guid applyId;
+        Guid confirmId;
+
+        await using (var context = database.CreateContext())
+        {
+            var repository = new LedgerRepository(context);
+            await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
+            var funds = new FundService(repository, Dates);
+            var position = await funds.CreatePositionAsync(
+                new("基金", null, null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
+                CancellationToken.None);
+            var apply = await funds.ApplySellAsync(
+                new(position.Result!.Position.Id, 10m, Today, null, Guid.NewGuid()),
+                CancellationToken.None);
+            applyId = apply.Result!.Activity.Id;
+            var confirm = await funds.ConfirmSellAsync(
+                applyId,
+                new ConfirmFundSellRequest(10m, 10m, Today, 1m, 100m, Today, null, Guid.NewGuid()),
+                CancellationToken.None);
+            confirmId = confirm.Result!.Activity.Id;
+            var arrival = await funds.ArriveSellAsync(
+                confirmId,
+                new FundSellArrivalRequest(100m, Today, null, Guid.NewGuid()),
+                CancellationToken.None);
+            Assert.Equal(AssetOperationStatus.Created, arrival.Status);
+        }
+
+        await using var readback = database.CreateContext();
+        var transactions = await readback.AssetTransactions.OrderBy(transaction => transaction.CreatedAt).ToListAsync();
+        var applyRow = transactions.Single(transaction => transaction.Kind == AssetTransactionKind.FundSellApply);
+        var confirmRow = transactions.Single(transaction => transaction.Kind == AssetTransactionKind.FundSellConfirm);
+        var arrivalRow = transactions.Single(transaction => transaction.Kind == AssetTransactionKind.FundSellArrival);
+
+        Assert.Equal(applyId, applyRow.Id);
+        Assert.Equal(applyId, confirmRow.LinkedTransactionId);
+        Assert.Equal(confirmId, arrivalRow.LinkedTransactionId);
+        Assert.Equal(1m, confirmRow.Fee);
+        Assert.Equal(10100m, (await readback.CashAccounts.SingleAsync()).Balance);
+        Assert.Equal(90m, (await readback.FundPositions.SingleAsync()).Shares);
+        Assert.Equal(900m, (await readback.FundPositions.SingleAsync()).Cost);
+
+        var overview = await new FundService(new LedgerRepository(readback), Dates).GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(900m, overview.TotalValue);
+        Assert.Equal(0m, overview.PendingArrivalAmount);
+        Assert.Empty(overview.PendingArrivals!);
+    }
 }

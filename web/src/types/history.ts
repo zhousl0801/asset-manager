@@ -38,6 +38,8 @@ export interface HoldingReplay {
   priceDate: string | null
   priceSource: string | null
   pendingAmount: number
+  appliedShares: number
+  pendingArrivalAmount: number
   value: number | null
 }
 

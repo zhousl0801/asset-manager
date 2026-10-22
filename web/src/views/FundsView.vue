@@ -3,8 +3,10 @@ import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  arriveFundSell,
   buyFund,
   confirmFundBuy,
+  confirmFundSell,
   createFundPosition,
   fetchFundOverview,
   sellFund,
@@ -24,9 +26,16 @@ import {
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
-import type { FundActivity, FundOverview, FundPosition, PendingFundBuy } from '../types/fund'
+import type {
+  FundActivity,
+  FundOverview,
+  FundPosition,
+  PendingFundArrival,
+  PendingFundBuy,
+  PendingFundSell
+} from '../types/fund'
 
-type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'quote'
+type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'sellConfirm' | 'sellArrival' | 'quote'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -39,6 +48,8 @@ const requestId = ref(createRequestId())
 const isSaving = ref(false)
 const formError = ref('')
 const confirmingPendingId = ref<string | null>(null)
+const confirmingSellId = ref<string | null>(null)
+const arrivingConfirmId = ref<string | null>(null)
 const form = reactive({
   positionId: '',
   name: '',
@@ -61,6 +72,10 @@ const selectedPosition = computed<FundPosition | null>(() =>
   overview.value?.positions.find((position) => position.id === form.positionId) ?? null)
 const selectedPending = computed<PendingFundBuy | null>(() =>
   overview.value?.pendingBuys.find((pending) => pending.transactionId === confirmingPendingId.value) ?? null)
+const selectedSellApplication = computed<PendingFundSell | null>(() =>
+  overview.value?.sellApplications.find((pending) => pending.transactionId === confirmingSellId.value) ?? null)
+const selectedPendingArrival = computed<PendingFundArrival | null>(() =>
+  overview.value?.pendingArrivals.find((pending) => pending.transactionId === arrivingConfirmId.value) ?? null)
 const sheetTitle = computed(() => {
   switch (sheet.value) {
     case 'opening':
@@ -70,7 +85,11 @@ const sheetTitle = computed(() => {
     case 'confirm':
       return '确认基金买入'
     case 'sell':
-      return '记录基金卖出'
+      return '申请赎回基金'
+    case 'sellConfirm':
+      return '确认基金赎回'
+    case 'sellArrival':
+      return '登记赎回到账'
     case 'quote':
       return '更新基金净值'
     default:
@@ -86,7 +105,11 @@ const sheetSubtitle = computed(() => {
     case 'confirm':
       return '待确认转为持仓，不再次扣款'
     case 'sell':
-      return '份额减少，净回款转入现金'
+      return '份额冻结，仍在持仓中估值'
+    case 'sellConfirm':
+      return '份额减少，净回款转为待到账'
+    case 'sellArrival':
+      return '待到账转入现金，不重复计算收益'
     case 'quote':
       return '只更新估值，不改变现金和成本'
     default:
@@ -102,7 +125,11 @@ const sheetNote = computed(() => {
     case 'confirm':
       return '确认沿用原扣款金额，不再扣现金；费用从已扣款金额中列示，成交差额体现在持有收益中。'
     case 'sell':
-      return '按卖出份额比例结转成本；卖出净回款与成本差额计入已实现收益。'
+      return '申请后份额仍计入持仓估值，但会冻结，不能重复申请超过可售份额。'
+    case 'sellConfirm':
+      return '按确认份额比例结转成本；净回款转为待到账，与成本差额计入已实现收益。'
+    case 'sellArrival':
+      return '到账金额必须与待到账金额一致，不再次确认收益；如有差额，请先更正赎回确认。'
     case 'quote':
       return '净值日期不能晚于今天；未披露时继续保留最近有效净值。'
     default:
@@ -129,9 +156,15 @@ const canSubmit = computed(() => {
         && parseAmount(form.fee) !== null
         && (parseAmount(form.fee) ?? 0) >= 0
     case 'sell':
-      return form.positionId !== ''
+      return form.positionId !== '' && parseQuantity(form.shares) !== null
+    case 'sellConfirm':
+      return confirmingSellId.value !== null
         && parseQuantity(form.shares) !== null
+        && parsePrice(form.netValue) !== null
         && (parseAmount(form.netAmount) ?? 0) > 0
+        && parseAmount(form.fee) !== null
+    case 'sellArrival':
+      return arrivingConfirmId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
     case 'quote':
       return form.positionId !== '' && parsePrice(form.netValue) !== null
     default:
@@ -182,6 +215,8 @@ async function loadOverview(): Promise<void> {
 function openSheet(kind: SheetKind, positionId?: string): void {
   sheet.value = kind
   confirmingPendingId.value = null
+  confirmingSellId.value = null
+  arrivingConfirmId.value = null
   requestId.value = createRequestId()
   formError.value = ''
   form.note = ''
@@ -220,6 +255,24 @@ function openConfirmSheet(pending: PendingFundBuy): void {
   form.note = pending.note ?? ''
 }
 
+function openSellConfirmSheet(application: PendingFundSell): void {
+  openSheet('sellConfirm', application.positionId)
+  confirmingSellId.value = application.transactionId
+  form.shares = String(application.shares)
+  form.netValue = ''
+  form.netValueDate = today
+  form.businessDate = today
+  form.note = application.note ?? ''
+}
+
+function openArrivalSheet(arrival: PendingFundArrival): void {
+  openSheet('sellArrival', arrival.positionId)
+  arrivingConfirmId.value = arrival.transactionId
+  form.netAmount = String(arrival.amount)
+  form.businessDate = today
+  form.note = arrival.note ?? ''
+}
+
 function closeSheet(): void {
   if (!isSaving.value) {
     sheet.value = null
@@ -242,6 +295,10 @@ async function submit(): Promise<void> {
       await submitConfirm()
     } else if (sheet.value === 'sell') {
       await submitSell()
+    } else if (sheet.value === 'sellConfirm') {
+      await submitSellConfirm()
+    } else if (sheet.value === 'sellArrival') {
+      await submitSellArrival()
     } else {
       await submitQuote()
     }
@@ -399,18 +456,16 @@ async function submitConfirm(): Promise<void> {
 async function submitSell(): Promise<void> {
   const position = selectedPosition.value
   const shares = parseQuantity(form.shares)
-  const netAmount = parseAmount(form.netAmount)
 
   if (!position) {
     formError.value = '请选择基金持仓。'
     return
   }
 
-  if (shares === null || netAmount === null || netAmount <= 0) {
-    formError.value = '请填写有效的卖出份额和净回款金额。'
+  if (shares === null) {
+    formError.value = '请填写有效的申请赎回份额。'
     return
   }
-
 
   const dateError = validateBusinessDate()
 
@@ -423,13 +478,121 @@ async function submitSell(): Promise<void> {
   const result = await sellFund({
     positionId: position.id,
     shares,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
+    requestId: requestId.value
+  })
+  notice.value = `已申请赎回 ${formatQuantity(result.activity.shares)} 份，确认后转为待到账。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitSellConfirm(): Promise<void> {
+  const application = selectedSellApplication.value
+  const shares = parseQuantity(form.shares)
+  const netValue = parsePrice(form.netValue)
+  const netAmount = parseAmount(form.netAmount)
+  const fee = parseAmount(form.fee)
+
+  if (!application) {
+    formError.value = '赎回申请不存在，请刷新后重试。'
+    return
+  }
+
+  if (shares === null || netValue === null || netAmount === null || netAmount <= 0 || fee === null || fee < 0) {
+    formError.value = '请填写有效的确认份额、净值、净回款和费用。'
+    return
+  }
+
+  if (shares > application.shares) {
+    formError.value = '确认份额不能超过申请赎回份额。'
+    return
+  }
+
+  if (fee > netAmount) {
+    formError.value = '费用不能超过净回款金额。'
+    return
+  }
+
+  const businessDateError = validateBusinessDate()
+
+  if (businessDateError) {
+    formError.value = businessDateError
+    return
+  }
+
+  if (form.businessDate < application.businessDate) {
+    formError.value = '确认日期不能早于申请日期。'
+    return
+  }
+
+  const valueDateError = validateValueDate(form.netValueDate, '净值日期')
+
+  if (valueDateError) {
+    formError.value = valueDateError
+    return
+  }
+
+  if (form.netValueDate > form.businessDate) {
+    formError.value = '净值日期不能晚于确认日期。'
+    return
+  }
+
+  isSaving.value = true
+  const result = await confirmFundSell(application.transactionId, {
+    shares,
+    netValue,
+    netValueDate: form.netValueDate,
+    fee,
     netAmount,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
     requestId: requestId.value
   })
-  notice.value = `已卖出 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  notice.value = `已确认赎回 ${formatQuantity(result.activity.shares)} 份，待到账 ¥${formatMoney(result.activity.amount)}。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitSellArrival(): Promise<void> {
+  const arrival = selectedPendingArrival.value
+  const amount = parseAmount(form.netAmount)
+
+  if (!arrival) {
+    formError.value = '待到账记录不存在，请刷新后重试。'
+    return
+  }
+
+  if (amount === null || amount <= 0) {
+    formError.value = '请填写有效的到账金额。'
+    return
+  }
+
+  if (amount !== arrival.amount) {
+    formError.value = '到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。'
+    return
+  }
+
+  const businessDateError = validateBusinessDate()
+
+  if (businessDateError) {
+    formError.value = businessDateError
+    return
+  }
+
+  if (form.businessDate < arrival.businessDate) {
+    formError.value = '到账日期不能早于确认日期。'
+    return
+  }
+
+  isSaving.value = true
+  const result = await arriveFundSell(arrival.transactionId, {
+    amount,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
+    requestId: requestId.value
+  })
+  notice.value = `赎回到账 ¥${formatMoney(result.activity.amount)}，当前现金 ¥${formatMoney(result.cashBalance)}。`
   sheet.value = null
   await loadOverview()
 }
@@ -507,6 +670,12 @@ function activityTitle(activity: FundActivity): string {
       return '买入确认'
     case 'sell':
       return '基金卖出'
+    case 'sellApply':
+      return '赎回申请'
+    case 'sellConfirm':
+      return '赎回确认'
+    case 'sellArrival':
+      return '赎回到账'
     case 'quote':
       return '更新净值'
     default:
@@ -530,13 +699,20 @@ function activityNote(activity: FundActivity): string {
       return '买入待确认 → 基金持仓'
     case 'sell':
       return '基金持仓 → 现金'
+    case 'sellApply':
+      return '份额冻结，仍在持仓'
+    case 'sellConfirm':
+      return '基金持仓 → 待到账'
+    case 'sellArrival':
+      return '待到账 → 现金'
     default:
       return '仅更新估值'
   }
 }
 
 function activityAmountText(activity: FundActivity): string {
-  if (activity.type === 'buy' || activity.type === 'buyPending' || activity.type === 'sell') {
+  if (activity.type === 'buy' || activity.type === 'buyPending' || activity.type === 'sell'
+    || activity.type === 'sellArrival') {
     return formatSignedMoney(activity.cashEffect)
   }
 
@@ -544,8 +720,12 @@ function activityAmountText(activity: FundActivity): string {
     return `净值 ${formatMoney(activity.netValue)}`
   }
 
-  if (activity.type === 'buyConfirmed') {
+  if (activity.type === 'buyConfirmed' || activity.type === 'sellApply') {
     return `${formatQuantity(activity.shares)} 份`
+  }
+
+  if (activity.type === 'sellConfirm') {
+    return `待到账 ${formatMoney(activity.amount)}`
   }
 
   return `成本 ${formatMoney(activity.amount)}`
@@ -594,6 +774,7 @@ function goBack(): void {
         <p class="hero-meta">
           {{ overview.positions.length }} 只基金 · 持仓成本 {{ formatMoney(overview.totalCost) }}
           <template v-if="overview.pendingAmount > 0"> · 含待确认 ¥{{ formatMoney(overview.pendingAmount) }}</template>
+          <template v-if="overview.pendingArrivalAmount > 0"> · 含待到账 ¥{{ formatMoney(overview.pendingArrivalAmount) }}</template>
         </p>
         <div class="hero-metrics">
           <div>
@@ -664,6 +845,49 @@ function goBack(): void {
         </section>
       </template>
 
+      <template v-if="overview.sellApplications.length">
+        <div class="section-head">
+          <h2>赎回申请</h2>
+          <span class="meta">{{ overview.sellApplications.length }} 笔 · 份额已冻结</span>
+        </div>
+        <section class="pending-list">
+          <article v-for="application in overview.sellApplications" :key="application.transactionId" class="pending-card">
+            <div class="pending-copy">
+              <strong>{{ application.positionName }}</strong>
+              <small>
+                {{ formatBusinessDate(application.businessDate) }} · {{ formatQuantity(application.shares) }} 份
+                <template v-if="application.note"> · {{ application.note }}</template>
+              </small>
+            </div>
+            <div class="pending-side">
+              <button type="button" class="confirm-button" @click="openSellConfirmSheet(application)">确认赎回</button>
+            </div>
+          </article>
+        </section>
+      </template>
+
+      <template v-if="overview.pendingArrivals.length">
+        <div class="section-head">
+          <h2>赎回待到账</h2>
+          <span class="meta">{{ overview.pendingArrivals.length }} 笔 · ¥{{ formatMoney(overview.pendingArrivalAmount) }}</span>
+        </div>
+        <section class="pending-list">
+          <article v-for="arrival in overview.pendingArrivals" :key="arrival.transactionId" class="pending-card">
+            <div class="pending-copy">
+              <strong>{{ arrival.positionName }}</strong>
+              <small>
+                {{ formatBusinessDate(arrival.businessDate) }} · {{ formatQuantity(arrival.shares) }} 份
+                <template v-if="arrival.note"> · {{ arrival.note }}</template>
+              </small>
+            </div>
+            <div class="pending-side">
+              <b>¥{{ formatMoney(arrival.amount) }}</b>
+              <button type="button" class="confirm-button" @click="openArrivalSheet(arrival)">登记到账</button>
+            </div>
+          </article>
+        </section>
+      </template>
+
       <div class="section-head">
         <h2>持仓</h2>
         <span class="meta">可用现金 ¥{{ formatMoney(overview.cashBalance) }}</span>
@@ -715,7 +939,7 @@ function goBack(): void {
 
       <section v-if="overview.activities.length" class="activity-card">
         <div v-for="activity in overview.activities" :key="activity.id" class="activity-row">
-          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'quote' ? '净' : '录' }}</span>
+          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
           <span class="activity-copy">
             <strong>{{ activityTitle(activity) }}</strong>
             <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
@@ -753,6 +977,14 @@ function goBack(): void {
         <div v-if="selectedPending" class="summary-line">
           <span>买入待确认</span>
           <b>¥{{ formatMoney(selectedPending.amount) }}</b>
+        </div>
+        <div v-if="selectedSellApplication" class="summary-line">
+          <span>申请赎回</span>
+          <b>{{ formatQuantity(selectedSellApplication.shares) }} 份</b>
+        </div>
+        <div v-if="selectedPendingArrival" class="summary-line">
+          <span>待到账</span>
+          <b>¥{{ formatMoney(selectedPendingArrival.amount) }}</b>
         </div>
       </div>
 
@@ -859,18 +1091,57 @@ function goBack(): void {
               </option>
             </select>
           </label>
+          <label class="form-field">
+            <span>申请赎回份额</span>
+            <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
+            <small>申请后份额冻结，仍计入持仓估值；确认时才减少份额并转为待到账。</small>
+          </label>
+          <label class="form-field">
+            <span>申请日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
+        </template>
+
+        <template v-else-if="sheet === 'sellConfirm'">
           <div class="form-row">
             <label class="form-field">
-              <span>卖出份额</span>
+              <span>确认赎回份额</span>
               <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
             </label>
             <label class="form-field">
-              <span>净回款（元）</span>
-              <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
+              <span>成交净值</span>
+              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span>净值日期</span>
+              <input v-model="form.netValueDate" type="date" :max="today" />
+            </label>
+            <label class="form-field">
+              <span>费用（元）</span>
+              <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
             </label>
           </div>
           <label class="form-field">
-            <span>业务日期</span>
+            <span>净到账金额（元）</span>
+            <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label class="form-field">
+            <span>确认日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+            <small>确认份额不能超过申请份额；确认日期不能早于申请日期。</small>
+          </label>
+        </template>
+
+        <template v-else-if="sheet === 'sellArrival'">
+          <label class="form-field">
+            <span>到账金额（元）</span>
+            <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
+            <small>必须与待到账金额一致；如有差额，请先更正赎回确认。</small>
+          </label>
+          <label class="form-field">
+            <span>到账日期</span>
             <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
@@ -901,7 +1172,7 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <CashAdjustmentLink v-if="sheet === 'buy' || sheet === 'sell'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
+        <CashAdjustmentLink v-if="sheet === 'buy'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="-(parseAmount(form.amount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 

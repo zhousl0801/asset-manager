@@ -117,13 +117,34 @@ public sealed class AssetEndpointsTests
             note = "确认",
             requestId = Guid.NewGuid()
         });
-        var fundSellResponse = await client.PostAsJsonAsync("/api/ledger/funds/sells", new
+        var fundSellApplyResponse = await client.PostAsJsonAsync("/api/ledger/funds/sells", new
         {
             positionId = position.Position.Id,
             shares = 10m,
-            netAmount = 150m,
             businessDate = date,
             note = "赎回",
+            requestId = Guid.NewGuid()
+        });
+        var fundSellApply = await fundSellApplyResponse.Content.ReadFromJsonAsync<FundMutationResultDto>(JsonOptions);
+        Assert.NotNull(fundSellApply);
+        var fundSellConfirmResponse = await client.PostAsJsonAsync($"/api/ledger/funds/sells/{fundSellApply.Activity.Id}/confirm", new
+        {
+            shares = 10m,
+            netValue = 13m,
+            netValueDate = date,
+            fee = 0m,
+            netAmount = 150m,
+            businessDate = date,
+            note = "确认",
+            requestId = Guid.NewGuid()
+        });
+        var fundSellConfirm = await fundSellConfirmResponse.Content.ReadFromJsonAsync<FundMutationResultDto>(JsonOptions);
+        Assert.NotNull(fundSellConfirm);
+        var fundSellArrivalResponse = await client.PostAsJsonAsync($"/api/ledger/funds/sells/{fundSellConfirm.Activity.Id}/arrival", new
+        {
+            amount = 150m,
+            businessDate = date,
+            note = "到账",
             requestId = Guid.NewGuid()
         });
 
@@ -135,7 +156,9 @@ public sealed class AssetEndpointsTests
         Assert.Equal(HttpStatusCode.OK, positionResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, fundBuyResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, fundConfirmResponse.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, fundSellResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, fundSellApplyResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, fundSellConfirmResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, fundSellArrivalResponse.StatusCode);
 
         var provident = await client.GetFromJsonAsync<ProvidentOverviewDto>(
             "/api/ledger/provident",
@@ -160,7 +183,7 @@ public sealed class AssetEndpointsTests
         Assert.NotNull(funds);
         Assert.Equal(1300m, funds.TotalValue);
         Assert.Single(funds.Positions);
-        Assert.Equal(4, funds.Activities.Count);
+        Assert.Equal(6, funds.Activities.Count);
 
         Assert.NotNull(cash);
         Assert.Equal(12018m, cash.Balance);
@@ -171,6 +194,7 @@ public sealed class AssetEndpointsTests
         Assert.All(cash.Activities, activity => Assert.Equal(CashActivityType.AssetTransfer, activity.Type));
         Assert.Contains(cash.Activities, activity => activity.Title == "公积金提取");
         Assert.Contains(cash.Activities, activity => activity.Title == "基金买入待确认");
+        Assert.Contains(cash.Activities, activity => activity.Title == "基金赎回到账");
         Assert.Contains(cash.Activities, activity => activity.Title == "积存金卖出");
 
         Assert.NotNull(home);

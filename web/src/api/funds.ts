@@ -1,9 +1,11 @@
 import type {
   BuyFundInput,
   ConfirmFundBuyInput,
+  ConfirmFundSellInput,
   CreateFundPositionInput,
   FundMutationResult,
   FundOverview,
+  FundSellArrivalInput,
   SellFundInput,
   UpdateFundQuoteInput
 } from '../types/fund'
@@ -36,6 +38,20 @@ export function confirmFundBuy(transactionId: string, input: ConfirmFundBuyInput
 
 export function sellFund(input: SellFundInput): Promise<FundMutationResult> {
   return apiRequest<FundMutationResult>('/api/ledger/funds/sells', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
+}
+
+export function confirmFundSell(transactionId: string, input: ConfirmFundSellInput): Promise<FundMutationResult> {
+  return apiRequest<FundMutationResult>(`/api/ledger/funds/sells/${encodeURIComponent(transactionId)}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
+}
+
+export function arriveFundSell(transactionId: string, input: FundSellArrivalInput): Promise<FundMutationResult> {
+  return apiRequest<FundMutationResult>(`/api/ledger/funds/sells/${encodeURIComponent(transactionId)}/arrival`, {
     method: 'POST',
     body: JSON.stringify(input)
   })

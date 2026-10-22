@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   createPosition: vi.fn(),
   sell: vi.fn(),
+  confirmSell: vi.fn(),
+  arriveSell: vi.fn(),
   quote: vi.fn()
 }))
 
@@ -18,6 +20,8 @@ vi.mock('../api/funds', () => ({
   confirmFundBuy: mocks.confirm,
   createFundPosition: mocks.createPosition,
   sellFund: mocks.sell,
+  confirmFundSell: mocks.confirmSell,
+  arriveFundSell: mocks.arriveSell,
   updateFundQuote: mocks.quote
 }))
 
@@ -47,6 +51,9 @@ const overview = {
   }],
   activities: [],
   pendingAmount: 300,
+  pendingArrivalAmount: 0,
+  sellApplications: [] as unknown[],
+  pendingArrivals: [] as unknown[],
   pendingBuys: [{
     transactionId: 'pb1',
     positionId: 'p1',
@@ -123,5 +130,109 @@ test('buy only records the paid amount and defers shares to confirmation', async
   expect(mocks.buy).toHaveBeenCalledTimes(1)
   expect(mocks.buy.mock.calls[0]![0]).toMatchObject({ positionId: 'p1', amount: 300 })
   expect(mocks.buy.mock.calls[0]![0]).not.toHaveProperty('shares')
+  view.unmount()
+})
+
+test('redemption application records shares without collecting proceeds', async () => {
+  mocks.sell.mockResolvedValue({
+    position: overview.positions[0],
+    cashBalance: 9700,
+    activity: { id: 'sa1', type: 'sellApply', shares: 10, amount: 0, cashEffect: 0, fee: 0 }
+  })
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+
+  const sellButton = view.findAll('button').find((button) => button.text() === '卖出')!
+  await sellButton.trigger('click')
+  await flushPromises()
+
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
+  inputs[0]!.value = '10'
+  inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.sell).toHaveBeenCalledTimes(1)
+  expect(mocks.sell.mock.calls[0]![0]).toMatchObject({ positionId: 'p1', shares: 10 })
+  expect(mocks.sell.mock.calls[0]![0]).not.toHaveProperty('netAmount')
+  view.unmount()
+})
+
+test('redemption confirmation submits shares, net value, fee and proceeds', async () => {
+  const withApplication = structuredClone(overview)
+  withApplication.pendingAmount = 0
+  withApplication.pendingBuys = []
+  withApplication.sellApplications = [{
+    transactionId: 'sa1',
+    positionId: 'p1',
+    positionName: '纳指基金',
+    shares: 10,
+    businessDate: '2026-10-21',
+    note: '赎回'
+  }]
+  mocks.overview.mockResolvedValue(withApplication)
+  mocks.confirmSell.mockResolvedValue({
+    position: overview.positions[0],
+    cashBalance: 9700,
+    activity: { id: 'sc1', type: 'sellConfirm', shares: 10, amount: 100, cashEffect: 0, fee: 0 }
+  })
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+
+  const confirmButton = view.findAll('button').find((button) => button.text() === '确认赎回')!
+  await confirmButton.trigger('click')
+  await flushPromises()
+
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
+  inputs[1]!.value = '10'
+  inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+  inputs[4]!.value = '100'
+  inputs[4]!.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.confirmSell).toHaveBeenCalledTimes(1)
+  expect(mocks.confirmSell.mock.calls[0]![0]).toBe('sa1')
+  expect(mocks.confirmSell.mock.calls[0]![1]).toMatchObject({ shares: 10, netValue: 10, netAmount: 100, fee: 0 })
+  view.unmount()
+})
+
+test('redemption arrival sends the pending amount to cash', async () => {
+  const withArrival = structuredClone(overview)
+  withArrival.pendingAmount = 0
+  withArrival.pendingBuys = []
+  withArrival.pendingArrivalAmount = 100
+  withArrival.pendingArrivals = [{
+    transactionId: 'sc1',
+    positionId: 'p1',
+    positionName: '纳指基金',
+    shares: 10,
+    amount: 100,
+    businessDate: '2026-10-21',
+    note: null
+  }]
+  mocks.overview.mockResolvedValue(withArrival)
+  mocks.arriveSell.mockResolvedValue({
+    position: overview.positions[0],
+    cashBalance: 9800,
+    activity: { id: 'ar1', type: 'sellArrival', shares: null, amount: 100, cashEffect: 100, fee: 0 }
+  })
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+
+  const arrivalButton = view.findAll('button').find((button) => button.text() === '登记到账')!
+  await arrivalButton.trigger('click')
+  await flushPromises()
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.arriveSell).toHaveBeenCalledTimes(1)
+  expect(mocks.arriveSell.mock.calls[0]![0]).toBe('sc1')
+  expect(mocks.arriveSell.mock.calls[0]![1]).toMatchObject({ amount: 100 })
   view.unmount()
 })

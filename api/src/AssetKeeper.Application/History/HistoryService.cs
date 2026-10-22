@@ -219,6 +219,7 @@ public sealed class HistoryService
         }
 
         ValidateFundBuyChange(original, facts, request);
+        ValidateFundSellChange(original, facts, request);
 
         if (request.Action == "reverse")
         {
@@ -337,6 +338,53 @@ public sealed class HistoryService
         if (request.Action == "correct" && request.Fee is not null && (request.Fee < 0 || request.Fee > original.Amount))
         {
             throw new HistoryValidationException("买入确认费用必须在 0 与买入金额之间。");
+        }
+    }
+
+    private static void ValidateFundSellChange(BusinessFact original, IReadOnlyList<BusinessFact> facts, HistoryChangeRequest request)
+    {
+        if (original.Source != "asset")
+        {
+            return;
+        }
+
+        var linkedConfirm = facts.FirstOrDefault(fact => !fact.IsReversed
+            && fact.Kind == AssetTransactionKind.FundSellConfirm && fact.LinkedTransactionId == original.Id);
+        var linkedArrival = facts.FirstOrDefault(fact => !fact.IsReversed
+            && fact.Kind == AssetTransactionKind.FundSellArrival && fact.LinkedTransactionId == original.Id);
+
+        if (original.Kind == AssetTransactionKind.FundSellApply && linkedConfirm is not null)
+        {
+            throw new HistoryValidationException("该赎回申请已确认，请先撤销赎回确认，再处理申请记录。");
+        }
+
+        if (original.Kind == AssetTransactionKind.FundSellApply && request.Action == "correct" && request.Amount != 0m)
+        {
+            throw new HistoryValidationException("赎回申请只记录申请份额，不填写金额。");
+        }
+
+        if (original.Kind == AssetTransactionKind.FundSellConfirm && linkedArrival is not null)
+        {
+            throw new HistoryValidationException("该赎回确认已到账，请先撤销赎回到账，再处理确认记录。");
+        }
+
+        if (original.Kind != AssetTransactionKind.FundSellArrival || request.Action != "correct")
+        {
+            return;
+        }
+
+        var confirm = original.LinkedTransactionId is Guid confirmId
+            ? facts.FirstOrDefault(fact => fact.Id == confirmId && !fact.IsReversed)
+            : null;
+
+        if (confirm is null)
+        {
+            throw new HistoryValidationException("赎回到账关联的确认记录不存在或已撤销。");
+        }
+
+        if (request.Amount != confirm.Amount)
+        {
+            throw new HistoryValidationException("赎回到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。");
         }
     }
 

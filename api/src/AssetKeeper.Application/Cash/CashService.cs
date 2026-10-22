@@ -258,6 +258,7 @@ public sealed class CashService
             AssetTransactionKind.FundBuy => "基金买入",
             AssetTransactionKind.FundBuyPending => "基金买入待确认",
             AssetTransactionKind.FundSell => "基金卖出",
+            AssetTransactionKind.FundSellArrival => "基金赎回到账",
             AssetTransactionKind.GoldBuy => "积存金买入",
             AssetTransactionKind.GoldSell => "积存金卖出",
             _ => "资产流转"

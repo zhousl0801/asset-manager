@@ -52,7 +52,9 @@ public sealed class G0RegressionTests
         var service = new FundService(context.Repository, context.Dates);
         var opening = await service.CreatePositionAsync(new("基金", null, null, null, 100m, 1000m, 10m, Today.AddDays(-20), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
         var id = opening.Result!.Position.Id;
-        await service.SellAsync(new(id, 50m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        var sellApply = await service.ApplySellAsync(new(id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
+        await service.ConfirmSellAsync(sellApply.Result!.Activity.Id,
+            new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
 
         var pending = await service.BuyAsync(new(id, 2000m, Today.AddDays(-11), null, Guid.NewGuid()), CancellationToken.None);
         var result = await service.ConfirmBuyAsync(pending.Result!.Activity.Id,

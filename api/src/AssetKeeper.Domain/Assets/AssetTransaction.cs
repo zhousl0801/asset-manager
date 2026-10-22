@@ -83,20 +83,25 @@ public sealed class AssetTransaction
         var quote = Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote;
         var pendingBuy = Kind == AssetTransactionKind.FundBuyPending;
         var confirmedBuy = Kind == AssetTransactionKind.FundBuyConfirm;
+        var sellApply = Kind == AssetTransactionKind.FundSellApply;
+        var sellConfirm = Kind == AssetTransactionKind.FundSellConfirm;
+        var sellArrival = Kind == AssetTransactionKind.FundSellArrival;
         EnsureAmount(amount, nameof(amount));
 
-        if (amount < 0 || (!opening && !quote && amount == 0))
+        if (amount < 0 || (!opening && !quote && !sellApply && amount == 0))
         {
-            throw new ArgumentException("交易金额必须大于 0；起始余额或核对成本允许为 0。");
+            throw new ArgumentException("交易金额必须大于 0；起始余额、赎回申请或核对成本允许为 0。");
         }
 
         if (AssetType != AssetType.ProvidentFund && !quote)
         {
-            if (pendingBuy)
+            if (pendingBuy || sellArrival)
             {
                 if (quantity is not null)
                 {
-                    throw new ArgumentException("买入待确认不包含份额，确认时再录入实际份额。");
+                    throw new ArgumentException(pendingBuy
+                        ? "买入待确认不包含份额，确认时再录入实际份额。"
+                        : "赎回到账不包含份额，确认时已记录实际赎回份额。");
                 }
             }
             else if (quantity is null || quantity < 0 || quantity > MaximumQuantity || decimal.Round(quantity.Value, 4) != quantity.Value
@@ -106,14 +111,14 @@ public sealed class AssetTransaction
             }
         }
 
-        if (pendingBuy && (price is not null || priceDate is not null))
+        if ((pendingBuy || sellApply || sellArrival) && (price is not null || priceDate is not null))
         {
-            throw new ArgumentException("买入待确认不记录成交净值，确认时再填写。");
+            throw new ArgumentException("该记录不包含成交净值，净值在确认时填写。");
         }
 
-        if (confirmedBuy && (price is null || priceDate is null))
+        if ((confirmedBuy || sellConfirm) && (price is null || priceDate is null))
         {
-            throw new ArgumentException("买入确认必须提供成交净值和净值日期。");
+            throw new ArgumentException("确认记录必须提供成交净值和净值日期。");
         }
 
         if (price is not null && (price <= 0 || price > MaximumPrice || decimal.Round(price.Value, 4) != price.Value))
@@ -133,24 +138,24 @@ public sealed class AssetTransaction
 
         if (fee is not null && fee != 0m)
         {
-            if (!confirmedBuy)
+            if (!confirmedBuy && !sellConfirm)
             {
-                throw new ArgumentException("只有买入确认可以记录费用。");
+                throw new ArgumentException("只有确认记录可以记录费用。");
             }
 
             EnsureFee(fee.Value, amount);
             Fee = fee.Value;
         }
-        else if (confirmedBuy && fee is not null)
+        else if ((confirmedBuy || sellConfirm) && fee is not null)
         {
             Fee = 0m;
         }
-        else if (pendingBuy)
+        else if (pendingBuy || sellApply || sellArrival)
         {
             Fee = 0m;
         }
 
-        if (confirmedBuy)
+        if (confirmedBuy || sellConfirm)
         {
             EnsureFee(Fee, amount);
         }
@@ -166,7 +171,8 @@ public sealed class AssetTransaction
         CashEffect = Kind switch
         {
             AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyPending or AssetTransactionKind.GoldBuy => -amount,
-            AssetTransactionKind.FundSell or AssetTransactionKind.GoldSell or AssetTransactionKind.ProvidentWithdrawal => amount,
+            AssetTransactionKind.FundSell or AssetTransactionKind.FundSellArrival or AssetTransactionKind.GoldSell
+                or AssetTransactionKind.ProvidentWithdrawal => amount,
             _ => 0m
         };
         Note = Normalize(note);
@@ -358,11 +364,42 @@ public sealed class AssetTransaction
         return transaction;
     }
 
-    public static AssetTransaction CreateFundSell(
+    public static AssetTransaction CreateFundSellApply(
         Guid ledgerId,
         Guid fundPositionId,
         decimal shares,
+        string subject,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveQuantity(shares, nameof(shares));
+
+        return Create(
+            ledgerId,
+            requestId,
+            AssetType.Fund,
+            AssetTransactionKind.FundSellApply,
+            RequirePositionId(fundPositionId),
+            shares,
+            0m,
+            0m,
+            null,
+            subject,
+            note,
+            businessDate,
+            now);
+    }
+
+    public static AssetTransaction CreateFundSellConfirm(
+        Guid ledgerId,
+        Guid fundPositionId,
+        Guid applyTransactionId,
+        decimal shares,
+        decimal netValue,
         decimal netAmount,
+        decimal fee,
         string subject,
         DateOnly businessDate,
         string? note,
@@ -371,21 +408,68 @@ public sealed class AssetTransaction
     {
         EnsurePositiveQuantity(shares, nameof(shares));
         EnsurePositiveAmount(netAmount, nameof(netAmount));
+        EnsureFee(fee, netAmount);
 
-        return Create(
+        if (applyTransactionId == Guid.Empty)
+        {
+            throw new ArgumentException("赎回申请标识无效。", nameof(applyTransactionId));
+        }
+
+        var transaction = Create(
             ledgerId,
             requestId,
             AssetType.Fund,
-            AssetTransactionKind.FundSell,
+            AssetTransactionKind.FundSellConfirm,
             RequirePositionId(fundPositionId),
             shares,
             netAmount,
-            netAmount,
+            0m,
+            netValue,
+            subject,
+            note,
+            businessDate,
+            now,
+            fee);
+        transaction.LinkedTransactionId = applyTransactionId;
+
+        return transaction;
+    }
+
+    public static AssetTransaction CreateFundSellArrival(
+        Guid ledgerId,
+        Guid fundPositionId,
+        Guid confirmTransactionId,
+        decimal amount,
+        string subject,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveAmount(amount, nameof(amount));
+
+        if (confirmTransactionId == Guid.Empty)
+        {
+            throw new ArgumentException("赎回确认标识无效。", nameof(confirmTransactionId));
+        }
+
+        var transaction = Create(
+            ledgerId,
+            requestId,
+            AssetType.Fund,
+            AssetTransactionKind.FundSellArrival,
+            RequirePositionId(fundPositionId),
+            null,
+            amount,
+            amount,
             null,
             subject,
             note,
             businessDate,
             now);
+        transaction.LinkedTransactionId = confirmTransactionId;
+
+        return transaction;
     }
 
     public static AssetTransaction CreateFundQuote(
