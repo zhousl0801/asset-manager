@@ -18,6 +18,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     private readonly List<MutationReceipt> _receipts = new();
 
     private readonly List<LedgerEntry> _entries = new();
+    private readonly List<EntryCategory> _categories = new();
     private readonly List<CashAdjustment> _adjustments = new();
     private readonly List<FundPosition> _fundPositions = new();
     private readonly List<AssetTransaction> _assetTransactions = new();
@@ -35,6 +36,8 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     public int SaveCount { get; private set; }
 
     public IReadOnlyList<LedgerEntry> Entries => _entries;
+
+    public IReadOnlyList<EntryCategory> Categories => _categories;
 
     public IReadOnlyList<CashAdjustment> Adjustments => _adjustments;
 
@@ -184,6 +187,83 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     public Task AddEntryAsync(LedgerEntry entry, CancellationToken cancellationToken)
     {
         _entries.Add(entry);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<EntryCategory>> GetCategoriesAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<EntryCategory> categories = _categories
+            .Where(category => category.LedgerId == ledgerId)
+            .OrderBy(category => category.Kind)
+            .ThenBy(category => category.SortOrder)
+            .ThenBy(category => category.Name)
+            .ToList();
+
+        return Task.FromResult(categories);
+    }
+
+    public Task<EntryCategory?> GetCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var normalized = name.Trim();
+
+        return Task.FromResult(_categories.SingleOrDefault(category =>
+            category.LedgerId == ledgerId
+            && category.Kind == kind
+            && string.Equals(category.Name, normalized, StringComparison.Ordinal)));
+    }
+
+    public Task<EntryCategory?> GetCategoryForUpdateAsync(
+        Guid ledgerId,
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_categories.SingleOrDefault(category =>
+            category.LedgerId == ledgerId && category.Id == categoryId));
+    }
+
+    public Task<EntryCategory?> GetCategoryBySystemKeyAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string systemKey,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_categories.SingleOrDefault(category =>
+            category.LedgerId == ledgerId
+            && category.Kind == kind
+            && string.Equals(category.SystemKey, systemKey, StringComparison.Ordinal)));
+    }
+
+    public Task AddCategoryAsync(EntryCategory category, CancellationToken cancellationToken)
+    {
+        _categories.Add(category);
+        return Task.CompletedTask;
+    }
+
+    public Task AddCategoriesAsync(IReadOnlyList<EntryCategory> categories, CancellationToken cancellationToken)
+    {
+        _categories.AddRange(categories);
+        return Task.CompletedTask;
+    }
+
+    public Task RenameEntryCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string oldName,
+        string newName,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in _entries.Where(entry =>
+            entry.LedgerId == ledgerId && entry.Kind == kind && entry.Category == oldName))
+        {
+            entry.ApplyCategoryRename(newName);
+        }
+
         return Task.CompletedTask;
     }
 

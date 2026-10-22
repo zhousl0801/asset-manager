@@ -182,10 +182,15 @@ public sealed class PlanExecutionService
         {
             case AutoPlanType.SalaryIncome:
             {
+                var salaryCategory = await _ledgerRepository.GetCategoryBySystemKeyAsync(
+                    occurrence.LedgerId,
+                    LedgerEntryKind.Income,
+                    "salary",
+                    cancellationToken);
                 var result = await _entries.CreateAsync(
                     new CreateLedgerEntryRequest(
                         LedgerEntryKind.Income,
-                        "工资",
+                        salaryCategory?.Name ?? "工资",
                         occurrence.Amount,
                         occurrence.DueDate,
                         occurrence.PlanName,

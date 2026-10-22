@@ -32,6 +32,36 @@ export interface EntryPeriodSummary {
   entries: LedgerEntry[]
 }
 
+export interface EntryStatsPoint {
+  date: string
+  label: string
+  income: number
+  expense: number
+}
+
+export interface EntryStatsCategory {
+  category: string
+  amount: number
+  count: number
+  share: number
+}
+
+export interface EntryStats {
+  period: EntryPeriod
+  anchor: string
+  from: string
+  to: string
+  coveredDays: number
+  income: number
+  expense: number
+  incomeDailyAverage: number
+  expenseDailyAverage: number
+  points: EntryStatsPoint[]
+  incomeCategories: EntryStatsCategory[]
+  expenseCategories: EntryStatsCategory[]
+  note: string | null
+}
+
 export interface EntryMutationResult {
   entry: LedgerEntry
   cashBalance: number

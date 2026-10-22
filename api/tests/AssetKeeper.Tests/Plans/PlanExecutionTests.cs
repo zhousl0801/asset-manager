@@ -73,7 +73,7 @@ public sealed class PlanExecutionTests
         Assert.Contains("现金余额不足", sipOccurrence.ErrorMessage);
 
         await new LedgerEntryService(context.Repository, context.Dates).CreateAsync(
-            new(LedgerEntryKind.Income, "补资金", 500m, Today, null, Guid.NewGuid()), CancellationToken.None);
+            new(LedgerEntryKind.Income, "其他收入", 500m, Today, null, Guid.NewGuid()), CancellationToken.None);
         var retry = await context.Plans.RetryOccurrenceAsync(
             sipOccurrence.Id, new PlanActionRequest(Guid.NewGuid()), CancellationToken.None);
         Assert.Equal(AssetOperationStatus.Success, retry.Status);

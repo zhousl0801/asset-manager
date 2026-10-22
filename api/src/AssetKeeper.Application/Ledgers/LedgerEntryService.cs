@@ -98,6 +98,17 @@ public sealed class LedgerEntryService
             return EntryOperationResult.Invalid(errors);
         }
 
+        var categoryError = await ValidateCategoryAsync(
+            ledger.Id,
+            request.Kind,
+            request.Category,
+            allowInactive: false,
+            cancellationToken);
+
+        if (categoryError is not null)
+        {
+            return EntryOperationResult.Invalid([categoryError]);
+        }
 
         var now = _businessDateProvider.UtcNow;
         var entry = LedgerEntry.Create(
@@ -178,6 +189,20 @@ public sealed class LedgerEntryService
             return EntryOperationResult.Invalid(errors);
         }
 
+        var keepsCategory = entry.Kind == request.Kind
+            && string.Equals(entry.Category, request.Category.Trim(), StringComparison.Ordinal);
+        var categoryError = await ValidateCategoryAsync(
+            ledger.Id,
+            request.Kind,
+            request.Category,
+            allowInactive: keepsCategory,
+            cancellationToken);
+
+        if (categoryError is not null)
+        {
+            return EntryOperationResult.Invalid([categoryError]);
+        }
+
         var now = _businessDateProvider.UtcNow;
 
         entry.Update(
@@ -251,6 +276,32 @@ public sealed class LedgerEntryService
 
         return EntryOperationResult.Success(
             new EntryMutationResultDto(Map(entry), ledger.CashAccount.Balance));
+    }
+
+    private async Task<string?> ValidateCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string name,
+        bool allowInactive,
+        CancellationToken cancellationToken)
+    {
+        EntryCategory? category;
+
+        try
+        {
+            category = await _ledgerRepository.GetCategoryAsync(ledgerId, kind, name, cancellationToken);
+        }
+        catch (ArgumentException)
+        {
+            return "请选择有效分类。";
+        }
+
+        if (category is null)
+        {
+            return "请选择有效分类。";
+        }
+
+        return !allowInactive && !category.IsActive ? "该分类已停用，请重新选择。" : null;
     }
 
     private static LedgerEntryDto Map(LedgerEntry entry)

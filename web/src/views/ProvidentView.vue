@@ -280,7 +280,7 @@ function goBack(): void {
 
 <style scoped>
 .provident-page {
-  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  padding-bottom: calc(97px + env(safe-area-inset-bottom));
 }
 
 .provident-header {

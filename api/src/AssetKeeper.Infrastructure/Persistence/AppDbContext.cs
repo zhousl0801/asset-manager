@@ -23,6 +23,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
 
+    public DbSet<EntryCategory> EntryCategories => Set<EntryCategory>();
+
     public DbSet<CashAdjustment> CashAdjustments => Set<CashAdjustment>();
 
     public DbSet<ProvidentFundAccount> ProvidentFundAccounts => Set<ProvidentFundAccount>();

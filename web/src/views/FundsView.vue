@@ -1242,7 +1242,7 @@ function goBack(): void {
 
 <style scoped>
 .funds-page {
-  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  padding-bottom: calc(97px + env(safe-area-inset-bottom));
 }
 
 .funds-header {

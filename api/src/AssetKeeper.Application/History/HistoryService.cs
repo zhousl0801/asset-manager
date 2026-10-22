@@ -75,6 +75,25 @@ public sealed class HistoryService
 
         try
         {
+            if (request.Source == "entry" && request.Action == "correct")
+            {
+                if (request.EntryKind is null)
+                {
+                    throw new HistoryValidationException("请选择收支方向。");
+                }
+
+                var category = await _repository.GetCategoryAsync(
+                    ledger.Id,
+                    request.EntryKind.Value,
+                    request.Category ?? string.Empty,
+                    cancellationToken);
+
+                if (category is null)
+                {
+                    throw new HistoryValidationException("请选择有效分类。");
+                }
+            }
+
             var data = await _repository.GetReplayDataAsync(ledger.Id, cancellationToken);
             var before = new LedgerReplayCalculator().Calculate(data, BusinessFact.From(data), _dates.Today, currentDate: _dates.Today);
             var after = Preview(data, request);

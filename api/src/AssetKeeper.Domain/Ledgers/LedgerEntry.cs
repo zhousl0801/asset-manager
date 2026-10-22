@@ -133,6 +133,11 @@ public sealed class LedgerEntry
         Version++;
     }
 
+    public void ApplyCategoryRename(string category)
+    {
+        Category = category;
+    }
+
     public void Reverse(string? reason, DateTimeOffset now)
     {
         if (Status != LedgerEntryStatus.Active)

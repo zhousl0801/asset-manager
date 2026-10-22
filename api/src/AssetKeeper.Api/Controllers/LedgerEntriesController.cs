@@ -10,10 +10,14 @@ namespace AssetKeeper.Api.Controllers;
 public sealed class LedgerEntriesController : ControllerBase
 {
     private readonly LedgerEntryService _ledgerEntryService;
+    private readonly EntryStatsService _entryStatsService;
 
-    public LedgerEntriesController(LedgerEntryService ledgerEntryService)
+    public LedgerEntriesController(
+        LedgerEntryService ledgerEntryService,
+        EntryStatsService entryStatsService)
     {
         _ledgerEntryService = ledgerEntryService;
+        _entryStatsService = entryStatsService;
     }
 
     [HttpGet]
@@ -45,6 +49,24 @@ public sealed class LedgerEntriesController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    [HttpGet("stats")]
+    [ProducesResponseType<EntryStatsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetStats(
+        [FromQuery] EntryPeriod period = EntryPeriod.Month,
+        [FromQuery] DateOnly? anchor = null,
+        CancellationToken cancellationToken = default)
+    {
+        var stats = await _entryStatsService.GetAsync(period, anchor, cancellationToken);
+
+        if (stats is null)
+        {
+            return LedgerNotFound();
+        }
+
+        return Ok(stats);
     }
 
     [HttpGet("{entryId:guid}")]

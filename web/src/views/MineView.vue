@@ -28,6 +28,10 @@ onMounted(async () => {
         <span>自动记账计划</span>
         <b>{{ planCount === null ? '查看 ›' : `${planCount} 项 ›` }}</b>
       </RouterLink>
+      <RouterLink class="list-row" to="/categories">
+        <span>收支分类</span>
+        <b>管理 ›</b>
+      </RouterLink>
       <RouterLink class="list-row" to="/history">
         <span>历史核对与资产回看</span>
         <b>查看 ›</b>

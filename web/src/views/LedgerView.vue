@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchEntryPeriod } from '../api/entries'
+import { fetchEntryPeriod, fetchEntryStats } from '../api/entries'
+import { fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import LedgerStatsChart from '../components/LedgerStatsChart.vue'
 import { ExpenseCategories, IncomeCategories } from '../constants/categories'
+import type { EntryCategory } from '../types/category'
 import { formatBusinessDate, formatMoney, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel, periodStart, shiftAnchor } from '../utils/period'
-import type { EntryKind, EntryPeriod, EntryPeriodSummary, LedgerEntry } from '../types/entry'
+import type { EntryKind, EntryPeriod, EntryPeriodSummary, EntryStats, LedgerEntry } from '../types/entry'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -19,10 +22,16 @@ const periodOptions: Array<{ value: EntryPeriod; label: string }> = [
 
 const period = ref<EntryPeriod>('month')
 const anchor = ref(today)
+const view = ref<'list' | 'chart'>('list')
+const statsKind = ref<EntryKind>('expense')
+const stats = ref<EntryStats | null>(null)
+const statsLoading = ref(false)
+const statsError = ref('')
 const kindFilter = ref<'all' | EntryKind>('all')
 const categoryFilter = ref('')
 const search = ref('')
 const summary = ref<EntryPeriodSummary | null>(null)
+const categoryItems = ref<EntryCategory[]>([])
 const isLoading = ref(false)
 const errorMessage = ref('')
 let searchTimer: number | undefined
@@ -32,6 +41,14 @@ const periodLabel = computed(() => formatPeriodLabel(anchor.value, period.value)
 const canGoNext = computed(() =>
   periodStart(anchor.value, period.value) < periodStart(today, period.value))
 const categoryOptions = computed(() => {
+  const loaded = categoryItems.value
+    .filter((category) => kindFilter.value === 'all' || category.kind === kindFilter.value)
+    .map((category) => category.name)
+
+  if (loaded.length) {
+    return [...new Set(loaded)]
+  }
+
   if (kindFilter.value === 'income') {
     return IncomeCategories
   }
@@ -41,6 +58,27 @@ const categoryOptions = computed(() => {
   }
 
   return [...ExpenseCategories, ...IncomeCategories]
+})
+const statsCategories = computed(() => {
+  if (!stats.value) {
+    return []
+  }
+
+  return statsKind.value === 'income' ? stats.value.incomeCategories : stats.value.expenseCategories
+})
+const statsTotal = computed(() => {
+  if (!stats.value) {
+    return 0
+  }
+
+  return statsKind.value === 'income' ? stats.value.income : stats.value.expense
+})
+const statsAverage = computed(() => {
+  if (!stats.value) {
+    return 0
+  }
+
+  return statsKind.value === 'income' ? stats.value.incomeDailyAverage : stats.value.expenseDailyAverage
 })
 const hasFilters = computed(() =>
   kindFilter.value !== 'all' || categoryFilter.value !== '' || search.value.trim() !== '')
@@ -69,6 +107,12 @@ watch([period, anchor, kindFilter, categoryFilter], () => {
   void loadEntries()
 })
 
+watch([period, anchor, view], () => {
+  if (view.value === 'chart') {
+    void loadStats()
+  }
+})
+
 watch(search, () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(() => {
@@ -76,7 +120,42 @@ watch(search, () => {
   }, 300)
 })
 
-onMounted(() => loadEntries())
+onMounted(() => {
+  void loadCategories()
+  void loadEntries()
+})
+
+function switchView(next: 'list' | 'chart'): void {
+  view.value = next
+}
+
+async function loadStats(): Promise<void> {
+  statsLoading.value = true
+  statsError.value = ''
+
+  try {
+    stats.value = await fetchEntryStats(period.value, anchor.value)
+  } catch (error) {
+    stats.value = null
+    statsError.value = getApiErrorMessage(error, '图表数据暂时无法读取，请稍后重试。')
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+function selectStatsCategory(category: string): void {
+  kindFilter.value = statsKind.value
+  categoryFilter.value = category
+  view.value = 'list'
+}
+
+async function loadCategories(): Promise<void> {
+  try {
+    categoryItems.value = await fetchCategories()
+  } catch {
+    categoryItems.value = []
+  }
+}
 
 onBeforeUnmount(() => {
   window.clearTimeout(searchTimer)
@@ -180,6 +259,11 @@ function goBack(): void {
     </header>
     <RouterLink class="back-link history-entry-link" to="/history">历史核对与资产回看 ›</RouterLink>
 
+    <div class="view-tabs" role="tablist" aria-label="账本视图">
+      <button type="button" :class="{ active: view === 'list' }" @click="switchView('list')">明细</button>
+      <button type="button" :class="{ active: view === 'chart' }" @click="switchView('chart')">图表</button>
+    </div>
+
     <section class="period-panel">
       <div class="period-top">
         <div class="period-tabs" role="tablist" aria-label="账本周期">
@@ -222,6 +306,7 @@ function goBack(): void {
       </div>
     </section>
 
+    <template v-if="view === 'list'">
     <div class="filter-bar">
       <div class="kind-tabs" role="tablist" aria-label="收支类型">
         <button
@@ -308,13 +393,78 @@ function goBack(): void {
       <p class="list-note">{{ summary?.entries.length ?? 0 }} 笔日常收支</p>
     </template>
   <button v-if="summary && summary.entries.length < summary.totalCount" type="button" class="secondary-button" :disabled="isLoading" @click="loadEntries(true)">加载更多（已显示 {{ summary.entries.length }} / {{ summary.totalCount }}）</button>
+    </template>
+
+    <template v-else>
+      <div class="stats-direction" role="tablist" aria-label="图表方向">
+        <button type="button" :class="{ active: statsKind === 'expense' }" @click="statsKind = 'expense'">支出</button>
+        <button type="button" :class="{ active: statsKind === 'income' }" @click="statsKind = 'income'">收入</button>
+      </div>
+
+      <p v-if="statsLoading && !stats" class="state">正在读取图表…</p>
+      <section v-else-if="statsError" class="state">
+        <p>{{ statsError }}</p>
+        <button type="button" class="secondary-button" @click="loadStats">重新加载</button>
+      </section>
+
+      <template v-else-if="stats">
+        <section class="stats-panel">
+          <div class="stats-head">
+            <h2>{{ statsKind === 'income' ? '收入' : '支出' }}</h2>
+            <b>¥{{ formatMoney(statsTotal) }}</b>
+          </div>
+          <p class="stats-meta">
+            日均 ¥{{ formatMoney(statsAverage) }} · 覆盖 {{ stats.coveredDays }} 天 · {{ periodLabel }}
+          </p>
+          <p v-if="stats.note" class="stats-note">{{ stats.note }}</p>
+        </section>
+
+        <section class="chart-card">
+          <div class="stats-head">
+            <h2>{{ statsKind === 'income' ? '收入趋势' : '支出趋势' }}</h2>
+            <span class="tiny">{{ stats.period === 'day' ? '当天' : stats.period === 'month' ? '按日' : '按月' }}</span>
+          </div>
+          <p v-if="stats.period === 'day'" class="state-inline">日视图只显示当天合计，切换月或年可查看趋势。</p>
+          <LedgerStatsChart
+            v-else-if="stats.points.length"
+            :points="stats.points"
+            :direction="statsKind"
+            :period="stats.period"
+            :total="statsTotal"
+          />
+          <p v-else class="state-inline">该周期还没有记录。</p>
+        </section>
+
+        <section class="ranking-panel" :class="{ income: statsKind === 'income' }">
+          <div class="stats-head">
+            <h2>分类排行</h2>
+            <span class="tiny">{{ statsCategories.length }} 类</span>
+          </div>
+          <button
+            v-for="category in statsCategories"
+            :key="category.category"
+            type="button"
+            class="rank-row"
+            @click="selectStatsCategory(category.category)"
+          >
+            <span class="rank-top">
+              <span>{{ category.category }}</span>
+              <b>¥{{ formatMoney(category.amount) }}</b>
+            </span>
+            <span class="rank-bar"><span :style="{ width: `${Math.max(category.share, 1)}%` }" /></span>
+            <small>{{ category.count }} 笔 · {{ category.share.toFixed(2) }}%</small>
+          </button>
+          <p v-if="!statsCategories.length" class="state-inline">该周期还没有{{ statsKind === 'income' ? '收入' : '支出' }}记录。</p>
+        </section>
+      </template>
+    </template>
     <AppNav />
   </main>
 </template>
 
 <style scoped>
 .ledger-page {
-  padding-bottom: calc(28px + env(safe-area-inset-bottom));
+  padding-bottom: calc(97px + env(safe-area-inset-bottom));
 }
 
 .ledger-header {
@@ -344,6 +494,160 @@ function goBack(): void {
 
 .add-button {
   font-weight: 550;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  width: fit-content;
+  margin-bottom: 14px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--color-bg-subtle);
+}
+
+.view-tabs button {
+  min-height: 30px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.view-tabs button.active {
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.stats-direction {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stats-direction button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.stats-direction button.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-weight: 550;
+}
+
+.stats-panel,
+.chart-card,
+.ranking-panel {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.stats-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.stats-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stats-head b {
+  font-size: 22px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.stats-note {
+  margin: 8px 0 0;
+  color: var(--color-warning);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.state-inline {
+  margin: 8px 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.rank-row {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.rank-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.rank-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.rank-top b {
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-bar {
+  display: block;
+  height: 5px;
+  margin: 6px 0 4px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--color-bg-subtle);
+}
+
+.rank-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-brand);
+}
+
+.ranking-panel.income .rank-bar span {
+  background: var(--color-finance-income);
+}
+
+.rank-row small {
+  color: var(--color-text-secondary);
+  font-size: 9px;
 }
 
 .period-panel {

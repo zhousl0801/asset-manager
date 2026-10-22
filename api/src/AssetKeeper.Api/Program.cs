@@ -36,6 +36,8 @@ builder.Services.AddScoped<LedgerService>();
 builder.Services.AddScoped<TrendService>();
 builder.Services.AddScoped<MonthChangeService>();
 builder.Services.AddScoped<LedgerEntryService>();
+builder.Services.AddScoped<EntryStatsService>();
+builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<CashService>();
 builder.Services.AddScoped<ProvidentFundService>();
 builder.Services.AddScoped<GoldService>();

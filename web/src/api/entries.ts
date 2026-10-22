@@ -4,6 +4,7 @@ import type {
   EntryMutationResult,
   EntryPeriod,
   EntryPeriodSummary,
+  EntryStats,
   LedgerEntry,
   UpdateEntryInput
 } from '../types/entry'
@@ -40,6 +41,15 @@ export function fetchEntryPeriod(query: EntryPeriodQuery): Promise<EntryPeriodSu
   }
 
   return apiRequest<EntryPeriodSummary>(`/api/ledger/entries?${params.toString()}`)
+}
+
+export function fetchEntryStats(period: EntryPeriod, anchor: string): Promise<EntryStats> {
+  const params = new URLSearchParams({
+    period,
+    anchor
+  })
+
+  return apiRequest<EntryStats>(`/api/ledger/entries/stats?${params.toString()}`)
 }
 
 export function fetchEntry(entryId: string): Promise<LedgerEntry> {

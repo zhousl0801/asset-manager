@@ -27,6 +27,11 @@ const router = createRouter({
       component: () => import('../views/MineView.vue')
     },
     {
+      path: '/categories',
+      name: 'categories',
+      component: () => import('../views/CategoriesView.vue')
+    },
+    {
       path: '/cash',
       name: 'cash',
       component: () => import('../views/CashView.vue')

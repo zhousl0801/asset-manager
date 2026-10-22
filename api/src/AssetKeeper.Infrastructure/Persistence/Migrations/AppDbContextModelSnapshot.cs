@@ -514,6 +514,66 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.ToTable("cash_adjustments", (string)null);
                 });
 
+            modelBuilder.Entity("AssetKeeper.Domain.Ledgers.EntryCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("SystemKey")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("system_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LedgerId", "Kind", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("LedgerId", "Kind", "SortOrder");
+
+                    b.ToTable("entry_categories", (string)null);
+                });
+
             modelBuilder.Entity("AssetKeeper.Domain.Ledgers.Ledger", b =>
                 {
                     b.Property<Guid>("Id")
@@ -974,6 +1034,15 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Ledger");
+                });
+
+            modelBuilder.Entity("AssetKeeper.Domain.Ledgers.EntryCategory", b =>
+                {
+                    b.HasOne("AssetKeeper.Domain.Ledgers.Ledger", null)
+                        .WithMany()
+                        .HasForeignKey("LedgerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AssetKeeper.Domain.Ledgers.LedgerEntry", b =>

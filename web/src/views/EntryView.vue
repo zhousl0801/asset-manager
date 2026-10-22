@@ -3,9 +3,11 @@ import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createEntry, fetchEntry, reverseEntry, updateEntry } from '../api/entries'
+import { fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AmountKeypad from '../components/AmountKeypad.vue'
 import { categoriesFor } from '../constants/categories'
+import type { EntryCategory } from '../types/category'
 import { applyAmountKey, evaluateAmountExpression, type AmountKey } from '../utils/amount'
 import { todayInBusinessTimeZone } from '../utils/format'
 import { createRequestId } from '../utils/request'
@@ -38,7 +40,20 @@ const formError = ref('')
 const showReverse = ref(false)
 const reverseReason = ref('')
 
-const categories = computed(() => categoriesFor(form.kind))
+const categoryItems = ref<EntryCategory[]>([])
+const categories = computed(() => {
+  const active = categoryItems.value
+    .filter((category) => category.kind === form.kind && category.isActive)
+    .sort((first, second) => first.sortOrder - second.sortOrder || first.name.localeCompare(second.name))
+    .map((category) => category.name)
+  const names = active.length ? active : categoriesFor(form.kind)
+
+  if (form.category && !names.includes(form.category)) {
+    return [form.category, ...names]
+  }
+
+  return names
+})
 const amount = computed(() => evaluateAmountExpression(form.expression))
 const canEdit = computed(() => entryStatus.value === 'active')
 const canSubmit = computed(() => amount.value !== null && !isSaving.value && canEdit.value)
@@ -52,6 +67,7 @@ const dateLabel = computed(() => {
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
+  await loadCategories()
 
   if (entryId.value) {
     await loadEntry()
@@ -59,6 +75,20 @@ onMounted(async () => {
     applyKindPreset()
   }
 })
+
+async function loadCategories(): Promise<void> {
+  try {
+    categoryItems.value = await fetchCategories()
+  } catch {
+    categoryItems.value = []
+  }
+}
+
+function defaultCategory(kind: EntryKind): string {
+  const first = categoryItems.value.find((category) => category.kind === kind && category.isActive)
+
+  return first?.name ?? categoriesFor(kind)[0] ?? ''
+}
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeydown)
@@ -92,7 +122,7 @@ function applyKindPreset(): void {
   }
 
   form.kind = requestedKind
-  form.category = categoriesFor(requestedKind)[0] ?? ''
+  form.category = defaultCategory(requestedKind)
 }
 
 function applyEntry(entry: LedgerEntry): void {
@@ -113,8 +143,8 @@ function setKind(kind: EntryKind): void {
 
   form.kind = kind
 
-  if (!categoriesFor(kind).includes(form.category)) {
-    form.category = categoriesFor(kind)[0] ?? ''
+  if (!categories.value.includes(form.category)) {
+    form.category = defaultCategory(kind)
   }
 }
 

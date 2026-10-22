@@ -190,6 +190,87 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.LedgerEntries.AddAsync(entry, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<EntryCategory>> GetCategoriesAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.EntryCategories
+            .AsNoTracking()
+            .Where(category => category.LedgerId == ledgerId)
+            .OrderBy(category => category.Kind)
+            .ThenBy(category => category.SortOrder)
+            .ThenBy(category => category.Name)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<EntryCategory?> GetCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var normalized = EntryCategory.NormalizeName(name);
+
+        return _dbContext.EntryCategories
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                category => category.LedgerId == ledgerId && category.Kind == kind && category.Name == normalized,
+                cancellationToken);
+    }
+
+    public Task<EntryCategory?> GetCategoryForUpdateAsync(
+        Guid ledgerId,
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.EntryCategories
+            .SingleOrDefaultAsync(
+                category => category.LedgerId == ledgerId && category.Id == categoryId,
+                cancellationToken);
+    }
+
+    public Task<EntryCategory?> GetCategoryBySystemKeyAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string systemKey,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.EntryCategories
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                category => category.LedgerId == ledgerId
+                    && category.Kind == kind
+                    && category.SystemKey == systemKey,
+                cancellationToken);
+    }
+
+    public async Task AddCategoryAsync(EntryCategory category, CancellationToken cancellationToken)
+    {
+        await _dbContext.EntryCategories.AddAsync(category, cancellationToken);
+    }
+
+    public async Task AddCategoriesAsync(IReadOnlyList<EntryCategory> categories, CancellationToken cancellationToken)
+    {
+        await _dbContext.EntryCategories.AddRangeAsync(categories, cancellationToken);
+    }
+
+    public async Task RenameEntryCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string oldName,
+        string newName,
+        CancellationToken cancellationToken)
+    {
+        var entries = await _dbContext.LedgerEntries
+            .Where(entry => entry.LedgerId == ledgerId && entry.Kind == kind && entry.Category == oldName)
+            .ToListAsync(cancellationToken);
+
+        foreach (var entry in entries)
+        {
+            entry.ApplyCategoryRename(newName);
+        }
+    }
+
     public async Task<IReadOnlyList<CashAdjustment>> GetCashAdjustmentsAsync(
         Guid ledgerId,
         DateOnly from,

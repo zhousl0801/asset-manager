@@ -51,6 +51,38 @@ public interface ILedgerRepository
 
     Task AddEntryAsync(LedgerEntry entry, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<EntryCategory>> GetCategoriesAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken);
+
+    Task<EntryCategory?> GetCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string name,
+        CancellationToken cancellationToken);
+
+    Task<EntryCategory?> GetCategoryForUpdateAsync(
+        Guid ledgerId,
+        Guid categoryId,
+        CancellationToken cancellationToken);
+
+    Task<EntryCategory?> GetCategoryBySystemKeyAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string systemKey,
+        CancellationToken cancellationToken);
+
+    Task AddCategoryAsync(EntryCategory category, CancellationToken cancellationToken);
+
+    Task AddCategoriesAsync(IReadOnlyList<EntryCategory> categories, CancellationToken cancellationToken);
+
+    Task RenameEntryCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string oldName,
+        string newName,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<CashAdjustment>> GetCashAdjustmentsAsync(
         Guid ledgerId,
         DateOnly from,

@@ -138,6 +138,10 @@ public sealed class LedgerService
         ledger.SetCashAccount(cashAccount);
 
         await _ledgerRepository.AddAsync(ledger, cashAccount, cancellationToken);
+        await _ledgerRepository.AddCategoriesAsync(
+            EntryCategoryDefaults.CreateFor(ledger.Id, now).ToList(),
+            cancellationToken);
+
         try
         {
             await _ledgerRepository.SaveChangesAsync(cancellationToken);
