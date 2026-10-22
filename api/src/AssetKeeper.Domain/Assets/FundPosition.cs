@@ -20,6 +20,8 @@ public sealed class FundPosition
 
     public Guid LedgerId { get; private set; }
 
+    public Guid? FundGroupId { get; private set; }
+
     public string Name { get; private set; } = string.Empty;
 
     public string? Code { get; private set; }
@@ -50,6 +52,8 @@ public sealed class FundPosition
 
     public Ledger Ledger { get; private set; } = null!;
 
+    public FundGroup? FundGroup { get; private set; }
+
     public decimal Value => decimal.Round(Shares * NetValue, 2);
 
     public decimal HoldingProfit => decimal.Round(Value - Cost, 2);
@@ -63,6 +67,23 @@ public sealed class FundPosition
         RealizedProfit = realizedProfit;
         NetValue = netValue;
         NetValueDate = netValueDate;
+        UpdatedAt = now;
+        Version++;
+    }
+
+    public void AssignGroup(Guid? fundGroupId, DateTimeOffset now)
+    {
+        if (fundGroupId == Guid.Empty)
+        {
+            throw new ArgumentException("分组标识无效。", nameof(fundGroupId));
+        }
+
+        if (FundGroupId == fundGroupId)
+        {
+            return;
+        }
+
+        FundGroupId = fundGroupId;
         UpdatedAt = now;
         Version++;
     }

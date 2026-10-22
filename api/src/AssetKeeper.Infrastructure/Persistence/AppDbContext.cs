@@ -29,6 +29,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<ProvidentFundAccount> ProvidentFundAccounts => Set<ProvidentFundAccount>();
 
+    public DbSet<FundGroup> FundGroups => Set<FundGroup>();
+
     public DbSet<FundPosition> FundPositions => Set<FundPosition>();
 
     public DbSet<GoldHolding> GoldHoldings => Set<GoldHolding>();

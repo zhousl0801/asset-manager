@@ -20,6 +20,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     private readonly List<LedgerEntry> _entries = new();
     private readonly List<EntryCategory> _categories = new();
     private readonly List<CashAdjustment> _adjustments = new();
+    private readonly List<FundGroup> _fundGroups = new();
     private readonly List<FundPosition> _fundPositions = new();
     private readonly List<AssetTransaction> _assetTransactions = new();
 
@@ -40,6 +41,8 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     public IReadOnlyList<EntryCategory> Categories => _categories;
 
     public IReadOnlyList<CashAdjustment> Adjustments => _adjustments;
+
+    public IReadOnlyList<FundGroup> FundGroups => _fundGroups;
 
     public IReadOnlyList<FundPosition> FundPositions => _fundPositions;
 
@@ -330,6 +333,39 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     {
         GoldHolding = holding;
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<FundGroup>> GetFundGroupsAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<FundGroup> groups = _fundGroups
+            .Where(group => group.LedgerId == ledgerId)
+            .OrderBy(group => group.SortOrder)
+            .ThenBy(group => group.Name)
+            .ToList();
+
+        return Task.FromResult(groups);
+    }
+
+    public Task<FundGroup?> GetFundGroupForUpdateAsync(
+        Guid ledgerId,
+        Guid groupId,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_fundGroups.SingleOrDefault(group =>
+            group.LedgerId == ledgerId && group.Id == groupId));
+    }
+
+    public Task AddFundGroupAsync(FundGroup group, CancellationToken cancellationToken)
+    {
+        _fundGroups.Add(group);
+        return Task.CompletedTask;
+    }
+
+    public void RemoveFundGroup(FundGroup group)
+    {
+        _fundGroups.Remove(group);
     }
 
     public Task<IReadOnlyList<FundPosition>> GetFundPositionsAsync(

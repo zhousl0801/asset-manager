@@ -27,6 +27,64 @@ export interface FundPosition {
   lastQuoteAttemptAt: string | null
   lastQuoteSource: string | null
   lastQuoteError: string | null
+  groupId: string | null
+  groupName: string | null
+}
+
+export interface FundGroup {
+  id: string
+  name: string
+  sortOrder: number
+  fundCount: number
+  positionCount: number
+  confirmedValue: number
+}
+
+export interface FundPlatformHolding {
+  positionId: string
+  platform: string | null
+  name: string
+  code: string | null
+  shareClass: string | null
+  shares: number
+  cost: number
+  netValue: number
+  netValueDate: string
+  value: number
+  holdingProfit: number
+  realizedProfit: number
+  hasEffectiveQuote: boolean
+}
+
+export interface FundShareClass {
+  shareClass: string | null
+  shares: number
+  cost: number
+  value: number
+  holdingProfit: number
+  realizedProfit: number
+  netValue: number | null
+  netValueDate: string | null
+  platforms: FundPlatformHolding[]
+}
+
+export interface FundSummary {
+  key: string
+  name: string
+  groupId: string | null
+  groupName: string | null
+  value: number
+  cost: number
+  holdingProfit: number
+  realizedProfit: number
+  pendingBuyAmount: number
+  pendingArrivalAmount: number
+  assetValue: number
+  platformCount: number
+  latestNetValueDate: string | null
+  historyConfirmed: boolean
+  hasEffectiveQuotes: boolean
+  classes: FundShareClass[]
 }
 
 export interface FundQuoteRefreshResult {
@@ -98,6 +156,8 @@ export interface FundOverview {
   pendingArrivalAmount: number
   sellApplications: PendingFundSell[]
   pendingArrivals: PendingFundArrival[]
+  groups: FundGroup[]
+  funds: FundSummary[]
 }
 
 export interface FundMutationResult {

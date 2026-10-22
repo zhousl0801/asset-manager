@@ -20,6 +20,9 @@ internal sealed class FundPositionConfiguration : IEntityTypeConfiguration<FundP
             .HasColumnName("ledger_id")
             .IsRequired();
 
+        builder.Property(position => position.FundGroupId)
+            .HasColumnName("fund_group_id");
+
         builder.Property(position => position.Name)
             .HasColumnName("name")
             .HasMaxLength(FundPosition.MaximumNameLength)
@@ -86,10 +89,16 @@ internal sealed class FundPositionConfiguration : IEntityTypeConfiguration<FundP
             .IsRequired();
 
         builder.HasIndex(position => position.LedgerId);
+        builder.HasIndex(position => position.FundGroupId);
 
         builder.HasOne(position => position.Ledger)
             .WithMany()
             .HasForeignKey(position => position.LedgerId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(position => position.FundGroup)
+            .WithMany()
+            .HasForeignKey(position => position.FundGroupId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

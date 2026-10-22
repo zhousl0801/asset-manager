@@ -17,4 +17,6 @@ public sealed record FundPositionDto(
     bool HasEffectiveQuote = true,
     DateTimeOffset? LastQuoteAttemptAt = null,
     string? LastQuoteSource = null,
-    string? LastQuoteError = null);
+    string? LastQuoteError = null,
+    Guid? GroupId = null,
+    string? GroupName = null);

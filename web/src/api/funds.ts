@@ -3,6 +3,7 @@ import type {
   ConfirmFundBuyInput,
   ConfirmFundSellInput,
   CreateFundPositionInput,
+  FundGroup,
   FundMutationResult,
   FundOverview,
   FundQuoteRefreshResult,
@@ -14,6 +15,37 @@ import { apiRequest } from './client'
 
 export function fetchFundOverview(): Promise<FundOverview> {
   return apiRequest<FundOverview>('/api/ledger/funds')
+}
+
+export function fetchFundGroups(): Promise<FundGroup[]> {
+  return apiRequest<FundGroup[]>('/api/ledger/fund-groups')
+}
+
+export function createFundGroup(name: string): Promise<FundGroup> {
+  return apiRequest<FundGroup>('/api/ledger/fund-groups', {
+    method: 'POST',
+    body: JSON.stringify({ name })
+  })
+}
+
+export function renameFundGroup(groupId: string, name: string): Promise<FundGroup> {
+  return apiRequest<FundGroup>(`/api/ledger/fund-groups/${encodeURIComponent(groupId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name })
+  })
+}
+
+export function deleteFundGroup(groupId: string): Promise<void> {
+  return apiRequest<void>(`/api/ledger/fund-groups/${encodeURIComponent(groupId)}`, {
+    method: 'DELETE'
+  })
+}
+
+export function assignFundGroup(positionId: string, groupId: string | null): Promise<{ groupId: string | null; positionIds: string[] }> {
+  return apiRequest(`/api/ledger/fund-groups/positions/${encodeURIComponent(positionId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ groupId })
+  })
 }
 
 export function createFundPosition(input: CreateFundPositionInput): Promise<FundMutationResult> {

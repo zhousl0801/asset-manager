@@ -4,15 +4,20 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   arriveFundSell,
+  assignFundGroup,
   buyFund,
   confirmFundBuy,
   confirmFundSell,
+  createFundGroup,
   createFundPosition,
+  deleteFundGroup,
   fetchFundOverview,
   refreshFundQuote,
+  renameFundGroup,
   sellFund,
   updateFundQuote
 } from '../api/funds'
+import { fetchPlanOverview } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
@@ -32,12 +37,37 @@ import type {
   FundActivity,
   FundOverview,
   FundPosition,
+  FundShareClass,
+  FundSummary,
   PendingFundArrival,
   PendingFundBuy,
   PendingFundSell
 } from '../types/fund'
+import type { AutoPlan } from '../types/plan'
 
 type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'sellConfirm' | 'sellArrival' | 'quote'
+type PortfolioView = 'positions' | 'returns' | 'activities' | 'plans'
+type GroupScope = 'all' | 'ungrouped' | string
+type FundMetricKey = 'value' | 'profit' | 'rate' | 'cost' | 'weight' | 'platforms' | 'pending'
+type FundSortKey = 'value' | 'profit' | 'rate' | 'name'
+
+const metricStorageKey = 'asset-keeper.fund.metrics'
+const defaultMetrics: FundMetricKey[] = ['value', 'profit', 'rate']
+const metricOptions: { key: FundMetricKey; label: string }[] = [
+  { key: 'value', label: '持仓价值' },
+  { key: 'profit', label: '持有收益' },
+  { key: 'rate', label: '收益率' },
+  { key: 'cost', label: '持仓成本' },
+  { key: 'weight', label: '占比' },
+  { key: 'platforms', label: '平台数' },
+  { key: 'pending', label: '待确认' }
+]
+const sortOptions: { key: FundSortKey; label: string }[] = [
+  { key: 'value', label: '持仓价值' },
+  { key: 'profit', label: '持有收益' },
+  { key: 'rate', label: '收益率' },
+  { key: 'name', label: '基金名称' }
+]
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -53,6 +83,23 @@ const confirmingPendingId = ref<string | null>(null)
 const confirmingSellId = ref<string | null>(null)
 const arrivingConfirmId = ref<string | null>(null)
 const refreshingQuote = ref(false)
+const activeGroup = ref<GroupScope>('all')
+const activeView = ref<PortfolioView>('positions')
+const expandedFund = ref<string | null>(null)
+const searchText = ref('')
+const sortKey = ref<FundSortKey>('value')
+const metricKeys = ref<FundMetricKey[]>(loadMetricKeys())
+const metricNotice = ref('')
+const groupSheetOpen = ref(false)
+const groupDraft = ref('')
+const groupError = ref('')
+const groupBusy = ref(false)
+const editingGroupId = ref<string | null>(null)
+const editingGroupName = ref('')
+const plans = ref<AutoPlan[]>([])
+const plansLoaded = ref(false)
+const plansLoading = ref(false)
+const plansError = ref('')
 const form = reactive({
   positionId: '',
   name: '',
@@ -79,6 +126,160 @@ const selectedSellApplication = computed<PendingFundSell | null>(() =>
   overview.value?.sellApplications.find((pending) => pending.transactionId === confirmingSellId.value) ?? null)
 const selectedPendingArrival = computed<PendingFundArrival | null>(() =>
   overview.value?.pendingArrivals.find((pending) => pending.transactionId === arrivingConfirmId.value) ?? null)
+
+const allFunds = computed<FundSummary[]>(() => {
+  const loaded = overview.value
+
+  if (!loaded) {
+    return []
+  }
+
+  if (loaded.funds?.length) {
+    return loaded.funds
+  }
+
+  return buildFallbackFunds(loaded.positions, loaded.pendingBuys, loaded.pendingArrivals)
+})
+
+const groups = computed(() => overview.value?.groups ?? [])
+
+const groupChips = computed(() => {
+  const all = allFunds.value
+  const ungroupedFunds = all.filter((fund) => !fund.groupId)
+  const chips = [{
+    key: 'all' as GroupScope,
+    label: '全部',
+    count: all.length,
+    value: all.reduce((sum, fund) => sum + fund.assetValue, 0)
+  }, ...groups.value.map((group) => ({
+    key: group.id as GroupScope,
+    label: group.name,
+    count: all.filter((fund) => fund.groupId === group.id).length,
+    value: all.filter((fund) => fund.groupId === group.id).reduce((sum, fund) => sum + fund.assetValue, 0)
+  }))]
+
+  if (ungroupedFunds.length) {
+    chips.push({
+      key: 'ungrouped' as GroupScope,
+      label: '未分组',
+      count: ungroupedFunds.length,
+      value: ungroupedFunds.reduce((sum, fund) => sum + fund.assetValue, 0)
+    })
+  }
+
+  return chips
+})
+
+const scopedFunds = computed(() => {
+  const search = searchText.value.trim().toLowerCase()
+
+  return allFunds.value.filter((fund) => {
+    if (activeGroup.value === 'ungrouped' && fund.groupId) {
+      return false
+    }
+
+    if (activeGroup.value !== 'all' && activeGroup.value !== 'ungrouped' && fund.groupId !== activeGroup.value) {
+      return false
+    }
+
+    if (!search) {
+      return true
+    }
+
+    return fund.name.toLowerCase().includes(search)
+      || fund.classes.some((fundClass) => fundClass.platforms.some((platform) =>
+        (platform.code ?? '').toLowerCase().includes(search)
+        || (platform.platform ?? '').toLowerCase().includes(search)))
+  })
+})
+
+const hasScopeFilter = computed(() => activeGroup.value !== 'all' || searchText.value.trim() !== '')
+
+const scopedPositionIds = computed(() => new Set(
+  scopedFunds.value.flatMap((fund) => fund.classes.flatMap((fundClass) =>
+    fundClass.platforms.map((platform) => platform.positionId)))
+))
+
+const scopedPendingBuys = computed(() => {
+  if (!hasScopeFilter.value) {
+    return overview.value?.pendingBuys ?? []
+  }
+
+  return (overview.value?.pendingBuys ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
+})
+
+const scopedSellApplications = computed(() => {
+  if (!hasScopeFilter.value) {
+    return overview.value?.sellApplications ?? []
+  }
+
+  return (overview.value?.sellApplications ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
+})
+
+const scopedPendingArrivals = computed(() => {
+  if (!hasScopeFilter.value) {
+    return overview.value?.pendingArrivals ?? []
+  }
+
+  return (overview.value?.pendingArrivals ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
+})
+
+const scopedActivities = computed(() => {
+  if (!hasScopeFilter.value) {
+    return overview.value?.activities ?? []
+  }
+
+  return (overview.value?.activities ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
+})
+
+const scope = computed(() => {
+  const confirmedValue = scopedFunds.value.reduce((sum, fund) => sum + fund.value, 0)
+  const cost = scopedFunds.value.reduce((sum, fund) => sum + fund.cost, 0)
+  const holdingProfit = scopedFunds.value.reduce((sum, fund) => sum + fund.holdingProfit, 0)
+  const realizedProfit = scopedFunds.value.reduce((sum, fund) => sum + fund.realizedProfit, 0)
+  const pendingBuyAmount = scopedPendingBuys.value.reduce((sum, item) => sum + item.amount, 0)
+  const pendingArrivalAmount = scopedPendingArrivals.value.reduce((sum, item) => sum + item.amount, 0)
+
+  return {
+    confirmedValue,
+    cost,
+    holdingProfit,
+    realizedProfit,
+    pendingBuyAmount,
+    pendingArrivalAmount,
+    assetValue: confirmedValue + pendingBuyAmount + pendingArrivalAmount,
+    rate: cost > 0 ? holdingProfit / cost * 100 : null,
+    hasEffectiveQuotes: scopedFunds.value.every((fund) => fund.hasEffectiveQuotes),
+    historyConfirmed: scopedFunds.value.every((fund) => fund.historyConfirmed)
+  }
+})
+
+const sortedFunds = computed(() => {
+  const funds = [...scopedFunds.value]
+
+  return funds.sort((left, right) => {
+    switch (sortKey.value) {
+      case 'name':
+        return left.name.localeCompare(right.name, 'zh-Hans-CN')
+      case 'profit':
+        return right.holdingProfit - left.holdingProfit || left.name.localeCompare(right.name, 'zh-Hans-CN')
+      case 'rate':
+        return rateOf(right) - rateOf(left) || left.name.localeCompare(right.name, 'zh-Hans-CN')
+      default:
+        return right.assetValue - left.assetValue || left.name.localeCompare(right.name, 'zh-Hans-CN')
+    }
+  })
+})
+
+const scopedPlans = computed(() => {
+  if (!hasScopeFilter.value) {
+    return plans.value
+  }
+
+  return plans.value.filter((plan) => plan.fundPositionId !== null && scopedPositionIds.value.has(plan.fundPositionId))
+})
+
+const activeGroupLabel = computed(() => groupChips.value.find((chip) => chip.key === activeGroup.value)?.label ?? '全部')
 const sheetTitle = computed(() => {
   switch (sheet.value) {
     case 'opening':
@@ -197,6 +398,7 @@ async function loadOverview(): Promise<void> {
 
   try {
     overview.value = await fetchFundOverview()
+    ensureActiveGroup()
 
     if (!form.positionId && overview.value.positions.length > 0) {
       form.positionId = overview.value.positions[0]!.id
@@ -213,6 +415,371 @@ async function loadOverview(): Promise<void> {
   } finally {
     isLoading.value = false
   }
+}
+
+function ensureActiveGroup(): void {
+  if (activeGroup.value === 'all') {
+    return
+  }
+
+  if (activeGroup.value === 'ungrouped') {
+    if (!allFunds.value.some((fund) => !fund.groupId)) {
+      activeGroup.value = 'all'
+    }
+
+    return
+  }
+
+  if (!groups.value.some((group) => group.id === activeGroup.value)) {
+    activeGroup.value = 'all'
+  }
+}
+
+function loadMetricKeys(): FundMetricKey[] {
+  try {
+    const stored = localStorage.getItem(metricStorageKey)
+
+    if (stored) {
+      const keys = JSON.parse(stored) as unknown
+
+      if (Array.isArray(keys)) {
+        const valid = keys.filter((key): key is FundMetricKey =>
+          metricOptions.some((option) => option.key === key)).slice(0, 3)
+
+        if (valid.length) {
+          return valid
+        }
+      }
+    }
+  } catch {
+    // 浏览器存储不可用时使用默认三项指标。
+  }
+
+  return [...defaultMetrics]
+}
+
+function persistMetricKeys(): void {
+  try {
+    localStorage.setItem(metricStorageKey, JSON.stringify(metricKeys.value))
+  } catch {
+    // 指标只是展示设置，保存失败不影响账本。
+  }
+}
+
+function toggleMetric(key: FundMetricKey): void {
+  metricNotice.value = ''
+
+  if (metricKeys.value.includes(key)) {
+    if (metricKeys.value.length <= 1) {
+      metricNotice.value = '至少保留一项指标。'
+      return
+    }
+
+    metricKeys.value = metricKeys.value.filter((item) => item !== key)
+    persistMetricKeys()
+    return
+  }
+
+  if (metricKeys.value.length >= 3) {
+    metricNotice.value = '最多同时显示 3 项指标，请先取消一项。'
+    return
+  }
+
+  metricKeys.value = [...metricKeys.value, key]
+  persistMetricKeys()
+}
+
+function rateOf(fund: FundSummary): number {
+  return fund.cost > 0 ? fund.holdingProfit / fund.cost : Number.NEGATIVE_INFINITY
+}
+
+function metricDisplay(fund: FundSummary): { key: FundMetricKey; label: string; value: string; tone: string }[] {
+  const total = scope.value.assetValue
+
+  return metricKeys.value.map((key) => {
+    switch (key) {
+      case 'profit':
+        return {
+          key,
+          label: '持有收益',
+          value: fund.hasEffectiveQuotes ? formatSignedMoney(fund.holdingProfit) : '行情待补',
+          tone: fund.holdingProfit > 0 ? 'profit' : fund.holdingProfit < 0 ? 'loss' : ''
+        }
+      case 'rate':
+        return {
+          key,
+          label: '收益率',
+          value: fund.hasEffectiveQuotes && fund.cost > 0
+            ? `${formatSignedMoney(fund.holdingProfit / fund.cost * 100)}%`
+            : '—',
+          tone: fund.holdingProfit > 0 ? 'profit' : fund.holdingProfit < 0 ? 'loss' : ''
+        }
+      case 'cost':
+        return { key, label: '成本', value: `¥${formatMoney(fund.cost)}`, tone: '' }
+      case 'weight':
+        return {
+          key,
+          label: '占比',
+          value: total > 0 ? `${formatMoney(fund.assetValue / total * 100)}%` : '—',
+          tone: ''
+        }
+      case 'platforms':
+        return { key, label: '平台', value: `${fund.platformCount} 个`, tone: '' }
+      case 'pending':
+        return {
+          key,
+          label: '在途',
+          value: fund.pendingBuyAmount + fund.pendingArrivalAmount > 0
+            ? `¥${formatMoney(fund.pendingBuyAmount + fund.pendingArrivalAmount)}`
+            : '—',
+          tone: ''
+        }
+      default:
+        return { key, label: '持仓价值', value: `¥${formatMoney(fund.value)}`, tone: '' }
+    }
+  })
+}
+
+function buildFallbackFunds(
+  positions: FundPosition[],
+  pendingBuys: PendingFundBuy[],
+  pendingArrivals: PendingFundArrival[]
+): FundSummary[] {
+  const byName = new Map<string, FundPosition[]>()
+
+  for (const position of positions) {
+    const members = byName.get(position.name) ?? []
+    members.push(position)
+    byName.set(position.name, members)
+  }
+
+  return Array.from(byName, ([name, members]) => {
+    const classes: FundShareClass[] = []
+    const byClass = new Map<string, FundPosition[]>()
+
+    for (const member of members) {
+      const key = member.shareClass ?? ''
+      const classMembers = byClass.get(key) ?? []
+      classMembers.push(member)
+      byClass.set(key, classMembers)
+    }
+
+    for (const [shareClass, classMembers] of byClass) {
+      const netValues = [...new Set(classMembers.map((member) => member.netValue))]
+      const netValueDates = [...new Set(classMembers.map((member) => member.netValueDate))]
+
+      classes.push({
+        shareClass: shareClass || null,
+        shares: classMembers.reduce((sum, member) => sum + member.shares, 0),
+        cost: classMembers.reduce((sum, member) => sum + member.cost, 0),
+        value: classMembers.reduce((sum, member) => sum + member.value, 0),
+        holdingProfit: classMembers.reduce((sum, member) => sum + member.holdingProfit, 0),
+        realizedProfit: classMembers.reduce((sum, member) => sum + member.realizedProfit, 0),
+        netValue: netValues.length === 1 ? netValues[0]! : null,
+        netValueDate: netValueDates.length === 1 ? netValueDates[0]! : null,
+        platforms: classMembers.map((member) => ({
+          positionId: member.id,
+          platform: member.platform,
+          name: member.name,
+          code: member.code,
+          shareClass: member.shareClass,
+          shares: member.shares,
+          cost: member.cost,
+          netValue: member.netValue,
+          netValueDate: member.netValueDate,
+          value: member.value,
+          holdingProfit: member.holdingProfit,
+          realizedProfit: member.realizedProfit,
+          hasEffectiveQuote: member.hasEffectiveQuote
+        }))
+      })
+    }
+
+    const memberIds = new Set(members.map((member) => member.id))
+    const pendingBuyAmount = pendingBuys
+      .filter((item) => memberIds.has(item.positionId))
+      .reduce((sum, item) => sum + item.amount, 0)
+    const pendingArrivalAmount = pendingArrivals
+      .filter((item) => memberIds.has(item.positionId))
+      .reduce((sum, item) => sum + item.amount, 0)
+    const value = members.reduce((sum, member) => sum + member.value, 0)
+    const groupId = members.find((member) => member.groupId)?.groupId ?? null
+
+    return {
+      key: name,
+      name,
+      groupId,
+      groupName: members.find((member) => member.groupName)?.groupName ?? null,
+      value,
+      cost: members.reduce((sum, member) => sum + member.cost, 0),
+      holdingProfit: members.reduce((sum, member) => sum + member.holdingProfit, 0),
+      realizedProfit: members.reduce((sum, member) => sum + member.realizedProfit, 0),
+      pendingBuyAmount,
+      pendingArrivalAmount,
+      assetValue: value + pendingBuyAmount + pendingArrivalAmount,
+      platformCount: new Set(members.map((member) => member.platform).filter(Boolean)).size,
+      latestNetValueDate: members.map((member) => member.netValueDate).sort().at(-1) ?? null,
+      historyConfirmed: members.every((member) => member.historyConfirmed),
+      hasEffectiveQuotes: members.every((member) => member.hasEffectiveQuote),
+      classes
+    } satisfies FundSummary
+  }).sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'))
+}
+
+function toggleFund(key: string): void {
+  expandedFund.value = expandedFund.value === key ? null : key
+}
+
+function selectGroup(key: GroupScope): void {
+  activeGroup.value = key
+  expandedFund.value = null
+}
+
+async function setView(view: PortfolioView): Promise<void> {
+  activeView.value = view
+
+  if (view === 'plans') {
+    await loadPlans()
+  }
+}
+
+async function loadPlans(): Promise<void> {
+  if (plansLoaded.value || plansLoading.value) {
+    return
+  }
+
+  plansLoading.value = true
+  plansError.value = ''
+
+  try {
+    const result = await fetchPlanOverview()
+    plans.value = result.plans.filter((plan) => plan.type === 'fundSip')
+    plansLoaded.value = true
+  } catch (error) {
+    plansError.value = getApiErrorMessage(error, '定投计划暂时无法读取。')
+  } finally {
+    plansLoading.value = false
+  }
+}
+
+function openGroupSheet(): void {
+  groupSheetOpen.value = true
+  groupDraft.value = ''
+  groupError.value = ''
+  editingGroupId.value = null
+  editingGroupName.value = ''
+}
+
+function closeGroupSheet(): void {
+  if (!groupBusy.value) {
+    groupSheetOpen.value = false
+  }
+}
+
+async function submitGroup(): Promise<void> {
+  const name = groupDraft.value.trim()
+
+  if (!name) {
+    groupError.value = '请输入分组名称。'
+    return
+  }
+
+  groupBusy.value = true
+  groupError.value = ''
+
+  try {
+    await createFundGroup(name)
+    groupDraft.value = ''
+    notice.value = `已新增投资分组「${name}」。`
+    await loadOverview()
+  } catch (error) {
+    groupError.value = getApiErrorMessage(error, '新增分组失败，请重试。')
+  } finally {
+    groupBusy.value = false
+  }
+}
+
+function startRenameGroup(groupId: string, name: string): void {
+  editingGroupId.value = groupId
+  editingGroupName.value = name
+  groupError.value = ''
+}
+
+async function saveGroupName(groupId: string): Promise<void> {
+  const name = editingGroupName.value.trim()
+
+  if (!name) {
+    groupError.value = '分组名称不能为空。'
+    return
+  }
+
+  groupBusy.value = true
+  groupError.value = ''
+
+  try {
+    await renameFundGroup(groupId, name)
+    editingGroupId.value = null
+    notice.value = `分组已更名为「${name}」。`
+    await loadOverview()
+  } catch (error) {
+    groupError.value = getApiErrorMessage(error, '分组改名失败，请重试。')
+  } finally {
+    groupBusy.value = false
+  }
+}
+
+async function removeGroup(groupId: string, name: string): Promise<void> {
+  if (!window.confirm(`删除分组「${name}」？组内基金会回到未分组，持仓和收益不变。`)) {
+    return
+  }
+
+  groupBusy.value = true
+  groupError.value = ''
+
+  try {
+    await deleteFundGroup(groupId)
+
+    if (activeGroup.value === groupId) {
+      activeGroup.value = 'all'
+    }
+
+    notice.value = `已删除分组「${name}」，组内基金回到未分组。`
+    await loadOverview()
+  } catch (error) {
+    groupError.value = getApiErrorMessage(error, '删除分组失败，请重试。')
+  } finally {
+    groupBusy.value = false
+  }
+}
+
+async function moveFund(fund: FundSummary, event: Event): Promise<void> {
+  const target = event.target as HTMLSelectElement
+  const groupId = target.value || null
+  const positionId = fund.classes.flatMap((fundClass) => fundClass.platforms)[0]?.positionId
+
+  if (!positionId) {
+    return
+  }
+
+  try {
+    await assignFundGroup(positionId, groupId)
+    notice.value = groupId
+      ? `「${fund.name}」已归入「${groupChips.value.find((chip) => chip.key === groupId)?.label ?? '分组'}」。`
+      : `「${fund.name}」已移到未分组。`
+    await loadOverview()
+  } catch (error) {
+    notice.value = getApiErrorMessage(error, '调整分组失败，请重试。')
+    await loadOverview()
+  }
+}
+
+function planCycleLabel(plan: AutoPlan): string {
+  if (plan.cycle === 'weekly') {
+    const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    return `每周${weekdays[plan.dayOfWeek ?? 0] ?? ''}`
+  }
+
+  return `每月 ${plan.dayOfMonth ?? 1} 日`
 }
 
 function openSheet(kind: SheetKind, positionId?: string): void {
@@ -806,29 +1373,29 @@ function goBack(): void {
     <template v-else-if="overview">
       <section class="funds-hero">
         <p class="hero-label">
-          基金资产
-          <span class="hero-tag">{{ overview.historyConfirmed ? '已确认持仓' : '持仓日期待确认' }}</span>
+          {{ activeGroupLabel }}
+          <span class="hero-tag">{{ scope.historyConfirmed ? '已确认持仓' : '持仓日期待确认' }}</span>
         </p>
-        <h2 class="hero-balance"><span>¥</span>{{ overview.hasEffectiveQuotes ? formatMoney(overview.totalValue) : '行情待补' }}</h2>
+        <h2 class="hero-balance"><span>¥</span>{{ scope.hasEffectiveQuotes ? formatMoney(scope.assetValue) : '行情待补' }}</h2>
         <p class="hero-meta">
-          {{ overview.positions.length }} 只基金 · 持仓成本 {{ formatMoney(overview.totalCost) }}
-          <template v-if="overview.pendingAmount > 0"> · 含待确认 ¥{{ formatMoney(overview.pendingAmount) }}</template>
-          <template v-if="overview.pendingArrivalAmount > 0"> · 含待到账 ¥{{ formatMoney(overview.pendingArrivalAmount) }}</template>
+          {{ scopedFunds.length }} 只基金 · 持仓成本 {{ formatMoney(scope.cost) }}
+          <template v-if="scope.pendingBuyAmount > 0"> · 含待确认 ¥{{ formatMoney(scope.pendingBuyAmount) }}</template>
+          <template v-if="scope.pendingArrivalAmount > 0"> · 含待到账 ¥{{ formatMoney(scope.pendingArrivalAmount) }}</template>
         </p>
         <div class="hero-metrics">
           <div>
             <span>持有收益</span>
-            <b :class="{ profit: overview.holdingProfit > 0, loss: overview.holdingProfit < 0 }">
-              {{ overview.hasEffectiveQuotes ? formatSignedMoney(overview.holdingProfit) : '行情待补' }}
+            <b :class="{ profit: scope.holdingProfit > 0, loss: scope.holdingProfit < 0 }">
+              {{ scope.hasEffectiveQuotes ? formatSignedMoney(scope.holdingProfit) : '行情待补' }}
             </b>
           </div>
           <div>
             <span>持有收益率</span>
-            <b>{{ overview.hasEffectiveQuotes && overview.totalCost > 0 ? `${formatSignedMoney(overview.holdingProfit / overview.totalCost * 100)}%` : '—' }}</b>
+            <b>{{ scope.hasEffectiveQuotes && scope.cost > 0 ? `${formatSignedMoney(scope.holdingProfit / scope.cost * 100)}%` : '—' }}</b>
           </div>
           <div>
             <span>已实现收益</span>
-            <b>{{ overview.historyConfirmed ? formatSignedMoney(overview.totalRealizedProfit) : '待核对' }}</b>
+            <b>{{ scope.historyConfirmed ? formatSignedMoney(scope.realizedProfit) : '待核对' }}</b>
           </div>
         </div>
       </section>
@@ -861,15 +1428,53 @@ function goBack(): void {
         </button>
       </div>
 
+      <div class="group-bar">
+        <div class="group-chips" role="tablist" aria-label="投资分组">
+          <button
+            v-for="chip in groupChips"
+            :key="chip.key"
+            type="button"
+            :class="{ active: activeGroup === chip.key }"
+            role="tab"
+            :aria-selected="activeGroup === chip.key"
+            @click="selectGroup(chip.key)"
+          >
+            {{ chip.label }} <small>{{ chip.count }}</small>
+          </button>
+        </div>
+        <button type="button" class="group-manage" @click="openGroupSheet">管理</button>
+      </div>
+
+      <div class="portfolio-toolbar">
+        <input v-model="searchText" type="search" placeholder="搜索基金名称、代码或平台" aria-label="搜索基金" />
+        <select v-model="sortKey" aria-label="排序方式">
+          <option v-for="option in sortOptions" :key="option.key" :value="option.key">按{{ option.label }}</option>
+        </select>
+      </div>
+
+      <div class="metric-picker" aria-label="持仓指标">
+        <span>指标</span>
+        <button
+          v-for="option in metricOptions"
+          :key="option.key"
+          type="button"
+          :class="{ active: metricKeys.includes(option.key) }"
+          @click="toggleMetric(option.key)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <p v-if="metricNotice" class="summary-note">{{ metricNotice }}</p>
+
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
-      <template v-if="overview.pendingBuys.length">
+      <template v-if="scopedPendingBuys.length">
         <div class="section-head">
           <h2>买入待确认</h2>
-          <span class="meta">{{ overview.pendingBuys.length }} 笔 · ¥{{ formatMoney(overview.pendingAmount) }}</span>
+          <span class="meta">{{ scopedPendingBuys.length }} 笔 · ¥{{ formatMoney(scope.pendingBuyAmount) }}</span>
         </div>
         <section class="pending-list">
-          <article v-for="pending in overview.pendingBuys" :key="pending.transactionId" class="pending-card">
+          <article v-for="pending in scopedPendingBuys" :key="pending.transactionId" class="pending-card">
             <div class="pending-copy">
               <strong>{{ pending.positionName }}</strong>
               <small>
@@ -884,13 +1489,13 @@ function goBack(): void {
         </section>
       </template>
 
-      <template v-if="overview.sellApplications.length">
+      <template v-if="scopedSellApplications.length">
         <div class="section-head">
           <h2>赎回申请</h2>
-          <span class="meta">{{ overview.sellApplications.length }} 笔 · 份额已冻结</span>
+          <span class="meta">{{ scopedSellApplications.length }} 笔 · 份额已冻结</span>
         </div>
         <section class="pending-list">
-          <article v-for="application in overview.sellApplications" :key="application.transactionId" class="pending-card">
+          <article v-for="application in scopedSellApplications" :key="application.transactionId" class="pending-card">
             <div class="pending-copy">
               <strong>{{ application.positionName }}</strong>
               <small>
@@ -905,13 +1510,13 @@ function goBack(): void {
         </section>
       </template>
 
-      <template v-if="overview.pendingArrivals.length">
+      <template v-if="scopedPendingArrivals.length">
         <div class="section-head">
           <h2>赎回待到账</h2>
-          <span class="meta">{{ overview.pendingArrivals.length }} 笔 · ¥{{ formatMoney(overview.pendingArrivalAmount) }}</span>
+          <span class="meta">{{ scopedPendingArrivals.length }} 笔 · ¥{{ formatMoney(scope.pendingArrivalAmount) }}</span>
         </div>
         <section class="pending-list">
-          <article v-for="arrival in overview.pendingArrivals" :key="arrival.transactionId" class="pending-card">
+          <article v-for="arrival in scopedPendingArrivals" :key="arrival.transactionId" class="pending-card">
             <div class="pending-copy">
               <strong>{{ arrival.positionName }}</strong>
               <small>
@@ -927,76 +1532,213 @@ function goBack(): void {
         </section>
       </template>
 
-      <div class="section-head">
-        <h2>持仓</h2>
-        <span class="meta">可用现金 ¥{{ formatMoney(overview.cashBalance) }}</span>
+      <div class="view-tabs" role="tablist" aria-label="投资视图">
+        <button type="button" :class="{ active: activeView === 'positions' }" @click="setView('positions')">持仓</button>
+        <button type="button" :class="{ active: activeView === 'returns' }" @click="setView('returns')">收益</button>
+        <button type="button" :class="{ active: activeView === 'activities' }" @click="setView('activities')">交易</button>
+        <button type="button" :class="{ active: activeView === 'plans' }" @click="setView('plans')">定投</button>
       </div>
 
-      <section v-if="overview.positions.length" class="position-list">
-        <article v-for="position in overview.positions" :key="position.id" class="position-card">
-          <header>
+      <template v-if="activeView === 'positions' || activeView === 'returns'">
+        <div class="section-head">
+          <h2>{{ activeView === 'positions' ? '组合持仓' : '持有收益' }}</h2>
+          <span class="meta">
+            <template v-if="activeView === 'returns'">收益 {{ formatSignedMoney(scope.holdingProfit) }} · 收益率 {{ scope.rate === null ? '—' : `${formatSignedMoney(scope.rate)}%` }}</template>
+            <template v-else>可用现金 ¥{{ formatMoney(overview.cashBalance) }}</template>
+          </span>
+        </div>
+
+        <section v-if="sortedFunds.length" class="fund-list">
+          <article v-for="fund in sortedFunds" :key="fund.key" class="fund-card">
+            <header
+              role="button"
+              tabindex="0"
+              @click="toggleFund(fund.key)"
+              @keydown.enter="toggleFund(fund.key)"
+            >
+              <div class="fund-title">
+                <strong>{{ fund.name }}</strong>
+                <small>
+                  {{ fund.groupName ?? '未分组' }} · {{ fund.platformCount }} 个平台 · 净值日期
+                  {{ fund.latestNetValueDate ? formatBusinessDate(fund.latestNetValueDate) : '待补' }}
+                </small>
+              </div>
+              <div class="fund-headline">
+                <template v-if="activeView === 'positions'">
+                  <b>{{ fund.hasEffectiveQuotes ? `¥${formatMoney(fund.assetValue)}` : '行情待补' }}</b>
+                </template>
+                <template v-else>
+                  <b :class="{ profit: fund.holdingProfit > 0, loss: fund.holdingProfit < 0 }">
+                    {{ fund.hasEffectiveQuotes ? formatSignedMoney(fund.holdingProfit) : '行情待补' }}
+                  </b>
+                  <small>{{ fund.hasEffectiveQuotes && fund.cost > 0 ? `${formatSignedMoney(fund.holdingProfit / fund.cost * 100)}%` : '—' }}</small>
+                </template>
+                <span class="expand-mark">{{ expandedFund === fund.key ? '收起' : '展开' }}</span>
+              </div>
+            </header>
+
+            <div class="fund-metrics">
+              <div v-for="metric in metricDisplay(fund)" :key="metric.key">
+                <span>{{ metric.label }}</span>
+                <b :class="metric.tone">{{ metric.value }}</b>
+              </div>
+            </div>
+
+            <div v-if="expandedFund === fund.key" class="fund-detail">
+              <label class="fund-group-select">
+                <span>投资分组</span>
+                <select :value="fund.groupId ?? ''" @change="moveFund(fund, $event)">
+                  <option value="">未分组</option>
+                  <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                </select>
+              </label>
+
+              <section
+                v-for="(fundClass, index) in fund.classes"
+                :key="fundClass.shareClass ?? index"
+                class="fund-class"
+              >
+                <header>
+                  <strong>{{ fundClass.shareClass ? `${fundClass.shareClass} 类` : '未标类别' }}</strong>
+                  <span>{{ formatQuantity(fundClass.shares) }} 份 · 成本 ¥{{ formatMoney(fundClass.cost) }}</span>
+                </header>
+                <p class="fund-class-meta">
+                  净值 {{ fundClass.netValue === null ? '各平台不一致' : formatQuantity(fundClass.netValue) }}
+                  <template v-if="fundClass.netValueDate"> · {{ formatBusinessDate(fundClass.netValueDate) }}</template>
+                  · 估值 ¥{{ formatMoney(fundClass.value) }}
+                  · 收益 {{ formatSignedMoney(fundClass.holdingProfit) }}
+                </p>
+                <div
+                  v-for="platform in fundClass.platforms"
+                  :key="platform.positionId"
+                  class="fund-platform-row"
+                >
+                  <div>
+                    <strong>{{ platform.platform || '未填平台' }}</strong>
+                    <small>{{ platform.code || '未填代码' }}</small>
+                  </div>
+                  <div class="fund-platform-value">
+                    <b>{{ formatQuantity(platform.shares) }} 份</b>
+                    <small>成本 ¥{{ formatMoney(platform.cost) }} · 估值 ¥{{ formatMoney(platform.value) }}</small>
+                  </div>
+                </div>
+              </section>
+
+              <p class="summary-note">
+                同一基金的 A/C 类分别列示份额和净值，不合并份额，也不平均净值。
+                <template v-if="!fund.hasEffectiveQuotes"> 部分平台行情依据不足，估值仅供参考。</template>
+              </p>
+            </div>
+          </article>
+        </section>
+
+        <div v-else class="empty-state">
+          <p>{{ allFunds.length ? '当前分组或搜索条件下没有基金。' : '还没有基金持仓' }}</p>
+          <button v-if="!allFunds.length" type="button" class="primary-button" @click="openSheet('opening')">录入已有持仓</button>
+          <button v-else type="button" class="secondary-button" @click="selectGroup('all'); searchText = ''">查看全部基金</button>
+        </div>
+
+        <p v-if="!scope.historyConfirmed || !scope.hasEffectiveQuotes" class="summary-note">
+          部分持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。
+        </p>
+      </template>
+
+      <template v-else-if="activeView === 'activities'">
+        <div class="section-head">
+          <h2>交易记录</h2>
+          <span class="meta">{{ scopedActivities.length }} 条 · 最近 200 条</span>
+        </div>
+
+        <section v-if="scopedActivities.length" class="activity-card">
+          <div v-for="activity in scopedActivities" :key="activity.id" class="activity-row">
+            <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
+            <span class="activity-copy">
+              <strong>{{ activityTitle(activity) }}</strong>
+              <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
+            </span>
+            <b class="activity-value" :class="{ income: activity.cashEffect > 0 }">
+              {{ activityAmountText(activity) }}
+            </b>
+          </div>
+        </section>
+
+        <p v-else class="summary-note">当前范围还没有基金交易记录。</p>
+      </template>
+
+      <template v-else>
+        <div class="section-head">
+          <h2>定投计划</h2>
+          <span class="meta">与自动记账共用同一计划</span>
+        </div>
+
+        <p v-if="plansLoading" class="state">正在读取定投计划…</p>
+        <section v-else-if="plansError" class="state">
+          <p>{{ plansError }}</p>
+          <button type="button" class="secondary-button" @click="plansLoaded = false; plansError = ''; loadPlans()">重新加载</button>
+        </section>
+        <section v-else-if="scopedPlans.length" class="fund-plan-list">
+          <article v-for="plan in scopedPlans" :key="plan.id" class="fund-plan-row">
             <div>
-              <strong>{{ positionLabel(position) }}</strong>
+              <strong>{{ plan.name }}</strong>
               <small>
-                {{ [position.platform, position.code].filter(Boolean).join(' · ') || '未填写平台' }}
+                {{ planCycleLabel(plan) }} · {{ plan.isActive ? '启用' : '已暂停' }}
+                · 下期 {{ plan.nextDueDate ? formatBusinessDate(plan.nextDueDate) : '待定' }}
               </small>
             </div>
-            <b>{{ position.hasEffectiveQuote ? formatMoney(position.value) : '行情待补' }}</b>
-          </header>
-          <div class="position-metrics">
-            <div>
-              <span>份额</span>
-              <b>{{ formatQuantity(position.shares) }}</b>
-            </div>
-            <div>
-              <span>成本</span>
-              <b>{{ formatMoney(position.cost) }}</b>
-            </div>
-            <div>
-              <span>持有收益</span>
-              <b :class="{ profit: position.holdingProfit > 0, loss: position.holdingProfit < 0 }">
-                {{ position.hasEffectiveQuote ? formatSignedMoney(position.holdingProfit) : '行情待补' }}
-              </b>
-            </div>
-          </div>
-          <footer>
-            <template v-if="position.hasEffectiveQuote">净值 {{ formatQuantity(position.netValue) }} · {{ formatBusinessDate(position.netValueDate) }} · {{ quoteSourceLabel(position.lastQuoteSource) }}</template><template v-else>行情依据不足</template>
-            <span>已实现 {{ formatSignedMoney(position.realizedProfit) }}</span>
-          </footer>
-          <small v-if="position.lastQuoteError" class="quote-error">最近获取失败：{{ position.lastQuoteError }}</small>
-        </article>
-      </section>
+            <b>¥{{ formatMoney(plan.amount) }}</b>
+            <RouterLink to="/plans">管理</RouterLink>
+          </article>
+        </section>
+        <p v-else class="summary-note">
+          当前范围还没有基金定投计划。<RouterLink to="/plans">去自动记账设置</RouterLink>。
+        </p>
+      </template>
 
-      <div v-else class="empty-state">
-        <p>还没有基金持仓</p>
-        <button type="button" class="primary-button" @click="openSheet('opening')">录入已有持仓</button>
-      </div>
-
-      <div class="section-head">
-        <h2>交易记录</h2>
-        <span class="meta">最近 200 条</span>
-      </div>
-
-      <section v-if="overview.activities.length" class="activity-card">
-        <div v-for="activity in overview.activities" :key="activity.id" class="activity-row">
-          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
-          <span class="activity-copy">
-            <strong>{{ activityTitle(activity) }}</strong>
-            <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
-          </span>
-          <b class="activity-value" :class="{ income: activity.cashEffect > 0 }">
-            {{ activityAmountText(activity) }}
-          </b>
-        </div>
-      </section>
-
-      <p v-else class="summary-note">还没有基金交易记录。</p>
-
-      <p v-if="!overview.historyConfirmed || !overview.hasEffectiveQuotes" class="summary-note">部分持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。</p>
       <p class="summary-note">
-        基金买卖属于资产流转，不计入生活收支；净值更新只影响估值。
+        基金买卖属于资产流转，不计入生活收支；净值更新只影响估值。分组只改变查看范围，不改持仓、成本和收益。
       </p>
     </template>
+
+    <BottomSheet
+      :open="groupSheetOpen"
+      title="投资分组"
+      subtitle="自定义组合视角，最多 20 个字"
+      :close-disabled="groupBusy"
+      @close="closeGroupSheet"
+    >
+      <form class="form-stack" @submit.prevent="submitGroup">
+        <label class="form-field">
+          <span>新增分组</span>
+          <div class="group-create-row">
+            <input v-model="groupDraft" type="text" maxlength="20" placeholder="例如：纳斯达克指数" />
+            <button type="submit" class="primary-button" :disabled="groupBusy">添加</button>
+          </div>
+        </label>
+      </form>
+
+      <p v-if="groupError" class="form-error" role="alert">{{ groupError }}</p>
+
+      <section class="group-manage-list">
+        <div v-for="group in groups" :key="group.id" class="group-manage-row">
+          <template v-if="editingGroupId === group.id">
+            <input v-model="editingGroupName" type="text" maxlength="20" aria-label="分组名称" />
+            <button type="button" class="confirm-button" :disabled="groupBusy" @click="saveGroupName(group.id)">保存</button>
+            <button type="button" class="text-button" :disabled="groupBusy" @click="editingGroupId = null">取消</button>
+          </template>
+          <template v-else>
+            <div>
+              <strong>{{ group.name }}</strong>
+              <small>{{ group.fundCount }} 只基金 · {{ group.positionCount }} 个持仓</small>
+            </div>
+            <button type="button" class="text-button" @click="startRenameGroup(group.id, group.name)">改名</button>
+            <button type="button" class="text-button danger" :disabled="groupBusy" @click="removeGroup(group.id, group.name)">删除</button>
+          </template>
+        </div>
+        <p v-if="!groups.length" class="summary-note">还没有分组。新增后可在基金卡片里调整所属分组。</p>
+      </section>
+
+      <p class="summary-note">删除分组不会删除基金或改变资产，组内基金回到「未分组」。</p>
+    </BottomSheet>
 
     <BottomSheet
       :open="sheet !== null"
@@ -1395,6 +2137,449 @@ function goBack(): void {
   border-color: var(--color-border-disabled);
   background: var(--color-bg-disabled);
   color: var(--color-text-disabled);
+}
+
+.group-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.group-chips {
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.group-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.group-chips button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.group-chips button.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.group-chips small {
+  margin-left: 3px;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.group-manage {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 10px;
+}
+
+.portfolio-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.portfolio-toolbar input,
+.portfolio-toolbar select {
+  min-height: 36px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 9px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+
+.portfolio-toolbar input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 11px;
+}
+
+.portfolio-toolbar select {
+  flex: 0 0 auto;
+  max-width: 118px;
+  padding: 0 8px;
+}
+
+.metric-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.metric-picker > span {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.metric-picker button {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.metric-picker button.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+
+.view-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 20px;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--color-bg-muted, var(--color-brand-soft));
+}
+
+.view-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.view-tabs button.active {
+  background: var(--color-bg-surface);
+  box-shadow: 0 1px 4px rgba(24, 32, 51, 0.08);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.fund-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fund-card {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 13px;
+  background: var(--color-bg-surface);
+}
+
+.fund-card > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 14px 0;
+  cursor: pointer;
+}
+
+.fund-title {
+  min-width: 0;
+}
+
+.fund-title strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fund-title small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.fund-headline {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.fund-headline b {
+  font-size: 15px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-headline small {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.expand-mark {
+  color: var(--color-brand);
+  font-size: 9px;
+}
+
+.fund-metrics {
+  display: flex;
+  gap: 0;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.fund-metrics > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.fund-metrics > div + div {
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.fund-metrics span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.fund-metrics b {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-detail {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.fund-group-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.fund-group-select select {
+  flex: 1;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 11px;
+}
+
+.fund-class {
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: 10px;
+  background: var(--color-bg-soft, rgba(0, 47, 167, 0.04));
+}
+
+.fund-class header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.fund-class header span {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.fund-class-meta {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.fund-platform-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--color-border-subtle);
+}
+
+.fund-platform-row strong {
+  display: block;
+  font-size: 10px;
+  font-weight: 550;
+}
+
+.fund-platform-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.fund-platform-value {
+  text-align: right;
+}
+
+.fund-platform-value b {
+  font-size: 10px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.fund-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.fund-plan-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.fund-plan-row strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fund-plan-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.fund-plan-row > b {
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-plan-row a {
+  color: var(--color-brand);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.group-create-row {
+  display: flex;
+  gap: 8px;
+}
+
+.group-create-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-create-row button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.group-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.group-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+}
+
+.group-manage-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-manage-row strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.group-manage-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.group-manage-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.text-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 10px;
+}
+
+.text-button.danger {
+  color: var(--color-finance-loss);
 }
 
 .notice {

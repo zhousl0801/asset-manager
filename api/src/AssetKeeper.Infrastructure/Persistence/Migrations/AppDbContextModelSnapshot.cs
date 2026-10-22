@@ -145,6 +145,51 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.ToTable("asset_transactions", (string)null);
                 });
 
+            modelBuilder.Entity("AssetKeeper.Domain.Assets.FundGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LedgerId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("LedgerId", "SortOrder");
+
+                    b.ToTable("fund_groups", (string)null);
+                });
+
             modelBuilder.Entity("AssetKeeper.Domain.Assets.FundPosition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -160,6 +205,10 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("cost");
+
+                    b.Property<Guid?>("FundGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("fund_group_id");
 
                     b.Property<DateTimeOffset?>("LastQuoteAttemptAt")
                         .HasColumnType("timestamptz")
@@ -226,6 +275,8 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnName("version");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FundGroupId");
 
                     b.HasIndex("LedgerId");
 
@@ -962,13 +1013,31 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.Navigation("Ledger");
                 });
 
-            modelBuilder.Entity("AssetKeeper.Domain.Assets.FundPosition", b =>
+            modelBuilder.Entity("AssetKeeper.Domain.Assets.FundGroup", b =>
                 {
                     b.HasOne("AssetKeeper.Domain.Ledgers.Ledger", "Ledger")
                         .WithMany()
                         .HasForeignKey("LedgerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Ledger");
+                });
+
+            modelBuilder.Entity("AssetKeeper.Domain.Assets.FundPosition", b =>
+                {
+                    b.HasOne("AssetKeeper.Domain.Assets.FundGroup", "FundGroup")
+                        .WithMany()
+                        .HasForeignKey("FundGroupId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AssetKeeper.Domain.Ledgers.Ledger", "Ledger")
+                        .WithMany()
+                        .HasForeignKey("LedgerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FundGroup");
 
                     b.Navigation("Ledger");
                 });

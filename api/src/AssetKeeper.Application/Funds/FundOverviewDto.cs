@@ -14,4 +14,6 @@ public sealed record FundOverviewDto(
     IReadOnlyList<PendingFundBuyDto>? PendingBuys = null,
     decimal PendingArrivalAmount = 0m,
     IReadOnlyList<PendingFundSellDto>? SellApplications = null,
-    IReadOnlyList<PendingFundArrivalDto>? PendingArrivals = null);
+    IReadOnlyList<PendingFundArrivalDto>? PendingArrivals = null,
+    IReadOnlyList<FundGroupDto>? Groups = null,
+    IReadOnlyList<FundSummaryDto>? Funds = null);

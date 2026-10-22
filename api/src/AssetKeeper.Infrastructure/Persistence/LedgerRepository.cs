@@ -336,6 +336,39 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.GoldHoldings.AddAsync(holding, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<FundGroup>> GetFundGroupsAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.FundGroups
+            .AsNoTracking()
+            .Where(group => group.LedgerId == ledgerId)
+            .OrderBy(group => group.SortOrder)
+            .ThenBy(group => group.Name)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<FundGroup?> GetFundGroupForUpdateAsync(
+        Guid ledgerId,
+        Guid groupId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.FundGroups
+            .SingleOrDefaultAsync(
+                group => group.Id == groupId && group.LedgerId == ledgerId,
+                cancellationToken);
+    }
+
+    public async Task AddFundGroupAsync(FundGroup group, CancellationToken cancellationToken)
+    {
+        await _dbContext.FundGroups.AddAsync(group, cancellationToken);
+    }
+
+    public void RemoveFundGroup(FundGroup group)
+    {
+        _dbContext.FundGroups.Remove(group);
+    }
+
     public async Task<IReadOnlyList<FundPosition>> GetFundPositionsAsync(
         Guid ledgerId,
         CancellationToken cancellationToken)

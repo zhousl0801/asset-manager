@@ -40,6 +40,7 @@ public sealed class FundService
         }
 
         var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
+        var groups = await _ledgerRepository.GetFundGroupsAsync(ledger.Id, cancellationToken);
         var transactions = await _ledgerRepository.GetAssetTransactionsAsync(
             ledger.Id,
             AssetType.Fund,
@@ -111,11 +112,25 @@ public sealed class FundService
                 transaction.Note))
             .ToList();
         var pendingArrivalAmount = pendingArrivals.Sum(item => item.Amount);
+        var groupNames = groups.ToDictionary(group => group.Id, group => group.Name);
+        var replayStates = replay.Funds
+            .Where(item => item.PositionId is not null)
+            .ToDictionary(item => item.PositionId!.Value);
         var mappedPositions = positions.Select(position =>
         {
-            var state = replay.Funds.Single(item => item.PositionId == position.Id);
-            return Map(position) with { HistoryConfirmed = state.CanRebuild, HasEffectiveQuote = state.Value is not null };
+            var state = replayStates[position.Id];
+            return Map(position) with
+            {
+                HistoryConfirmed = state.CanRebuild,
+                HasEffectiveQuote = state.Value is not null,
+                GroupId = position.FundGroupId,
+                GroupName = position.FundGroupId is null
+                    ? null
+                    : groupNames.GetValueOrDefault(position.FundGroupId.Value)
+            };
         }).ToList();
+        var funds = BuildFundSummaries(positions, pendingBuys, pendingArrivals, replayStates, groupNames);
+        var groupSummaries = BuildGroupSummaries(groups, positions, funds);
 
         return new FundOverviewDto(
             positions.Sum(position => position.Value) + pendingAmount + pendingArrivalAmount,
@@ -131,7 +146,115 @@ public sealed class FundService
             pendingBuys,
             pendingArrivalAmount,
             sellApplications,
-            pendingArrivals);
+            pendingArrivals,
+            groupSummaries,
+            funds);
+    }
+
+    private static IReadOnlyList<FundSummaryDto> BuildFundSummaries(
+        IReadOnlyList<FundPosition> positions,
+        IReadOnlyList<PendingFundBuyDto> pendingBuys,
+        IReadOnlyList<PendingFundArrivalDto> pendingArrivals,
+        IReadOnlyDictionary<Guid, HoldingReplay> replayStates,
+        IReadOnlyDictionary<Guid, string> groupNames)
+    {
+        var pendingBuyAmounts = pendingBuys
+            .GroupBy(item => item.PositionId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+        var pendingArrivalAmounts = pendingArrivals
+            .GroupBy(item => item.PositionId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+
+        return positions
+            .GroupBy(position => position.Name, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var members = group.OrderBy(position => position.ShareClass).ThenBy(position => position.Platform).ToList();
+                var classes = members
+                    .GroupBy(position => position.ShareClass ?? string.Empty, StringComparer.Ordinal)
+                    .Select(classGroup =>
+                    {
+                        var classMembers = classGroup
+                            .OrderBy(position => position.Platform)
+                            .ThenBy(position => position.Id)
+                            .ToList();
+                        var netValues = classMembers.Select(position => position.NetValue).Distinct().ToList();
+                        var netValueDates = classMembers.Select(position => position.NetValueDate).Distinct().ToList();
+
+                        return new FundShareClassDto(
+                            string.IsNullOrWhiteSpace(classGroup.Key) ? null : classGroup.Key,
+                            decimal.Round(classMembers.Sum(position => position.Shares), 4),
+                            decimal.Round(classMembers.Sum(position => position.Cost), 2),
+                            decimal.Round(classMembers.Sum(position => position.Value), 2),
+                            decimal.Round(classMembers.Sum(position => position.HoldingProfit), 2),
+                            decimal.Round(classMembers.Sum(position => position.RealizedProfit), 2),
+                            netValues.Count == 1 ? netValues[0] : null,
+                            netValueDates.Count == 1 ? netValueDates[0] : null,
+                            classMembers.Select(position => new FundPlatformHoldingDto(
+                                position.Id,
+                                position.Platform,
+                                position.Name,
+                                position.Code,
+                                position.ShareClass,
+                                position.Shares,
+                                position.Cost,
+                                position.NetValue,
+                                position.NetValueDate,
+                                position.Value,
+                                position.HoldingProfit,
+                                position.RealizedProfit,
+                                replayStates[position.Id].Value is not null)).ToList());
+                    })
+                    .OrderBy(fundClass => fundClass.ShareClass, StringComparer.Ordinal)
+                    .ToList();
+                var pendingBuyAmount = members.Sum(position => pendingBuyAmounts.GetValueOrDefault(position.Id));
+                var pendingArrivalAmount = members.Sum(position => pendingArrivalAmounts.GetValueOrDefault(position.Id));
+                var value = decimal.Round(members.Sum(position => position.Value), 2);
+                var groupId = members.Select(position => position.FundGroupId).FirstOrDefault(id => id is not null);
+                var platformCount = members
+                    .Select(position => position.Platform)
+                    .Where(platform => !string.IsNullOrWhiteSpace(platform))
+                    .Distinct(StringComparer.Ordinal)
+                    .Count();
+
+                return new FundSummaryDto(
+                    group.Key,
+                    group.Key,
+                    groupId,
+                    groupId is null ? null : groupNames.GetValueOrDefault(groupId.Value),
+                    value,
+                    decimal.Round(members.Sum(position => position.Cost), 2),
+                    decimal.Round(members.Sum(position => position.HoldingProfit), 2),
+                    decimal.Round(members.Sum(position => position.RealizedProfit), 2),
+                    decimal.Round(pendingBuyAmount, 2),
+                    decimal.Round(pendingArrivalAmount, 2),
+                    decimal.Round(value + pendingBuyAmount + pendingArrivalAmount, 2),
+                    platformCount,
+                    members.Max(position => position.NetValueDate),
+                    members.All(position => replayStates[position.Id].CanRebuild),
+                    members.All(position => replayStates[position.Id].Value is not null),
+                    classes);
+            })
+            .OrderBy(fund => fund.Name, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IReadOnlyList<FundGroupDto> BuildGroupSummaries(
+        IReadOnlyList<FundGroup> groups,
+        IReadOnlyList<FundPosition> positions,
+        IReadOnlyList<FundSummaryDto> funds)
+    {
+        return groups
+            .Select(group => new FundGroupDto(
+                group.Id,
+                group.Name,
+                group.SortOrder,
+                funds.Count(fund => fund.GroupId == group.Id),
+                positions.Count(position => position.FundGroupId == group.Id),
+                decimal.Round(positions
+                    .Where(position => position.FundGroupId == group.Id)
+                    .Sum(position => position.Value), 2)))
+            .ToList();
     }
 
     public Task<AssetOperationResult<FundMutationResultDto>> CreatePositionAsync(CreateFundPositionRequest request, CancellationToken cancellationToken)
