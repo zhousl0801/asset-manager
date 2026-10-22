@@ -54,6 +54,7 @@ public sealed class LedgerService
         var snapshot = new LedgerReplayCalculator().Calculate(data, BusinessFact.From(data), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
         var pendingFund = snapshot.Funds.Sum(item => item.PendingAmount);
         var pendingArrival = snapshot.Funds.Sum(item => item.PendingArrivalAmount);
+        var pendingGoldArrival = snapshot.Gold?.PendingArrivalAmount ?? 0m;
         var fundNote = $"持有 {fundPositions.Count} 只基金";
 
         if (pendingFund > 0)
@@ -79,12 +80,19 @@ public sealed class LedgerService
                 true,
                 providentAccount.Balance,
                 $"本月缴存 +{monthDeposit.ToString("N2", CultureInfo.InvariantCulture)}");
+        var goldNote = goldHolding is null ? string.Empty : $"持有 {goldHolding.Grams:0.####} 克";
+
+        if (pendingGoldArrival > 0)
+        {
+            goldNote += $" · 待到账 {pendingGoldArrival.ToString("N2", CultureInfo.InvariantCulture)}";
+        }
+
         var gold = goldHolding is null
             ? notConfigured
             : new AssetOverviewDto(
                 true,
-                goldHolding.Value,
-                $"持有 {goldHolding.Grams:0.####} 克");
+                goldHolding.Value + pendingGoldArrival,
+                goldNote);
 
         if (fundPositions.Count > 0 && snapshot.Funds.Any(item => item.Value is null))
         {

@@ -115,6 +115,103 @@ public sealed class GoldServiceTests
     }
 
     [Fact]
+    public async Task SellPending_ReducesGramsCostAndAddsPendingArrivalWithoutCash()
+    {
+        var context = await CreateContextAsync();
+        await SaveExistingHoldingAsync(context);
+
+        var result = await context.Gold.SellAsync(
+            new SellGoldRequest(1m, 898m, BusinessToday, "卖出待到账", Guid.NewGuid(), Settlement: GoldSellSettlement.PendingArrival),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(29m, result.Result.Grams);
+        Assert.Equal(24746.67m, result.Result.Cost);
+        Assert.Equal(10000m, result.Result.CashBalance);
+        Assert.Equal(26100m, result.Result.Value);
+        Assert.Equal(GoldActivityType.SellPending, result.Result.Activity.Type);
+
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+
+        Assert.NotNull(overview);
+        Assert.Equal(898m, overview.PendingArrivalAmount);
+        Assert.Single(overview.PendingArrivals!);
+        Assert.Equal(44.67m, overview.RealizedProfit);
+
+        var home = await context.Ledger.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(home);
+        Assert.Equal(26998m, home.Gold.Amount);
+        Assert.Equal(36998m, home.TotalAssets);
+    }
+
+    [Fact]
+    public async Task SellArrival_MovesPendingAmountToCashWithoutChangingGrams()
+    {
+        var context = await CreateContextAsync();
+        await SaveExistingHoldingAsync(context);
+        var pending = await context.Gold.SellAsync(
+            new SellGoldRequest(1m, 898m, BusinessToday, null, Guid.NewGuid(), Settlement: GoldSellSettlement.PendingArrival),
+            CancellationToken.None);
+
+        var result = await context.Gold.ArriveSellAsync(
+            pending.Result!.Activity.Id,
+            new GoldSellArrivalRequest(898m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(10898m, result.Result.CashBalance);
+        Assert.Equal(29m, result.Result.Grams);
+        Assert.Equal(26100m, result.Result.Value);
+        Assert.Equal(GoldActivityType.SellArrival, result.Result.Activity.Type);
+
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(0m, overview.PendingArrivalAmount);
+        Assert.Empty(overview.PendingArrivals!);
+        Assert.Equal(44.67m, overview.RealizedProfit);
+    }
+
+    [Fact]
+    public async Task SellArrival_WithDifferentAmount_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync();
+        await SaveExistingHoldingAsync(context);
+        var pending = await context.Gold.SellAsync(
+            new SellGoldRequest(1m, 898m, BusinessToday, null, Guid.NewGuid(), Settlement: GoldSellSettlement.PendingArrival),
+            CancellationToken.None);
+
+        var result = await context.Gold.ArriveSellAsync(
+            pending.Result!.Activity.Id,
+            new GoldSellArrivalRequest(897m, BusinessToday, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("到账金额必须与待到账金额一致"));
+        Assert.Equal(10000m, context.Repository.CashAccount!.Balance);
+    }
+
+    [Fact]
+    public async Task SellArrival_WithDuplicateRequest_DoesNotReceiveTwice()
+    {
+        var context = await CreateContextAsync();
+        await SaveExistingHoldingAsync(context);
+        var pending = await context.Gold.SellAsync(
+            new SellGoldRequest(1m, 898m, BusinessToday, null, Guid.NewGuid(), Settlement: GoldSellSettlement.PendingArrival),
+            CancellationToken.None);
+        var request = new GoldSellArrivalRequest(898m, BusinessToday, null, Guid.NewGuid());
+
+        var first = await context.Gold.ArriveSellAsync(pending.Result!.Activity.Id, request, CancellationToken.None);
+        var second = await context.Gold.ArriveSellAsync(pending.Result.Activity.Id, request, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, first.Status);
+        Assert.Equal(AssetOperationStatus.Success, second.Status);
+        Assert.Equal(10898m, second.Result!.CashBalance);
+        Assert.Equal(3, context.Repository.AssetTransactions.Count);
+    }
+
+    [Fact]
     public async Task SellAsync_WithMoreThanHeld_ReturnsInvalid()
     {
         var context = await CreateContextAsync();

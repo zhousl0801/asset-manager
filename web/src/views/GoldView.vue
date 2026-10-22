@@ -2,7 +2,7 @@
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { buyGold, fetchGoldOverview, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
+import { arriveGoldSell, buyGold, fetchGoldOverview, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
@@ -17,9 +17,9 @@ import {
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
-import type { GoldActivity, GoldOverview } from '../types/gold'
+import type { GoldActivity, GoldOverview, GoldSellSettlement, PendingGoldArrival } from '../types/gold'
 
-type SheetKind = 'buy' | 'sell' | 'quote' | 'holding'
+type SheetKind = 'buy' | 'sell' | 'sellArrival' | 'quote' | 'holding'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -32,6 +32,7 @@ const requestId = ref(createRequestId())
 const isSaving = ref(false)
 const expectedVersion = ref(0)
 const formError = ref('')
+const arrivingPendingId = ref<string | null>(null)
 const form = reactive({
   grams: '',
   amount: '',
@@ -41,8 +42,12 @@ const form = reactive({
   quoteDate: today,
   businessDate: today,
   note: '',
-  relatedCashAdjustmentId: null as string | null
+  relatedCashAdjustmentId: null as string | null,
+  settlement: 'received' as GoldSellSettlement
 })
+
+const selectedPendingArrival = computed<PendingGoldArrival | null>(() =>
+  overview.value?.pendingArrivals.find((pending) => pending.transactionId === arrivingPendingId.value) ?? null)
 
 const sheetTitle = computed(() => {
   switch (sheet.value) {
@@ -50,6 +55,8 @@ const sheetTitle = computed(() => {
       return '记录积存金买入'
     case 'sell':
       return '记录积存金卖出'
+    case 'sellArrival':
+      return '登记积存金卖到账'
     case 'quote':
       return '更新积存金报价'
     case 'holding':
@@ -63,7 +70,9 @@ const sheetSubtitle = computed(() => {
     case 'buy':
       return '从统一现金扣款，增加克数与成本'
     case 'sell':
-      return '减少克数，净回款转入现金'
+      return '减少克数，按收款状态转入现金或待到账'
+    case 'sellArrival':
+      return '待到账转入现金，不重复计算盈亏'
     case 'quote':
       return '只影响估值，不改变现金和成本'
     case 'holding':
@@ -77,7 +86,9 @@ const sheetNote = computed(() => {
     case 'buy':
       return '买入金额包含费用；实际扣款与持仓估值不同时，差额体现在持有盈亏中。'
     case 'sell':
-      return '按加权平均成本结转；卖出净回款与结转成本差额计入已实现盈亏。'
+      return '按加权平均成本结转；卖出净回款与结转成本差额计入已实现盈亏。待到账不增加现金。'
+    case 'sellArrival':
+      return '到账金额必须与待到账金额一致，不再次确认盈亏；如有差额，请先更正卖出记录。'
     case 'quote':
       return '报价日期不能晚于今天；行情失败时保留最近有效报价。'
     case 'holding':
@@ -98,6 +109,8 @@ const canSubmit = computed(() => {
         && parsePrice(form.quote) !== null
     case 'sell':
       return parseQuantity(form.grams) !== null && (parseAmount(form.netAmount) ?? 0) > 0
+    case 'sellArrival':
+      return arrivingPendingId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
     case 'quote':
       return parsePrice(form.quote) !== null
     case 'holding':
@@ -134,6 +147,7 @@ async function loadOverview(): Promise<void> {
 function openSheet(kind: SheetKind): void {
   expectedVersion.value = overview.value?.version ?? 0
   sheet.value = kind
+  arrivingPendingId.value = null
   requestId.value = createRequestId()
   formError.value = ''
   form.note = ''
@@ -145,11 +159,19 @@ function openSheet(kind: SheetKind): void {
   form.amount = ''
   form.netAmount = ''
   form.cost = ''
+  form.settlement = 'received'
 
   if (kind === 'holding' && overview.value?.isConfigured) {
     form.grams = String(overview.value.grams)
     form.cost = String(overview.value.cost)
   }
+}
+
+function openArrivalSheet(pending: PendingGoldArrival): void {
+  openSheet('sellArrival')
+  arrivingPendingId.value = pending.transactionId
+  form.netAmount = String(pending.amount)
+  form.note = pending.note ?? ''
 }
 
 function closeSheet(): void {
@@ -170,6 +192,8 @@ async function submit(): Promise<void> {
       await submitBuy()
     } else if (sheet.value === 'sell') {
       await submitSell()
+    } else if (sheet.value === 'sellArrival') {
+      await submitSellArrival()
     } else if (sheet.value === 'quote') {
       await submitQuote()
     } else {
@@ -251,10 +275,56 @@ async function submitSell(): Promise<void> {
     netAmount,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
+    relatedCashAdjustmentId: form.settlement === 'received' ? form.relatedCashAdjustmentId : null,
+    requestId: requestId.value,
+    settlement: form.settlement
+  })
+  notice.value = form.settlement === 'received'
+    ? `已卖出 ${formatQuantity(result.activity.grams)} 克，当前现金 ¥${formatMoney(result.cashBalance)}。`
+    : `已记录 ${formatQuantity(result.activity.grams)} 克卖出待到账 ¥${formatMoney(result.activity.amount)}，到账后转入现金。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitSellArrival(): Promise<void> {
+  const pending = selectedPendingArrival.value
+  const amount = parseAmount(form.netAmount)
+
+  if (!pending) {
+    formError.value = '积存金卖出待到账记录不存在，请刷新后重试。'
+    return
+  }
+
+  if (amount === null || amount <= 0) {
+    formError.value = '请填写有效的到账金额。'
+    return
+  }
+
+  if (amount !== pending.amount) {
+    formError.value = '到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。'
+    return
+  }
+
+  const dateError = validateBusinessDate()
+
+  if (dateError) {
+    formError.value = dateError
+    return
+  }
+
+  if (form.businessDate < pending.businessDate) {
+    formError.value = '到账日期不能早于卖出日期。'
+    return
+  }
+
+  isSaving.value = true
+  const result = await arriveGoldSell(pending.transactionId, {
+    amount,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
     requestId: requestId.value
   })
-  notice.value = `已卖出 ${formatQuantity(result.activity.grams)} 克，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  notice.value = `积存金卖到账 ¥${formatMoney(result.activity.amount)}，当前现金 ¥${formatMoney(result.cashBalance)}。`
   sheet.value = null
   await loadOverview()
 }
@@ -356,6 +426,10 @@ function activityTitle(activity: GoldActivity): string {
       return '积存金买入'
     case 'sell':
       return '积存金卖出'
+    case 'sellPending':
+      return '积存金卖出待到账'
+    case 'sellArrival':
+      return '积存金卖到账'
     case 'quote':
       return '更新报价'
     case 'correction':
@@ -375,6 +449,10 @@ function activityNote(activity: GoldActivity): string {
       return '现金 → 积存金'
     case 'sell':
       return '积存金 → 现金'
+    case 'sellPending':
+      return '积存金 → 待到账'
+    case 'sellArrival':
+      return '待到账 → 现金'
     case 'quote':
       return '仅更新估值'
     default:
@@ -383,8 +461,12 @@ function activityNote(activity: GoldActivity): string {
 }
 
 function activityAmountText(activity: GoldActivity): string {
-  if (activity.type === 'buy' || activity.type === 'sell') {
+  if (activity.type === 'buy' || activity.type === 'sell' || activity.type === 'sellArrival') {
     return formatSignedMoney(activity.cashEffect)
+  }
+
+  if (activity.type === 'sellPending') {
+    return `待到账 ${formatMoney(activity.amount)}`
   }
 
   if (activity.type === 'quote') {
@@ -395,7 +477,11 @@ function activityAmountText(activity: GoldActivity): string {
 }
 
 function activityMeta(activity: GoldActivity): string {
-  if (activity.type === 'buy' || activity.type === 'sell') {
+  if (activity.type === 'sellArrival') {
+    return `到账 ${formatMoney(activity.amount)} · ${formatBusinessDate(activity.businessDate)}`
+  }
+
+  if (activity.type === 'buy' || activity.type === 'sell' || activity.type === 'sellPending') {
     return `${formatQuantity(activity.grams)} 克 · ${formatBusinessDate(activity.businessDate)}`
   }
 
@@ -436,6 +522,7 @@ function goBack(): void {
         <p class="hero-meta">
           持仓估值 {{ formatQuantity(overview.grams) }} 克 ×
           {{ overview.hasEffectiveQuote ? formatMoney(overview.quote) : '行情待补' }} 元/克
+          <template v-if="overview.pendingArrivalAmount > 0"> · 含待到账 ¥{{ formatMoney(overview.pendingArrivalAmount) }}</template>
         </p>
         <div class="hero-metrics">
           <div>
@@ -471,6 +558,28 @@ function goBack(): void {
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
+      <template v-if="overview.pendingArrivals.length">
+        <div class="section-head">
+          <h2>卖出待到账</h2>
+          <span class="meta">{{ overview.pendingArrivals.length }} 笔 · ¥{{ formatMoney(overview.pendingArrivalAmount) }}</span>
+        </div>
+        <section class="pending-list">
+          <article v-for="pending in overview.pendingArrivals" :key="pending.transactionId" class="pending-card">
+            <div class="pending-copy">
+              <strong>{{ formatQuantity(pending.grams) }} 克</strong>
+              <small>
+                {{ formatBusinessDate(pending.businessDate) }}
+                <template v-if="pending.note"> · {{ pending.note }}</template>
+              </small>
+            </div>
+            <div class="pending-side">
+              <b>¥{{ formatMoney(pending.amount) }}</b>
+              <button type="button" class="confirm-button" @click="openArrivalSheet(pending)">登记到账</button>
+            </div>
+          </article>
+        </section>
+      </template>
+
       <div class="quote-panel">
         <div>
           <span>估值报价</span>
@@ -497,7 +606,7 @@ function goBack(): void {
 
       <section v-if="overview.activities.length" class="activity-card">
         <div v-for="activity in overview.activities" :key="activity.id" class="activity-row">
-          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'sell' ? '卖' : activity.type === 'quote' ? '价' : '校' }}</span>
+          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'sell' ? '卖' : activity.type === 'sellPending' ? '待' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '价' : '校' }}</span>
           <span class="activity-copy">
             <strong>{{ activityTitle(activity) }}</strong>
             <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
@@ -514,7 +623,7 @@ function goBack(): void {
       </div>
 
       <p class="summary-note">
-        买入按实际扣款增加克数与成本；卖出按加权平均成本结转。报价更新只影响估值。
+        买入按实际扣款增加克数与成本；卖出按加权平均成本结转，待到账收款后转入现金。报价更新只影响估值。
       </p>
     </template>
 
@@ -533,6 +642,10 @@ function goBack(): void {
         <div class="summary-line">
           <span>当前持有</span>
           <b>{{ formatQuantity(overview?.grams) }} 克</b>
+        </div>
+        <div v-if="selectedPendingArrival" class="summary-line">
+          <span>卖出待到账</span>
+          <b>¥{{ formatMoney(selectedPendingArrival.amount) }}</b>
         </div>
       </div>
 
@@ -605,7 +718,34 @@ function goBack(): void {
             />
           </label>
           <label class="form-field">
+            <span>收款状态</span>
+            <select v-model="form.settlement">
+              <option value="received">已到账</option>
+              <option value="pendingArrival">待到账</option>
+            </select>
+            <small>待到账只减少克数并增加待到账资产，现金不变；到账时再转入现金。</small>
+          </label>
+          <label class="form-field">
             <span>业务日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
+        </template>
+
+        <template v-else-if="sheet === 'sellArrival'">
+          <label class="form-field">
+            <span>到账金额（元）</span>
+            <input
+              v-model="form.netAmount"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.00"
+              @input="formError = ''"
+            />
+            <small>必须与待到账金额一致；如有差额，请先更正卖出记录。</small>
+          </label>
+          <label class="form-field">
+            <span>到账日期</span>
             <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
@@ -668,7 +808,7 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <CashAdjustmentLink v-if="sheet === 'buy' || sheet === 'sell'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
+        <CashAdjustmentLink v-if="sheet === 'buy' || (sheet === 'sell' && form.settlement === 'received')" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
@@ -914,6 +1054,68 @@ function goBack(): void {
 .meta {
   color: var(--color-text-secondary);
   font-size: 10px;
+}
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pending-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px dashed var(--color-border-default);
+  border-radius: 12px;
+  background: var(--color-brand-soft);
+}
+
+.pending-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pending-copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.pending-side b {
+  font-size: 14px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.confirm-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-brand);
+  border-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: 10px;
+  font-weight: 550;
 }
 
 .activity-card {

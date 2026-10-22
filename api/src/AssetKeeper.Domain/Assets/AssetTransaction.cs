@@ -86,6 +86,8 @@ public sealed class AssetTransaction
         var sellApply = Kind == AssetTransactionKind.FundSellApply;
         var sellConfirm = Kind == AssetTransactionKind.FundSellConfirm;
         var sellArrival = Kind == AssetTransactionKind.FundSellArrival;
+        var goldSellPending = Kind == AssetTransactionKind.GoldSellPending;
+        var goldSellArrival = Kind == AssetTransactionKind.GoldSellArrival;
         EnsureAmount(amount, nameof(amount));
 
         if (amount < 0 || (!opening && !quote && !sellApply && amount == 0))
@@ -95,13 +97,13 @@ public sealed class AssetTransaction
 
         if (AssetType != AssetType.ProvidentFund && !quote)
         {
-            if (pendingBuy || sellArrival)
+            if (pendingBuy || sellArrival || goldSellArrival)
             {
                 if (quantity is not null)
                 {
                     throw new ArgumentException(pendingBuy
                         ? "买入待确认不包含份额，确认时再录入实际份额。"
-                        : "赎回到账不包含份额，确认时已记录实际赎回份额。");
+                        : "到账记录不包含份额或克数，卖出确认时已记录实际数量。");
                 }
             }
             else if (quantity is null || quantity < 0 || quantity > MaximumQuantity || decimal.Round(quantity.Value, 4) != quantity.Value
@@ -111,7 +113,8 @@ public sealed class AssetTransaction
             }
         }
 
-        if ((pendingBuy || sellApply || sellArrival) && (price is not null || priceDate is not null))
+        if ((pendingBuy || sellApply || sellArrival || goldSellPending || goldSellArrival)
+            && (price is not null || priceDate is not null))
         {
             throw new ArgumentException("该记录不包含成交净值，净值在确认时填写。");
         }
@@ -150,7 +153,7 @@ public sealed class AssetTransaction
         {
             Fee = 0m;
         }
-        else if (pendingBuy || sellApply || sellArrival)
+        else if (pendingBuy || sellApply || sellArrival || goldSellPending || goldSellArrival)
         {
             Fee = 0m;
         }
@@ -172,7 +175,7 @@ public sealed class AssetTransaction
         {
             AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyPending or AssetTransactionKind.GoldBuy => -amount,
             AssetTransactionKind.FundSell or AssetTransactionKind.FundSellArrival or AssetTransactionKind.GoldSell
-                or AssetTransactionKind.ProvidentWithdrawal => amount,
+                or AssetTransactionKind.GoldSellArrival or AssetTransactionKind.ProvidentWithdrawal => amount,
             _ => 0m
         };
         Note = Normalize(note);
@@ -552,6 +555,69 @@ public sealed class AssetTransaction
             note,
             businessDate,
             now);
+    }
+
+    public static AssetTransaction CreateGoldSellPending(
+        Guid ledgerId,
+        decimal grams,
+        decimal netAmount,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveQuantity(grams, nameof(grams));
+        EnsurePositiveAmount(netAmount, nameof(netAmount));
+
+        return Create(
+            ledgerId,
+            requestId,
+            AssetType.Gold,
+            AssetTransactionKind.GoldSellPending,
+            null,
+            grams,
+            netAmount,
+            0m,
+            null,
+            "积存金",
+            note,
+            businessDate,
+            now);
+    }
+
+    public static AssetTransaction CreateGoldSellArrival(
+        Guid ledgerId,
+        Guid pendingTransactionId,
+        decimal amount,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveAmount(amount, nameof(amount));
+
+        if (pendingTransactionId == Guid.Empty)
+        {
+            throw new ArgumentException("积存金卖出待到账标识无效。", nameof(pendingTransactionId));
+        }
+
+        var transaction = Create(
+            ledgerId,
+            requestId,
+            AssetType.Gold,
+            AssetTransactionKind.GoldSellArrival,
+            null,
+            null,
+            amount,
+            amount,
+            null,
+            "积存金",
+            note,
+            businessDate,
+            now);
+        transaction.LinkedTransactionId = pendingTransactionId;
+
+        return transaction;
     }
 
     public static AssetTransaction CreateGoldQuote(

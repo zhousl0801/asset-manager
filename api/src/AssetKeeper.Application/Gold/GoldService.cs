@@ -42,6 +42,24 @@ public sealed class GoldService
 
         var replayData = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
         var replay = new LedgerReplayCalculator().Calculate(replayData, BusinessFact.From(replayData), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
+        var arrivedPendingIds = replayData.Transactions
+            .Where(transaction => !transaction.IsReversed && transaction.Kind == AssetTransactionKind.GoldSellArrival
+                && transaction.LinkedTransactionId is not null)
+            .Select(transaction => transaction.LinkedTransactionId!.Value)
+            .ToHashSet();
+        var pendingArrivals = replayData.Transactions
+            .Where(transaction => !transaction.IsReversed && transaction.Kind == AssetTransactionKind.GoldSellPending
+                && !arrivedPendingIds.Contains(transaction.Id) && transaction.BusinessDate <= _businessDateProvider.Today)
+            .OrderBy(transaction => transaction.BusinessDate)
+            .ThenBy(transaction => transaction.BusinessSequence)
+            .Select(transaction => new PendingGoldArrivalDto(
+                transaction.Id,
+                transaction.Quantity ?? 0m,
+                transaction.Amount,
+                transaction.BusinessDate,
+                transaction.Note))
+            .ToList();
+        var pendingArrivalAmount = pendingArrivals.Sum(item => item.Amount);
 
         return new GoldOverviewDto(
             holding is not null,
@@ -49,7 +67,7 @@ public sealed class GoldService
             holding?.Cost ?? 0m,
             holding?.Quote ?? 0m,
             holding?.QuoteDate,
-            holding?.Value ?? 0m,
+            (holding?.Value ?? 0m) + pendingArrivalAmount,
             averageCost,
             holding?.HoldingProfit ?? 0m,
             holding?.RealizedProfit ?? 0m,
@@ -57,7 +75,9 @@ public sealed class GoldService
             transactions.Select(Map).ToList(),
             holding?.Version ?? 0,
             replay.Gold?.CanRebuild ?? true,
-            replay.Gold?.Value is not null);
+            replay.Gold?.Value is not null,
+            pendingArrivalAmount,
+            pendingArrivals);
     }
 
     public Task<AssetOperationResult<GoldMutationResultDto>> BuyAsync(BuyGoldRequest request, CancellationToken cancellationToken)
@@ -204,21 +224,163 @@ public sealed class GoldService
                 new[] { "尚未记录积存金持仓。" });
         }
 
+        if (request.Settlement == GoldSellSettlement.PendingArrival && request.RelatedCashAdjustmentId is not null)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(
+                new[] { "待到账卖出不产生现金变动，不能关联现金核对差额。" });
+        }
 
         try
         {
             var now = _businessDateProvider.UtcNow;
-            var transaction = AssetTransaction.CreateGoldSell(
+            var transaction = request.Settlement == GoldSellSettlement.PendingArrival
+                ? AssetTransaction.CreateGoldSellPending(
+                    ledger.Id,
+                    request.Grams,
+                    request.NetAmount,
+                    request.BusinessDate,
+                    request.Note,
+                    request.RequestId,
+                    now)
+                : AssetTransaction.CreateGoldSell(
+                    ledger.Id,
+                    request.Grams,
+                    request.NetAmount,
+                    request.BusinessDate,
+                    request.Note,
+                    request.RequestId,
+                    now);
+
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(
+                ledger,
+                transaction,
+                request.BusinessDate,
+                null,
+                request.Settlement == GoldSellSettlement.Received ? request.RelatedCashAdjustmentId : null,
+                cancellationToken);
+
+
+            return AssetOperationResult<GoldMutationResultDto>.Created(
+                MapResult(holding, ledger.CashAccount.Balance, transaction));
+        }
+        catch (ArgumentException exception)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { exception.Message });
+        }
+    }
+
+    public Task<AssetOperationResult<GoldMutationResultDto>> ArriveSellAsync(
+        Guid pendingTransactionId,
+        GoldSellArrivalRequest request,
+        CancellationToken cancellationToken)
+    {
+        return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
+            "gold.sell.arrival",
+            request.RequestId,
+            new { TransactionId = pendingTransactionId, Request = request },
+            () => ArriveSellCoreAsync(pendingTransactionId, request, cancellationToken),
+            result => result.Status is AssetOperationStatus.Created or AssetOperationStatus.Success,
+            result => result with { Status = AssetOperationStatus.Success },
+            AssetOperationResult<GoldMutationResultDto>.Conflict,
+            message => AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { message }),
+            cancellationToken);
+    }
+
+    private async Task<AssetOperationResult<GoldMutationResultDto>> ArriveSellCoreAsync(
+        Guid pendingTransactionId,
+        GoldSellArrivalRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+
+        if (ledger is null)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.NotFound("账本尚未初始化。");
+        }
+
+        if (ledger.CashAccount is null)
+        {
+            throw new InvalidOperationException("账本缺少现金账户。");
+        }
+
+        if (request.RequestId == Guid.Empty)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "请求标识无效。" });
+        }
+
+        var validationErrors = AssetValidation.ValidateBusinessDate(
+            request.BusinessDate,
+            ledger.StartDate,
+            _businessDateProvider.Today);
+
+        if (validationErrors.Count > 0)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(validationErrors);
+        }
+
+        var pending = await _ledgerRepository.GetAssetTransactionForUpdateAsync(
+            ledger.Id,
+            pendingTransactionId,
+            cancellationToken);
+
+        if (pending is null)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.NotFound("积存金卖出待到账记录不存在。");
+        }
+
+        if (pending.Kind != AssetTransactionKind.GoldSellPending || pending.IsReversed)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "该记录不是有效的积存金卖出待到账。" });
+        }
+
+        if (request.BusinessDate < pending.BusinessDate)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "到账日期不能早于卖出日期。" });
+        }
+
+        if (request.Amount != pending.Amount)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。" });
+        }
+
+        var holding = await _ledgerRepository.GetGoldHoldingForUpdateAsync(ledger.Id, cancellationToken);
+
+        if (holding is null)
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "尚未记录积存金持仓。" });
+        }
+
+        var replayData = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
+
+        if (replayData.Transactions.Any(transaction => !transaction.IsReversed
+            && transaction.Kind == AssetTransactionKind.GoldSellArrival && transaction.LinkedTransactionId == pending.Id))
+        {
+            return AssetOperationResult<GoldMutationResultDto>.Invalid(new[] { "该笔积存金卖出已到账，不能重复收款。" });
+        }
+
+        try
+        {
+            var now = _businessDateProvider.UtcNow;
+            var transaction = AssetTransaction.CreateGoldSellArrival(
                 ledger.Id,
-                request.Grams,
-                request.NetAmount,
+                pending.Id,
+                request.Amount,
                 request.BusinessDate,
                 request.Note,
                 request.RequestId,
                 now);
 
-            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, null, request.RelatedCashAdjustmentId, cancellationToken);
-
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(
+                ledger,
+                transaction,
+                request.BusinessDate,
+                null,
+                null,
+                cancellationToken);
 
             return AssetOperationResult<GoldMutationResultDto>.Created(
                 MapResult(holding, ledger.CashAccount.Balance, transaction));
@@ -436,6 +598,8 @@ public sealed class GoldService
         {
             AssetTransactionKind.GoldBuy => GoldActivityType.Buy,
             AssetTransactionKind.GoldSell => GoldActivityType.Sell,
+            AssetTransactionKind.GoldSellPending => GoldActivityType.SellPending,
+            AssetTransactionKind.GoldSellArrival => GoldActivityType.SellArrival,
             AssetTransactionKind.GoldQuote => GoldActivityType.Quote,
             AssetTransactionKind.GoldOpening or AssetTransactionKind.GoldCorrection => GoldActivityType.Correction,
             _ => throw new InvalidOperationException("不是有效的积存金记录。")

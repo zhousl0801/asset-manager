@@ -4,6 +4,8 @@ public enum GoldActivityType
 {
     Buy,
     Sell,
+    SellPending,
+    SellArrival,
     Quote,
     Correction
 }

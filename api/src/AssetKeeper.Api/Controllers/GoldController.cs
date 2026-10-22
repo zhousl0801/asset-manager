@@ -53,6 +53,21 @@ public sealed class GoldController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("sells/{transactionId:guid}/arrival")]
+    [ProducesResponseType<GoldMutationResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArriveSell(
+        Guid transactionId,
+        [FromBody] GoldSellArrivalRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _goldService.ArriveSellAsync(transactionId, request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     [HttpPost("quote")]
     [ProducesResponseType<GoldMutationResultDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

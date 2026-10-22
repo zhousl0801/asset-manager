@@ -6,4 +6,5 @@ public sealed record SellGoldRequest(
     DateOnly BusinessDate,
     string? Note,
     Guid RequestId,
-    Guid? RelatedCashAdjustmentId = null);
+    Guid? RelatedCashAdjustmentId = null,
+    GoldSellSettlement Settlement = GoldSellSettlement.Received);

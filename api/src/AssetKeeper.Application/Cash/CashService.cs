@@ -261,6 +261,7 @@ public sealed class CashService
             AssetTransactionKind.FundSellArrival => "基金赎回到账",
             AssetTransactionKind.GoldBuy => "积存金买入",
             AssetTransactionKind.GoldSell => "积存金卖出",
+            AssetTransactionKind.GoldSellArrival => "积存金卖到账",
             _ => "资产流转"
         };
     }

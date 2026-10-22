@@ -26,7 +26,7 @@ public sealed record ReplayResult(
 {
     public decimal KnownTotalAssets => (CashBalance ?? 0m) + (ProvidentBalance ?? 0m)
         + Funds.Sum(position => (position.Value ?? 0m) + position.PendingAmount + position.PendingArrivalAmount)
-        + (Gold?.Value ?? 0m);
+        + (Gold?.Value ?? 0m) + (Gold?.PendingArrivalAmount ?? 0m);
 
     public decimal? TotalAssets => Issues.Count == 0 ? KnownTotalAssets : null;
 }

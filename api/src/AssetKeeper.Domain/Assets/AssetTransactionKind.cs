@@ -15,6 +15,8 @@ public enum AssetTransactionKind
     FundQuote,
     GoldBuy,
     GoldSell,
+    GoldSellPending,
+    GoldSellArrival,
     GoldQuote,
     GoldCorrection,
     ProvidentOpening,

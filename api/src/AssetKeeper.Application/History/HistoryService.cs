@@ -220,6 +220,7 @@ public sealed class HistoryService
 
         ValidateFundBuyChange(original, facts, request);
         ValidateFundSellChange(original, facts, request);
+        ValidateGoldSellChange(original, facts, request);
 
         if (request.Action == "reverse")
         {
@@ -385,6 +386,41 @@ public sealed class HistoryService
         if (request.Amount != confirm.Amount)
         {
             throw new HistoryValidationException("赎回到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。");
+        }
+    }
+
+    private static void ValidateGoldSellChange(BusinessFact original, IReadOnlyList<BusinessFact> facts, HistoryChangeRequest request)
+    {
+        if (original.Source != "asset")
+        {
+            return;
+        }
+
+        var linkedArrival = facts.FirstOrDefault(fact => !fact.IsReversed
+            && fact.Kind == AssetTransactionKind.GoldSellArrival && fact.LinkedTransactionId == original.Id);
+
+        if (original.Kind == AssetTransactionKind.GoldSellPending && linkedArrival is not null)
+        {
+            throw new HistoryValidationException("该积存金卖出已到账，请先撤销到账，再处理卖出记录。");
+        }
+
+        if (original.Kind != AssetTransactionKind.GoldSellArrival || request.Action != "correct")
+        {
+            return;
+        }
+
+        var pending = original.LinkedTransactionId is Guid pendingId
+            ? facts.FirstOrDefault(fact => fact.Id == pendingId && !fact.IsReversed)
+            : null;
+
+        if (pending is null)
+        {
+            throw new HistoryValidationException("积存金卖到账关联的卖出记录不存在或已撤销。");
+        }
+
+        if (request.Amount != pending.Amount)
+        {
+            throw new HistoryValidationException("积存金卖到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。");
         }
     }
 

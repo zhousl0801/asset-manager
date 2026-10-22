@@ -28,6 +28,7 @@ const isConfirmedBuy = computed(() => selected.value?.kind === 'FundBuyConfirm')
 const isConfirmedSell = computed(() => selected.value?.kind === 'FundSellConfirm')
 const isSellApply = computed(() => selected.value?.kind === 'FundSellApply')
 const isSellArrival = computed(() => selected.value?.kind === 'FundSellArrival')
+const isGoldSellArrival = computed(() => selected.value?.kind === 'GoldSellArrival')
 const isConfirmed = computed(() => isConfirmedBuy.value || isConfirmedSell.value)
 const hasQuantity = computed(() => selected.value?.source === 'asset' && selected.value.quantity !== null)
 const canLink = computed(() => selected.value?.source === 'entry' || (selected.value?.cashEffect ?? 0) !== 0)
@@ -35,7 +36,8 @@ const kindNames: Record<string, string> = {
   fundOpening: '基金起始持仓', fundBuy: '基金买入', fundBuyPending: '买入待确认', fundBuyConfirm: '买入确认',
   fundSell: '基金卖出', fundSellApply: '赎回申请', fundSellConfirm: '赎回确认', fundSellArrival: '赎回到账',
   fundQuote: '基金净值', fundCorrection: '基金持仓核对',
-  goldOpening: '积存金起始持仓', goldCorrection: '积存金持仓核对', goldBuy: '积存金买入', goldSell: '积存金卖出', goldQuote: '积存金报价',
+  goldOpening: '积存金起始持仓', goldCorrection: '积存金持仓核对', goldBuy: '积存金买入', goldSell: '积存金卖出',
+  goldSellPending: '积存金卖出待到账', goldSellArrival: '积存金卖到账', goldQuote: '积存金报价',
   providentOpening: '起始公积金', providentDeposit: '公积金缴存', providentWithdrawal: '公积金提取'
 }
 function title(fact: BusinessFact): string {
@@ -115,6 +117,7 @@ function impacts(value: ReplayResult): { key: string; label: string; value: stri
       { key: 'gr', label: '积存金已实现收益', value: money(value.gold.realizedProfit) },
       { key: 'gp', label: '积存金报价', value: money(value.gold.price) },
       { key: 'gd', label: '积存金行情日', value: value.gold.priceDate ?? '依据不足' },
+      { key: 'gw', label: '积存金待到账', value: money(value.gold.pendingArrivalAmount) },
       { key: 'gv', label: '积存金估值', value: money(value.gold.value) }
     ] : []),
     { key: 'knownTotal', label: '已有依据的部分合计', value: money(value.knownTotalAssets) },
@@ -158,7 +161,7 @@ function auditSummary(json: string | null): string {
           <small v-if="fund.pendingArrivalAmount > 0">赎回待到账 {{ money(fund.pendingArrivalAmount) }}</small>
           <small>行情 {{ fund.priceDate ?? '无该时点行情' }} · {{ fund.priceSource === 'manual' ? '手动录入' : fund.priceSource ?? '未取得' }}</small>
         </div>
-        <div v-if="history.snapshot.gold" class="history-holding"><strong>积存金 · {{ money(history.snapshot.gold.value) }}</strong><small>起始 {{ history.snapshot.gold.coverageFrom ?? '待确认' }} · {{ formatQuantity(history.snapshot.gold.quantity) }} 克 · 成本 {{ money(history.snapshot.gold.cost) }}</small><small>行情 {{ history.snapshot.gold.priceDate ?? '未取得' }} · {{ history.snapshot.gold.priceSource === 'manual' ? '手动录入' : history.snapshot.gold.priceSource ?? '无依据' }}</small></div>
+        <div v-if="history.snapshot.gold" class="history-holding"><strong>积存金 · {{ money(history.snapshot.gold.value) }}</strong><small>起始 {{ history.snapshot.gold.coverageFrom ?? '待确认' }} · {{ formatQuantity(history.snapshot.gold.quantity) }} 克 · 成本 {{ money(history.snapshot.gold.cost) }}</small><small v-if="history.snapshot.gold.pendingArrivalAmount > 0">卖出待到账 {{ money(history.snapshot.gold.pendingArrivalAmount) }}</small><small>行情 {{ history.snapshot.gold.priceDate ?? '未取得' }} · {{ history.snapshot.gold.priceSource === 'manual' ? '手动录入' : history.snapshot.gold.priceSource ?? '无依据' }}</small></div>
       </section>
       <div class="section-head"><h2>业务事实</h2><span class="meta">全部日期 · 含已撤销</span></div>
       <section class="history-card">
@@ -181,7 +184,7 @@ function auditSummary(json: string | null): string {
           <label class="form-field"><span>业务日期</span><input v-model="draft.date" type="date" :max="today" required /></label>
           <label v-if="draft.source !== 'cashOpening'" class="form-field"><span>同日业务顺序</span><input v-model.number="draft.sequence" type="number" min="1" step="1" required /><small>数字越小越先发生；须使用其他业务未占用的顺序。</small></label>
           <template v-if="draft.source === 'entry'"><label class="form-field"><span>收支方向</span><select v-model="draft.entryKind"><option value="income">收入</option><option value="expense">支出</option></select></label><label class="form-field"><span>分类</span><input v-model="draft.category" maxlength="20" required /></label></template>
-          <label v-if="!isQuote && !isSellApply" class="form-field"><span>{{ draft.source === 'adjustment' ? '当时核对的实际余额（元）' : '金额 / 持仓成本（元）' }}</span><input v-model.number="draft.amount" type="number" min="0" step="0.01" :disabled="isConfirmedBuy || isSellArrival" required /><small v-if="isConfirmedBuy">确认金额由对应的待确认记录决定；修改扣款金额请先撤销确认。</small><small v-else-if="isSellArrival">到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。</small></label>
+          <label v-if="!isQuote && !isSellApply" class="form-field"><span>{{ draft.source === 'adjustment' ? '当时核对的实际余额（元）' : '金额 / 持仓成本（元）' }}</span><input v-model.number="draft.amount" type="number" min="0" step="0.01" :disabled="isConfirmedBuy || isSellArrival || isGoldSellArrival" required /><small v-if="isConfirmedBuy">确认金额由对应的待确认记录决定；修改扣款金额请先撤销确认。</small><small v-else-if="isSellArrival">到账金额必须与待到账金额一致；如有差额，请先更正赎回确认。</small><small v-else-if="isGoldSellArrival">到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。</small></label>
           <label v-if="hasQuantity" class="form-field"><span>份额 / 克数</span><input v-model.number="draft.quantity" type="number" min="0" step="0.0001" required /></label>
           <label v-if="isConfirmed" class="form-field"><span>费用（元）</span><input v-model.number="draft.fee" type="number" min="0" step="0.01" /><small>费用从成交金额中列示，不产生额外现金变动。</small></label>
           <template v-if="selected.price !== null"><label class="form-field"><span>价格（选填，行情更新必填）</span><input v-model.number="draft.price" type="number" min="0.0001" step="0.0001" :required="isQuote" /></label><label v-if="!isQuote" class="form-field"><span>行情有效日期（有价格时必填）</span><input v-model="draft.priceDate" type="date" :max="today" /></label></template>

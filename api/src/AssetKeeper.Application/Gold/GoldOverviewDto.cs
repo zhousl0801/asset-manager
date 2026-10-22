@@ -14,4 +14,6 @@ public sealed record GoldOverviewDto(
     IReadOnlyList<GoldActivityDto> Activities,
     int Version,
     bool HistoryConfirmed = true,
-    bool HasEffectiveQuote = true);
+    bool HasEffectiveQuote = true,
+    decimal PendingArrivalAmount = 0m,
+    IReadOnlyList<PendingGoldArrivalDto>? PendingArrivals = null);

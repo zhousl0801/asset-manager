@@ -2,6 +2,7 @@ import type {
   BuyGoldInput,
   GoldMutationResult,
   GoldOverview,
+  GoldSellArrivalInput,
   SaveGoldHoldingInput,
   SellGoldInput,
   UpdateGoldQuoteInput
@@ -21,6 +22,13 @@ export function buyGold(input: BuyGoldInput): Promise<GoldMutationResult> {
 
 export function sellGold(input: SellGoldInput): Promise<GoldMutationResult> {
   return apiRequest<GoldMutationResult>('/api/ledger/gold/sells', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
+}
+
+export function arriveGoldSell(transactionId: string, input: GoldSellArrivalInput): Promise<GoldMutationResult> {
+  return apiRequest<GoldMutationResult>(`/api/ledger/gold/sells/${encodeURIComponent(transactionId)}/arrival`, {
     method: 'POST',
     body: JSON.stringify(input)
   })

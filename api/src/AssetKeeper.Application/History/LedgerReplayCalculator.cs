@@ -28,6 +28,7 @@ public sealed class LedgerReplayCalculator
         ValidateLinks(active, allAnchors);
         var pendingBuys = ValidateFundBuyLinks(active);
         var (sellApplies, sellConfirms) = ValidateFundSellLinks(active);
+        var goldSellPendings = ValidateGoldSellLinks(active);
         var fundStates = data.Positions.ToDictionary(position => position.Id, position => new MutableHolding());
         var goldState = data.Gold is null ? null : new MutableHolding();
         var unknownFunds = active.Where(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Fund)
@@ -84,12 +85,12 @@ public sealed class LedgerReplayCalculator
 
             if (fact.AssetType == AssetType.Fund && fact.PositionId is not null && !unknownFunds.Contains(fact.PositionId))
             {
-                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, sellApplies, sellConfirms, false);
+                ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, sellApplies, sellConfirms, goldSellPendings, false);
             }
 
             if (fact.AssetType == AssetType.Gold && goldState is not null && !unknownGold)
             {
-                ApplyHolding(goldState, fact, facts, pendingBuys, sellApplies, sellConfirms, true);
+                ApplyHolding(goldState, fact, facts, pendingBuys, sellApplies, sellConfirms, goldSellPendings, true);
             }
         }
 
@@ -112,7 +113,8 @@ public sealed class LedgerReplayCalculator
             var quote = Latest(observations, AssetType.Gold, null);
             gold = new HoldingReplay(null, unknownGold ? data.Gold.Grams : goldState.Quantity, unknownGold ? data.Gold.Cost : goldState.Cost,
                 unknownGold ? data.Gold.RealizedProfit : goldState.Realized, unknownGold ? null : goldState.CoverageFrom, !unknownGold,
-                (unknownGold ? asOfDate != currentDate : goldState.CoverageFrom is null) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source);
+                (unknownGold ? asOfDate != currentDate : goldState.CoverageFrom is null) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
+                PendingArrivalAmount: unknownGold ? 0m : goldState.PendingArrivalAmount);
         }
 
         var issues = new List<string>();
@@ -143,7 +145,8 @@ public sealed class LedgerReplayCalculator
 
     private static void ApplyHolding(MutableHolding state, BusinessFact fact, IReadOnlyList<BusinessFact> allFacts,
         IReadOnlyDictionary<Guid, BusinessFact> pendingBuys, IReadOnlyDictionary<Guid, BusinessFact> sellApplies,
-        IReadOnlyDictionary<Guid, BusinessFact> sellConfirms, bool gold)
+        IReadOnlyDictionary<Guid, BusinessFact> sellConfirms, IReadOnlyDictionary<Guid, BusinessFact> goldSellPendings,
+        bool gold)
     {
         if (fact.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote)
         {
@@ -193,6 +196,29 @@ public sealed class LedgerReplayCalculator
             var confirm = sellConfirms[fact.LinkedTransactionId!.Value];
             Ensure(state.PendingArrivalAmount >= confirm.Amount, fact, "赎回到账金额超过待到账金额");
             state.PendingArrivalAmount -= confirm.Amount;
+            return;
+        }
+
+        if (fact.Kind == AssetTransactionKind.GoldSellPending)
+        {
+            var quantity = fact.Quantity ?? 0m;
+            Ensure(state.CoverageFrom is not null && quantity > 0m && quantity <= state.Quantity,
+                fact, "该时点持有克数不足，卖出将超卖");
+            var reducedCost = quantity == state.Quantity ? state.Cost : decimal.Round(state.Cost * quantity / state.Quantity, 2);
+            state.Quantity -= quantity;
+            state.Cost -= reducedCost;
+            state.Realized += fact.Amount - reducedCost;
+            state.PendingArrivalAmount += fact.Amount;
+            Ensure(state.Quantity >= 0m && state.Cost >= 0m && state.PendingArrivalAmount <= AssetTransaction.MaximumAmount,
+                fact, "积存金卖出后的持仓或待到账金额无效");
+            return;
+        }
+
+        if (fact.Kind == AssetTransactionKind.GoldSellArrival)
+        {
+            var pending = goldSellPendings[fact.LinkedTransactionId!.Value];
+            Ensure(state.PendingArrivalAmount >= pending.Amount, fact, "积存金卖到账金额超过待到账金额");
+            state.PendingArrivalAmount -= pending.Amount;
             return;
         }
 
@@ -360,6 +386,56 @@ public sealed class LedgerReplayCalculator
         }
 
         return (applies, confirms);
+    }
+
+    private static IReadOnlyDictionary<Guid, BusinessFact> ValidateGoldSellLinks(IReadOnlyList<BusinessFact> active)
+    {
+        var pendings = active.Where(fact => fact.Kind == AssetTransactionKind.GoldSellPending)
+            .ToDictionary(fact => fact.Id);
+
+        foreach (var pending in pendings.Values)
+        {
+            if (pending.Quantity is null || pending.Quantity <= 0m || pending.Amount <= 0m)
+            {
+                throw new HistoryValidationException("积存金卖出待到账必须包含克数和净回款金额。");
+            }
+        }
+
+        foreach (var arrival in active.Where(fact => fact.Kind == AssetTransactionKind.GoldSellArrival))
+        {
+            if (arrival.LinkedTransactionId is not Guid pendingId || !pendings.TryGetValue(pendingId, out var pending))
+            {
+                throw new HistoryValidationException("积存金卖到账关联的记录不存在、已撤销或已到账。");
+            }
+
+            if (active.Any(fact => fact.Id != arrival.Id && fact.Kind == AssetTransactionKind.GoldSellArrival
+                && fact.LinkedTransactionId == pendingId))
+            {
+                throw new HistoryValidationException("同一笔积存金卖出只能到账一次。");
+            }
+
+            if (pending.AssetType != AssetType.Gold || arrival.AssetType != AssetType.Gold)
+            {
+                throw new HistoryValidationException("积存金卖到账与卖出记录的资产类型不一致。");
+            }
+
+            if (arrival.Quantity is not null || arrival.Amount <= 0m)
+            {
+                throw new HistoryValidationException("积存金卖到账只能记录到账金额。");
+            }
+
+            if (arrival.Amount != pending.Amount)
+            {
+                throw new HistoryValidationException("积存金卖到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。");
+            }
+
+            if (arrival.Date < pending.Date || (arrival.Date == pending.Date && arrival.Sequence <= pending.Sequence))
+            {
+                throw new HistoryValidationException("积存金卖到账必须晚于对应的卖出记录。");
+            }
+        }
+
+        return pendings;
     }
 
     private static void ValidateLinks(IReadOnlyList<BusinessFact> active, IReadOnlyDictionary<Guid, BusinessFact> anchors)

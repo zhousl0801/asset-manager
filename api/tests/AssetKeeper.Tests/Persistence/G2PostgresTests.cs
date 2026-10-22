@@ -1,5 +1,6 @@
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
+using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Domain.Assets;
 using AssetKeeper.Infrastructure.Persistence;
@@ -54,6 +55,49 @@ public sealed class G2PostgresTests
         Assert.NotNull(overview);
         Assert.Equal(3300m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingAmount);
+    }
+
+    [PostgresFact]
+    public async Task GoldSellPendingAndArrival_PersistLinkAndCash()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        Guid pendingId;
+
+        await using (var context = database.CreateContext())
+        {
+            var repository = new LedgerRepository(context);
+            await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
+            var gold = new GoldService(repository, Dates);
+            await gold.SaveHoldingAsync(
+                new SaveGoldHoldingRequest(30m, 25600m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
+                CancellationToken.None);
+            var pending = await gold.SellAsync(
+                new SellGoldRequest(1m, 898m, Today, null, Guid.NewGuid(), Settlement: GoldSellSettlement.PendingArrival),
+                CancellationToken.None);
+            pendingId = pending.Result!.Activity.Id;
+            var arrival = await gold.ArriveSellAsync(
+                pendingId,
+                new GoldSellArrivalRequest(898m, Today, null, Guid.NewGuid()),
+                CancellationToken.None);
+            Assert.Equal(AssetOperationStatus.Created, arrival.Status);
+        }
+
+        await using var readback = database.CreateContext();
+        var transactions = await readback.AssetTransactions.OrderBy(transaction => transaction.CreatedAt).ToListAsync();
+        var pendingRow = transactions.Single(transaction => transaction.Kind == AssetTransactionKind.GoldSellPending);
+        var arrivalRow = transactions.Single(transaction => transaction.Kind == AssetTransactionKind.GoldSellArrival);
+
+        Assert.Equal(pendingId, pendingRow.Id);
+        Assert.Equal(pendingId, arrivalRow.LinkedTransactionId);
+        Assert.Equal(10898m, (await readback.CashAccounts.SingleAsync()).Balance);
+        Assert.Equal(29m, (await readback.GoldHoldings.SingleAsync()).Grams);
+        Assert.Equal(24746.67m, (await readback.GoldHoldings.SingleAsync()).Cost);
+
+        var overview = await new GoldService(new LedgerRepository(readback), Dates).GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(26100m, overview.Value);
+        Assert.Equal(0m, overview.PendingArrivalAmount);
+        Assert.Empty(overview.PendingArrivals!);
     }
 
     [PostgresFact]

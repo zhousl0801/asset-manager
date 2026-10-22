@@ -1,4 +1,12 @@
-export type GoldActivityType = 'buy' | 'sell' | 'quote' | 'correction'
+export type GoldActivityType = 'buy' | 'sell' | 'sellPending' | 'sellArrival' | 'quote' | 'correction'
+
+export interface PendingGoldArrival {
+  transactionId: string
+  grams: number
+  amount: number
+  businessDate: string
+  note: string | null
+}
 
 export interface GoldActivity {
   id: string
@@ -27,6 +35,8 @@ export interface GoldOverview {
   realizedProfit: number
   cashBalance: number
   activities: GoldActivity[]
+  pendingArrivalAmount: number
+  pendingArrivals: PendingGoldArrival[]
 }
 
 export interface GoldMutationResult {
@@ -50,10 +60,20 @@ export interface BuyGoldInput {
   requestId: string
 }
 
+export type GoldSellSettlement = 'received' | 'pendingArrival'
+
 export interface SellGoldInput {
   relatedCashAdjustmentId?: string | null
   grams: number
   netAmount: number
+  businessDate: string
+  note: string
+  requestId: string
+  settlement: GoldSellSettlement
+}
+
+export interface GoldSellArrivalInput {
+  amount: number
   businessDate: string
   note: string
   requestId: string
