@@ -1,0 +1,1148 @@
+<script setup lang="ts">
+import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  buyFund,
+  createFundPosition,
+  fetchFundOverview,
+  sellFund,
+  updateFundQuote
+} from '../api/funds'
+import { ApiError, getApiErrorMessage } from '../api/client'
+import BottomSheet from '../components/BottomSheet.vue'
+import {
+  formatBusinessDate,
+  formatMoney,
+  formatQuantity,
+  formatSignedMoney,
+  parseAmount,
+  parseNonNegativeQuantity,
+  parsePrice,
+  parseQuantity,
+  todayInBusinessTimeZone
+} from '../utils/format'
+import { createRequestId } from '../utils/request'
+import type { FundActivity, FundOverview, FundPosition } from '../types/fund'
+
+type SheetKind = 'opening' | 'buy' | 'sell' | 'quote'
+
+const router = useRouter()
+const today = todayInBusinessTimeZone()
+const overview = ref<FundOverview | null>(null)
+const isLoading = ref(false)
+const errorMessage = ref('')
+const notice = ref('')
+const sheet = ref<SheetKind | null>(null)
+const requestId = ref(createRequestId())
+const isSaving = ref(false)
+const formError = ref('')
+const form = reactive({
+  positionId: '',
+  name: '',
+  code: '',
+  shareClass: '',
+  platform: '',
+  shares: '',
+  cost: '',
+  amount: '',
+  netAmount: '',
+  netValue: '',
+  netValueDate: today,
+  businessDate: today,
+  note: '',
+  relatedCashAdjustmentId: null as string | null
+})
+
+const selectedPosition = computed<FundPosition | null>(() =>
+  overview.value?.positions.find((position) => position.id === form.positionId) ?? null)
+const sheetTitle = computed(() => {
+  switch (sheet.value) {
+    case 'opening':
+      return '录入基金持仓'
+    case 'buy':
+      return '记录基金买入'
+    case 'sell':
+      return '记录基金卖出'
+    case 'quote':
+      return '更新基金净值'
+    default:
+      return ''
+  }
+})
+const sheetSubtitle = computed(() => {
+  switch (sheet.value) {
+    case 'opening':
+      return '用于已有持仓，不扣现金'
+    case 'buy':
+      return '现金减少，份额与成本增加'
+    case 'sell':
+      return '份额减少，净回款转入现金'
+    case 'quote':
+      return '只更新估值，不改变现金和成本'
+    default:
+      return ''
+  }
+})
+const sheetNote = computed(() => {
+  switch (sheet.value) {
+    case 'opening':
+      return '录入已有持仓不会从现金扣除购买成本，也不产生生活收支。'
+    case 'buy':
+      return '买入金额包含费用；实际扣款与份额估值不同时，差额体现在持有收益中。'
+    case 'sell':
+      return '按卖出份额比例结转成本；卖出净回款与成本差额计入已实现收益。'
+    case 'quote':
+      return '净值日期不能晚于今天；未披露时继续保留最近有效净值。'
+    default:
+      return ''
+  }
+})
+const canSubmit = computed(() => {
+  if (isSaving.value) {
+    return false
+  }
+
+  switch (sheet.value) {
+    case 'opening':
+      return form.name.trim() !== ''
+        && parseNonNegativeQuantity(form.shares) !== null
+        && parseAmount(form.cost) !== null
+        && parsePrice(form.netValue) !== null
+    case 'buy':
+      return form.positionId !== ''
+        && parseQuantity(form.shares) !== null
+        && (parseAmount(form.amount) ?? 0) > 0
+        && parsePrice(form.netValue) !== null
+    case 'sell':
+      return form.positionId !== ''
+        && parseQuantity(form.shares) !== null
+        && (parseAmount(form.netAmount) ?? 0) > 0
+    case 'quote':
+      return form.positionId !== '' && parsePrice(form.netValue) !== null
+    default:
+      return false
+  }
+})
+
+watch(
+  () => form.positionId,
+  (positionId) => {
+    const position = overview.value?.positions.find((item) => item.id === positionId)
+
+    if (!position || (sheet.value !== 'buy' && sheet.value !== 'quote')) {
+      return
+    }
+
+    form.netValue = String(position.netValue)
+    form.netValueDate = position.netValueDate
+  }
+)
+
+onMounted(loadOverview)
+
+async function loadOverview(): Promise<void> {
+  isLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    overview.value = await fetchFundOverview()
+
+    if (!form.positionId && overview.value.positions.length > 0) {
+      form.positionId = overview.value.positions[0]!.id
+    }
+  } catch (error) {
+    overview.value = null
+
+    if (error instanceof ApiError && error.status === 404) {
+      await router.replace({ name: 'setup' })
+      return
+    }
+
+    errorMessage.value = getApiErrorMessage(error, '基金数据加载失败，请重试。')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+function openSheet(kind: SheetKind, positionId?: string): void {
+  sheet.value = kind
+  requestId.value = createRequestId()
+  formError.value = ''
+  form.note = ''
+  form.relatedCashAdjustmentId = null
+  form.businessDate = today
+  form.shares = ''
+  form.cost = ''
+  form.amount = ''
+  form.netAmount = ''
+  form.name = ''
+  form.code = ''
+  form.shareClass = ''
+  form.platform = ''
+
+  if (kind === 'opening') {
+    form.positionId = ''
+    form.netValue = ''
+    form.netValueDate = today
+    return
+  }
+
+  form.positionId = positionId ?? overview.value?.positions[0]?.id ?? ''
+
+  const position = selectedPosition.value
+  form.netValue = position ? String(position.netValue) : ''
+  form.netValueDate = position?.netValueDate ?? today
+}
+
+function closeSheet(): void {
+  if (!isSaving.value) {
+    sheet.value = null
+  }
+}
+
+async function submit(): Promise<void> {
+  if (!sheet.value || !overview.value) {
+    return
+  }
+
+  formError.value = ''
+
+  try {
+    if (sheet.value === 'opening') {
+      await submitOpening()
+    } else if (sheet.value === 'buy') {
+      await submitBuy()
+    } else if (sheet.value === 'sell') {
+      await submitSell()
+    } else {
+      await submitQuote()
+    }
+  } catch (error) {
+    formError.value = getApiErrorMessage(error, '保存失败，请重试。')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function submitOpening(): Promise<void> {
+  const shares = parseNonNegativeQuantity(form.shares)
+  const cost = parseAmount(form.cost)
+  const netValue = parsePrice(form.netValue)
+
+  if (!form.name.trim()) {
+    formError.value = '请输入基金名称。'
+    return
+  }
+
+  if (shares === null || cost === null || netValue === null) {
+    formError.value = '请填写有效的份额、成本和净值。'
+    return
+  }
+
+  if (shares === 0 && cost !== 0) {
+    formError.value = '份额为 0 时，持仓成本也应为 0。'
+    return
+  }
+
+  const dateError = validateValueDate(form.netValueDate, '净值日期')
+
+  if (dateError) {
+    formError.value = dateError
+    return
+  }
+
+  const holdingDateError = validateBusinessDate()
+  if (holdingDateError) { formError.value = holdingDateError; return }
+
+  isSaving.value = true
+  await createFundPosition({
+    name: form.name.trim(),
+    code: form.code.trim(),
+    shareClass: form.shareClass.trim(),
+    platform: form.platform.trim(),
+    shares,
+    cost,
+    netValue,
+    netValueDate: form.netValueDate,
+    note: form.note.trim(),
+    holdingDate: form.businessDate,
+    requestId: requestId.value
+  })
+  notice.value = `已录入基金「${form.name.trim()}」。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitBuy(): Promise<void> {
+  const position = selectedPosition.value
+  const shares = parseQuantity(form.shares)
+  const amount = parseAmount(form.amount)
+  const netValue = parsePrice(form.netValue)
+
+  if (!position) {
+    formError.value = '请选择基金持仓。'
+    return
+  }
+
+  if (shares === null || amount === null || amount <= 0 || netValue === null) {
+    formError.value = '请填写有效的份额、扣款金额和净值。'
+    return
+  }
+
+
+  const businessDateError = validateBusinessDate()
+
+  if (businessDateError) {
+    formError.value = businessDateError
+    return
+  }
+
+  const valueDateError = validateValueDate(form.netValueDate, '净值日期')
+
+  if (valueDateError) {
+    formError.value = valueDateError
+    return
+  }
+
+  isSaving.value = true
+  const result = await buyFund({
+    positionId: position.id,
+    shares,
+    amount,
+    netValue,
+    netValueDate: form.netValueDate,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
+    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
+    requestId: requestId.value
+  })
+  notice.value = `已买入 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitSell(): Promise<void> {
+  const position = selectedPosition.value
+  const shares = parseQuantity(form.shares)
+  const netAmount = parseAmount(form.netAmount)
+
+  if (!position) {
+    formError.value = '请选择基金持仓。'
+    return
+  }
+
+  if (shares === null || netAmount === null || netAmount <= 0) {
+    formError.value = '请填写有效的卖出份额和净回款金额。'
+    return
+  }
+
+
+  const dateError = validateBusinessDate()
+
+  if (dateError) {
+    formError.value = dateError
+    return
+  }
+
+  isSaving.value = true
+  const result = await sellFund({
+    positionId: position.id,
+    shares,
+    netAmount,
+    businessDate: form.businessDate,
+    note: form.note.trim(),
+    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
+    requestId: requestId.value
+  })
+  notice.value = `已卖出 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  sheet.value = null
+  await loadOverview()
+}
+
+async function submitQuote(): Promise<void> {
+  const position = selectedPosition.value
+  const netValue = parsePrice(form.netValue)
+
+  if (!position) {
+    formError.value = '请选择基金持仓。'
+    return
+  }
+
+  if (netValue === null) {
+    formError.value = '请输入大于 0 的净值，最多四位小数。'
+    return
+  }
+
+  const dateError = validateValueDate(form.netValueDate, '净值日期')
+
+  if (dateError) {
+    formError.value = dateError
+    return
+  }
+
+  isSaving.value = true
+  await updateFundQuote({
+    positionId: position.id,
+    netValue,
+    netValueDate: form.netValueDate,
+    requestId: requestId.value
+  })
+  notice.value = `「${position.name}」净值已更新。`
+  sheet.value = null
+  await loadOverview()
+}
+
+function validateBusinessDate(): string | null {
+  if (!form.businessDate) {
+    return '请选择业务日期。'
+  }
+
+  if (form.businessDate > today) {
+    return '业务日期不能晚于今天。'
+  }
+
+  return null
+}
+
+function validateValueDate(value: string, label: string): string | null {
+  if (!value) {
+    return `请选择${label}。`
+  }
+
+  if (value > today) {
+    return `${label}不能晚于今天。`
+  }
+
+  return null
+}
+
+function positionLabel(position: FundPosition): string {
+  return position.shareClass ? `${position.name} ${position.shareClass}` : position.name
+}
+
+function activityTitle(activity: FundActivity): string {
+  switch (activity.type) {
+    case 'opening':
+      return '录入持仓'
+    case 'buy':
+      return '基金买入'
+    case 'sell':
+      return '基金卖出'
+    case 'quote':
+      return '更新净值'
+    default:
+      return '基金记录'
+  }
+}
+
+function activityNote(activity: FundActivity): string {
+  if (activity.note) {
+    return activity.note
+  }
+
+  switch (activity.type) {
+    case 'opening':
+      return '已有持仓，不扣现金'
+    case 'buy':
+      return '现金 → 基金持仓'
+    case 'sell':
+      return '基金持仓 → 现金'
+    default:
+      return '仅更新估值'
+  }
+}
+
+function activityAmountText(activity: FundActivity): string {
+  if (activity.type === 'buy' || activity.type === 'sell') {
+    return formatSignedMoney(activity.cashEffect)
+  }
+
+  if (activity.type === 'quote') {
+    return `净值 ${formatMoney(activity.netValue)}`
+  }
+
+  return `成本 ${formatMoney(activity.amount)}`
+}
+
+function activityMeta(activity: FundActivity): string {
+  if (activity.type === 'quote') {
+    return `${activity.positionName} · ${formatBusinessDate(activity.businessDate)}`
+  }
+
+  const shares = activity.shares === null ? '—' : `${formatQuantity(activity.shares)} 份`
+  const value = activity.netValue === null ? '' : ` · 净值 ${formatMoney(activity.netValue)}`
+
+  return `${activity.positionName} · ${shares}${value}`
+}
+
+function goBack(): void {
+  void router.push({ name: 'home' })
+}
+</script>
+
+<template>
+  <main class="page funds-page">
+    <header class="funds-header">
+      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
+      <h1>基金</h1>
+      <RouterLink class="back-link" to="/history">历史核对</RouterLink>
+    </header>
+
+    <p v-if="isLoading && !overview" class="state">正在读取基金…</p>
+
+    <section v-else-if="errorMessage" class="state">
+      <p>{{ errorMessage }}</p>
+      <button type="button" class="secondary-button" @click="loadOverview">重新加载</button>
+    </section>
+
+    <template v-else-if="overview">
+      <section class="funds-hero">
+        <p class="hero-label">
+          基金资产
+          <span class="hero-tag">{{ overview.historyConfirmed ? '已确认持仓' : '持仓日期待确认' }}</span>
+        </p>
+        <h2 class="hero-balance"><span>¥</span>{{ overview.hasEffectiveQuotes ? formatMoney(overview.totalValue) : '行情待补' }}</h2>
+        <p class="hero-meta">
+          {{ overview.positions.length }} 只基金 · 持仓成本 {{ formatMoney(overview.totalCost) }}
+        </p>
+        <div class="hero-metrics">
+          <div>
+            <span>持有收益</span>
+            <b :class="{ profit: overview.holdingProfit > 0, loss: overview.holdingProfit < 0 }">
+              {{ overview.hasEffectiveQuotes ? formatSignedMoney(overview.holdingProfit) : '行情待补' }}
+            </b>
+          </div>
+          <div>
+            <span>持有收益率</span>
+            <b>{{ overview.hasEffectiveQuotes && overview.totalCost > 0 ? `${formatSignedMoney(overview.holdingProfit / overview.totalCost * 100)}%` : '—' }}</b>
+          </div>
+          <div>
+            <span>已实现收益</span>
+            <b>{{ overview.historyConfirmed ? formatSignedMoney(overview.totalRealizedProfit) : '待核对' }}</b>
+          </div>
+        </div>
+      </section>
+
+      <div class="funds-actions">
+        <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
+        <button
+          type="button"
+          class="action-primary"
+          :disabled="overview.positions.length === 0"
+          @click="openSheet('buy')"
+        >
+          买入
+        </button>
+        <button
+          type="button"
+          class="action-secondary"
+          :disabled="overview.positions.length === 0"
+          @click="openSheet('sell')"
+        >
+          卖出
+        </button>
+        <button
+          type="button"
+          class="action-secondary"
+          :disabled="overview.positions.length === 0"
+          @click="openSheet('quote')"
+        >
+          更新净值
+        </button>
+      </div>
+
+      <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+
+      <div class="section-head">
+        <h2>持仓</h2>
+        <span class="meta">可用现金 ¥{{ formatMoney(overview.cashBalance) }}</span>
+      </div>
+
+      <section v-if="overview.positions.length" class="position-list">
+        <article v-for="position in overview.positions" :key="position.id" class="position-card">
+          <header>
+            <div>
+              <strong>{{ positionLabel(position) }}</strong>
+              <small>
+                {{ [position.platform, position.code].filter(Boolean).join(' · ') || '未填写平台' }}
+              </small>
+            </div>
+            <b>{{ position.hasEffectiveQuote ? formatMoney(position.value) : '行情待补' }}</b>
+          </header>
+          <div class="position-metrics">
+            <div>
+              <span>份额</span>
+              <b>{{ formatQuantity(position.shares) }}</b>
+            </div>
+            <div>
+              <span>成本</span>
+              <b>{{ formatMoney(position.cost) }}</b>
+            </div>
+            <div>
+              <span>持有收益</span>
+              <b :class="{ profit: position.holdingProfit > 0, loss: position.holdingProfit < 0 }">
+                {{ position.hasEffectiveQuote ? formatSignedMoney(position.holdingProfit) : '行情待补' }}
+              </b>
+            </div>
+          </div>
+          <footer>
+            <template v-if="position.hasEffectiveQuote">净值 {{ formatMoney(position.netValue) }} · {{ formatBusinessDate(position.netValueDate) }}</template><template v-else>行情依据不足</template>
+            <span>已实现 {{ formatSignedMoney(position.realizedProfit) }}</span>
+          </footer>
+        </article>
+      </section>
+
+      <div v-else class="empty-state">
+        <p>还没有基金持仓</p>
+        <button type="button" class="primary-button" @click="openSheet('opening')">录入已有持仓</button>
+      </div>
+
+      <div class="section-head">
+        <h2>交易记录</h2>
+        <span class="meta">最近 200 条</span>
+      </div>
+
+      <section v-if="overview.activities.length" class="activity-card">
+        <div v-for="activity in overview.activities" :key="activity.id" class="activity-row">
+          <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'sell' ? '卖' : activity.type === 'quote' ? '净' : '录' }}</span>
+          <span class="activity-copy">
+            <strong>{{ activityTitle(activity) }}</strong>
+            <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
+          </span>
+          <b class="activity-value" :class="{ income: activity.cashEffect > 0 }">
+            {{ activityAmountText(activity) }}
+          </b>
+        </div>
+      </section>
+
+      <p v-else class="summary-note">还没有基金交易记录。</p>
+
+      <p v-if="!overview.historyConfirmed || !overview.hasEffectiveQuotes" class="summary-note">部分持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。</p>
+      <p class="summary-note">
+        基金买卖属于资产流转，不计入生活收支；净值更新只影响估值。
+      </p>
+    </template>
+
+    <BottomSheet
+      :open="sheet !== null"
+      :title="sheetTitle"
+      :subtitle="sheetSubtitle"
+      :close-disabled="isSaving"
+      @close="closeSheet"
+    >
+      <div class="sheet-summary">
+        <div class="summary-line">
+          <span>可用现金</span>
+          <b>¥{{ formatMoney(overview?.cashBalance) }}</b>
+        </div>
+        <div v-if="selectedPosition" class="summary-line">
+          <span>当前持仓</span>
+          <b>{{ formatQuantity(selectedPosition.shares) }} 份</b>
+        </div>
+      </div>
+
+      <form class="form-stack" @submit.prevent="submit">
+        <label v-if="sheet === 'opening'" class="form-field">
+          <span>起始持仓日期</span>
+          <input v-model="form.businessDate" type="date" :max="today" required />
+          <small>所填份额和成本在这一天成立，独立于行情日期。</small>
+        </label>
+        <template v-if="sheet === 'opening'">
+          <label class="form-field">
+            <span>基金名称</span>
+            <input v-model="form.name" type="text" maxlength="50" placeholder="例如：纳指基金" />
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span>基金代码</span>
+              <input v-model="form.code" type="text" maxlength="20" placeholder="选填" />
+            </label>
+            <label class="form-field">
+              <span>份额类别</span>
+              <input v-model="form.shareClass" type="text" maxlength="10" placeholder="A / C" />
+            </label>
+          </div>
+          <label class="form-field">
+            <span>平台</span>
+            <input v-model="form.platform" type="text" maxlength="30" placeholder="选填" />
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span>持有份额</span>
+              <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>持仓成本（元）</span>
+              <input v-model="form.cost" type="text" inputmode="decimal" placeholder="0.00" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span>最新净值</span>
+              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>净值日期</span>
+              <input v-model="form.netValueDate" type="date" :max="today" />
+            </label>
+          </div>
+        </template>
+
+        <template v-else-if="sheet === 'buy'">
+          <label class="form-field">
+            <span>基金持仓</span>
+            <select v-model="form.positionId">
+              <option v-for="position in overview?.positions ?? []" :key="position.id" :value="position.id">
+                {{ positionLabel(position) }}
+              </option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span>买入份额</span>
+              <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>扣款金额（元）</span>
+              <input v-model="form.amount" type="text" inputmode="decimal" placeholder="0.00" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label class="form-field">
+              <span>成交净值</span>
+              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>净值日期</span>
+              <input v-model="form.netValueDate" type="date" :max="today" />
+            </label>
+          </div>
+          <label class="form-field">
+            <span>业务日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
+        </template>
+
+        <template v-else-if="sheet === 'sell'">
+          <label class="form-field">
+            <span>基金持仓</span>
+            <select v-model="form.positionId">
+              <option v-for="position in overview?.positions ?? []" :key="position.id" :value="position.id">
+                {{ positionLabel(position) }}
+              </option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span>卖出份额</span>
+              <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>净回款（元）</span>
+              <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
+            </label>
+          </div>
+          <label class="form-field">
+            <span>业务日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
+        </template>
+
+        <template v-else>
+          <label class="form-field">
+            <span>基金持仓</span>
+            <select v-model="form.positionId">
+              <option v-for="position in overview?.positions ?? []" :key="position.id" :value="position.id">
+                {{ positionLabel(position) }}
+              </option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label class="form-field">
+              <span>最新净值</span>
+              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
+            </label>
+            <label class="form-field">
+              <span>净值日期</span>
+              <input v-model="form.netValueDate" type="date" :max="today" />
+            </label>
+          </div>
+        </template>
+
+        <label v-if="sheet !== 'quote'" class="form-field">
+          <span>备注</span>
+          <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
+        </label>
+
+        <CashAdjustmentLink v-if="sheet === 'buy' || sheet === 'sell'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
+        <p class="form-note">{{ sheetNote }}</p>
+        <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
+
+        <div class="form-actions">
+          <button type="button" class="secondary-button" :disabled="isSaving" @click="closeSheet">
+            取消
+          </button>
+          <button type="submit" class="primary-button" :disabled="!canSubmit">
+            {{ isSaving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </form>
+    </BottomSheet>
+  </main>
+</template>
+
+<style scoped>
+.funds-page {
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+}
+
+.funds-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.funds-header h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.back-link {
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 12px;
+}
+
+.header-spacer {
+  width: 46px;
+}
+
+.funds-hero {
+  padding: 19px 17px 17px;
+  border-radius: 14px;
+  background: var(--color-brand-soft);
+}
+
+.hero-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.hero-tag {
+  padding: 2px 5px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: 9px;
+}
+
+.hero-balance {
+  margin: 8px 0 7px;
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -1.1px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-balance span {
+  margin-right: 5px;
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.hero-meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.hero-metrics > div + div {
+  padding-left: 12px;
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.hero-metrics span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.hero-metrics b {
+  display: block;
+  margin-top: 7px;
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.profit {
+  color: var(--color-finance-gain);
+}
+
+.loss {
+  color: var(--color-finance-loss);
+}
+
+.funds-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.funds-actions button {
+  min-height: 42px;
+  padding: 0 4px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.action-primary {
+  border: 1px solid var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.action-primary:hover:not(:disabled) {
+  background: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+}
+
+.action-secondary {
+  border: 1px solid var(--color-border-control);
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+}
+
+.action-secondary:hover:not(:disabled) {
+  background: var(--color-brand-soft);
+}
+
+.funds-actions button:disabled {
+  border-color: var(--color-border-disabled);
+  background: var(--color-bg-disabled);
+  color: var(--color-text-disabled);
+}
+
+.notice {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 22px 0 10px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.meta {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.position-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.position-card {
+  padding: 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.position-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.position-card header strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.position-card header small {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.position-card header > b {
+  font-size: 16px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.position-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.position-metrics > div + div {
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.position-metrics span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.position-metrics b {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.position-card footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 11px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.empty-state {
+  padding: 34px 16px;
+  border: 1px dashed var(--color-border-default);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 0 0 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.empty-state .primary-button {
+  width: 100%;
+}
+
+.activity-card {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+}
+
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.activity-row:last-child {
+  border-bottom: 0;
+}
+
+.activity-mark {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 33px;
+  height: 33px;
+  border-radius: 50%;
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.activity-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-copy strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.activity-copy small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-value {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.income {
+  color: var(--color-finance-income);
+}
+
+.summary-note {
+  margin: 14px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.7;
+  text-align: center;
+}
+</style>

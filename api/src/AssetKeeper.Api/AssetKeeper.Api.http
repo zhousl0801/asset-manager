@@ -1,0 +1,62 @@
+@AssetKeeper.Api_HostAddress = http://localhost:5069
+
+GET {{AssetKeeper.Api_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+GET {{AssetKeeper.Api_HostAddress}}/api/ledger
+Accept: application/json
+
+###
+
+POST {{AssetKeeper.Api_HostAddress}}/api/ledger/initialize
+Content-Type: application/json
+
+{
+  "startDate": "2026-10-01",
+  "cashBalance": 23400.00
+}
+
+###
+
+POST {{AssetKeeper.Api_HostAddress}}/api/ledger/entries
+Content-Type: application/json
+
+{
+  "kind": "expense",
+  "category": "餐饮",
+  "amount": 35.60,
+  "businessDate": "2026-10-21",
+  "note": "午餐",
+  "requestId": "6f1c2f0e-7a8b-4c1d-9e2f-3a4b5c6d7e8f"
+}
+
+###
+
+GET {{AssetKeeper.Api_HostAddress}}/api/ledger/entries?period=month&anchor=2026-10-21
+Accept: application/json
+
+###
+
+PUT {{AssetKeeper.Api_HostAddress}}/api/ledger/entries/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "kind": "expense",
+  "category": "餐饮",
+  "amount": 40.00,
+  "businessDate": "2026-10-21",
+  "note": "午餐"
+}
+
+###
+
+POST {{AssetKeeper.Api_HostAddress}}/api/ledger/entries/00000000-0000-0000-0000-000000000000/reverse
+Content-Type: application/json
+
+{
+  "reason": "重复记录"
+}
+
+###

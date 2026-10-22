@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AssetKeeper.Api/AssetKeeper.Api.csproj" />
+    <Project Path="src/AssetKeeper.Application/AssetKeeper.Application.csproj" />
+    <Project Path="src/AssetKeeper.Domain/AssetKeeper.Domain.csproj" />
+    <Project Path="src/AssetKeeper.Infrastructure/AssetKeeper.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AssetKeeper.Tests/AssetKeeper.Tests.csproj" />
+  </Folder>
+</Solution>

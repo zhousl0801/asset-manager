@@ -1,0 +1,245 @@
+html {
+  background: var(--color-bg-page);
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--color-focus-gap);
+}
+
+.page {
+  box-sizing: border-box;
+  width: min(100%, 430px);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) 19px calc(28px + env(safe-area-inset-bottom));
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.app-name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+
+.app-name::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 19px;
+  margin-right: 9px;
+  border-radius: 2px;
+  background: var(--color-brand);
+  vertical-align: -3px;
+}
+
+.app-sub {
+  margin: 4px 0 0 14px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.currency-tag {
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.state {
+  padding: 24px 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.secondary-button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 9px;
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: 13px;
+}
+
+.secondary-button:hover {
+  background: var(--color-brand-soft);
+}
+
+.primary-button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--color-brand-hover);
+}
+
+.primary-button:active:not(:disabled) {
+  background: var(--color-brand-active);
+}
+
+.primary-button:disabled {
+  background: var(--color-bg-disabled);
+  color: var(--color-text-disabled);
+}
+
+.text-link {
+  color: var(--color-brand);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  color: var(--color-brand-hover);
+  text-decoration: underline;
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.form-row {
+  display: flex;
+  gap: 10px;
+}
+
+.form-row > .form-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.form-field input,
+.form-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-control);
+  border-radius: 9px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.form-field input:hover,
+.form-field select:hover {
+  border-color: var(--color-border-hover);
+}
+
+.form-field input:focus-visible,
+.form-field select:focus-visible {
+  border-color: var(--color-border-focus);
+}
+
+.form-hint {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.form-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.form-actions > * {
+  flex: 1;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.summary-line b {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
