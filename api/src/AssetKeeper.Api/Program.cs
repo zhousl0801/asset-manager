@@ -43,6 +43,7 @@ builder.Services.AddScoped<ProvidentFundService>();
 builder.Services.AddScoped<GoldService>();
 builder.Services.AddScoped<FundService>();
 builder.Services.AddScoped<FundGroupService>();
+builder.Services.AddScoped<FundReturnService>();
 builder.Services.AddScoped<HistoryService>();
 builder.Services.AddScoped<IPlanRepository, PlanRepository>();
 builder.Services.AddScoped<PlanService>();

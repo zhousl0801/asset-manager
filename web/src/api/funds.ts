@@ -11,6 +11,8 @@ import type {
   SellFundInput,
   UpdateFundQuoteInput
 } from '../types/fund'
+import type { FundReturn, FundReturnDay } from '../types/fundReturn'
+import type { TrendRange } from '../types/trend'
 import { apiRequest } from './client'
 
 export function fetchFundOverview(): Promise<FundOverview> {
@@ -46,6 +48,38 @@ export function assignFundGroup(positionId: string, groupId: string | null): Pro
     method: 'PUT',
     body: JSON.stringify({ groupId })
   })
+}
+
+export function fetchFundReturns(
+  range: TrendRange,
+  groupId: string | null,
+  ungrouped: boolean
+): Promise<FundReturn> {
+  const params = new URLSearchParams({ range })
+
+  if (groupId) {
+    params.set('groupId', groupId)
+  } else if (ungrouped) {
+    params.set('ungrouped', 'true')
+  }
+
+  return apiRequest<FundReturn>(`/api/ledger/funds/returns?${params.toString()}`)
+}
+
+export function fetchFundReturnDay(
+  date: string,
+  groupId: string | null,
+  ungrouped: boolean
+): Promise<FundReturnDay> {
+  const params = new URLSearchParams({ date })
+
+  if (groupId) {
+    params.set('groupId', groupId)
+  } else if (ungrouped) {
+    params.set('ungrouped', 'true')
+  }
+
+  return apiRequest<FundReturnDay>(`/api/ledger/funds/returns/day?${params.toString()}`)
 }
 
 export function createFundPosition(input: CreateFundPositionInput): Promise<FundMutationResult> {

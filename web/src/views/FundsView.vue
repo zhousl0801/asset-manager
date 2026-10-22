@@ -21,6 +21,7 @@ import { fetchPlanOverview } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
+import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
   formatBusinessDate,
   formatMoney,
@@ -194,6 +195,9 @@ const scopedFunds = computed(() => {
 })
 
 const hasScopeFilter = computed(() => activeGroup.value !== 'all' || searchText.value.trim() !== '')
+const returnsGroupId = computed(() =>
+  activeGroup.value !== 'all' && activeGroup.value !== 'ungrouped' ? activeGroup.value : null)
+const returnsUngrouped = computed(() => activeGroup.value === 'ungrouped')
 
 const scopedPositionIds = computed(() => new Set(
   scopedFunds.value.flatMap((fund) => fund.classes.flatMap((fundClass) =>
@@ -1540,10 +1544,16 @@ function goBack(): void {
       </div>
 
       <template v-if="activeView === 'positions' || activeView === 'returns'">
+        <FundReturnsPanel
+          v-if="activeView === 'returns'"
+          :group-id="returnsGroupId"
+          :ungrouped="returnsUngrouped"
+        />
+
         <div class="section-head">
-          <h2>{{ activeView === 'positions' ? '组合持仓' : '持有收益' }}</h2>
+          <h2>{{ activeView === 'positions' ? '组合持仓' : '基金收益明细' }}</h2>
           <span class="meta">
-            <template v-if="activeView === 'returns'">收益 {{ formatSignedMoney(scope.holdingProfit) }} · 收益率 {{ scope.rate === null ? '—' : `${formatSignedMoney(scope.rate)}%` }}</template>
+            <template v-if="activeView === 'returns'">共 {{ scopedFunds.length }} 只基金</template>
             <template v-else>可用现金 ¥{{ formatMoney(overview.cashBalance) }}</template>
           </span>
         </div>
