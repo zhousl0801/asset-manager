@@ -46,5 +46,25 @@ internal sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
             .HasColumnName("updated_at")
             .HasColumnType("timestamptz")
             .IsRequired();
+
+        builder.Property(ledger => ledger.FundNotHeld)
+            .HasColumnName("fund_not_held")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(ledger => ledger.ProvidentFundNotHeld)
+            .HasColumnName("provident_fund_not_held")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(ledger => ledger.GoldNotHeld)
+            .HasColumnName("gold_not_held")
+            .HasDefaultValue(false)
+            .IsRequired();
+
+        builder.Property(ledger => ledger.CoverageConfirmed)
+            .HasColumnName("coverage_confirmed")
+            .HasDefaultValue(false)
+            .IsRequired();
     }
 }

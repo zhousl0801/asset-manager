@@ -51,6 +51,10 @@ public sealed class BackupLedger
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; }
     public long NextFactSequence { get; set; }
+    public bool FundNotHeld { get; set; }
+    public bool ProvidentFundNotHeld { get; set; }
+    public bool GoldNotHeld { get; set; }
+    public bool CoverageConfirmed { get; set; }
 }
 
 public sealed class BackupCashAccount

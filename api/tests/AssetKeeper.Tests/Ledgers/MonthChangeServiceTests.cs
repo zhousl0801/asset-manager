@@ -59,7 +59,7 @@ public sealed class MonthChangeServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_WhenLedgerStartsThisMonth_UsesStartDateAndExplainsIt()
+    public async Task GetAsync_WhenLedgerStartsThisMonth_HasNoComparableBaseline()
     {
         var startDate = new DateOnly(2026, 10, 10);
         await using var context = await CreateAsync(startDate);
@@ -70,12 +70,40 @@ public sealed class MonthChangeServiceTests
         var change = await context.MonthChange.GetAsync(CancellationToken.None);
 
         Assert.NotNull(change);
-        Assert.True(change.IsComplete);
+        Assert.False(change.IsComplete);
+        Assert.False(change.HasComparableData);
         Assert.Equal(startDate, change.From);
-        Assert.Equal(100m, change.TotalChange);
+        Assert.Null(change.TotalChange);
+        Assert.Null(change.InvestmentProfit);
         Assert.Equal(100m, change.LivingSurplus);
-        Assert.Equal(0m, change.InvestmentProfit);
-        Assert.Contains("本月变化自账本起始日起算。", change.Notes);
+        Assert.Equal(0m, change.AddedRecords);
+        Assert.Contains(change.Notes, note => note.Contains("暂无可比基线"));
+    }
+
+    [Fact]
+    public async Task GetAsync_SeparatesNewRecordsFromSameScopeChange()
+    {
+        await using var context = await CreateAsync(Today.AddDays(-31), includeProvident: false, includeGold: false);
+        await context.Provident.SetOpeningAsync(
+            new ProvidentOpeningRequest(5000m, new DateOnly(2026, 10, 5), null, Guid.NewGuid()),
+            CancellationToken.None);
+        var goldResult = await context.Gold.SaveHoldingAsync(
+            new SaveGoldHoldingRequest(10m, 8000m, 900m, new DateOnly(2026, 10, 5), null, Guid.NewGuid(),
+                HoldingDate: new DateOnly(2026, 10, 5)),
+            CancellationToken.None);
+        Assert.True(goldResult.Status is AssetOperationStatus.Success or AssetOperationStatus.Created,
+            string.Join("；", goldResult.Errors));
+
+        var change = await context.MonthChange.GetAsync(CancellationToken.None);
+
+        Assert.NotNull(change);
+        Assert.True(change.HasComparableData);
+        Assert.Equal(0m, change.ComparableChange);
+        Assert.Equal(14000m, change.AddedRecords);
+        Assert.Contains(change.Notes, note => note.Contains("含新增记录"));
+        Assert.True(change.AssetChanges.Single(item => item.AssetType == "fund").IsNew == false);
+        Assert.True(change.AssetChanges.Single(item => item.AssetType == "providentFund").IsNew);
+        Assert.True(change.AssetChanges.Single(item => item.AssetType == "gold").IsNew);
     }
 
     [Fact]
@@ -94,13 +122,16 @@ public sealed class MonthChangeServiceTests
         Assert.False(change.IsComplete);
         Assert.Null(change.TotalChange);
         Assert.Null(change.InvestmentProfit);
-        Assert.Contains("部分日期资产或行情依据不足，无法计算本月变化。", change.Notes);
+        Assert.Contains(change.Notes, note => note.Contains("暂无可比基线"));
         Assert.Equal(0m, change.LivingSurplus);
         Assert.Equal(0m, change.ReconciliationDifference);
         await db.DisposeAsync();
     }
 
-    private static async Task<TestContext> CreateAsync(DateOnly startDate)
+    private static async Task<TestContext> CreateAsync(
+        DateOnly startDate,
+        bool includeProvident = true,
+        bool includeGold = true)
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var repository = new LedgerRepository(db);
@@ -123,12 +154,20 @@ public sealed class MonthChangeServiceTests
                 Guid.NewGuid(),
                 HoldingDate: openingDate),
             CancellationToken.None);
-        await new GoldService(repository, dates).SaveHoldingAsync(
-            new SaveGoldHoldingRequest(10m, 8000m, 900m, openingDate, null, Guid.NewGuid(), HoldingDate: openingDate),
-            CancellationToken.None);
-        await new ProvidentFundService(repository, dates).SetOpeningAsync(
-            new ProvidentOpeningRequest(5000m, openingDate, null, Guid.NewGuid()),
-            CancellationToken.None);
+
+        if (includeGold)
+        {
+            await new GoldService(repository, dates).SaveHoldingAsync(
+                new SaveGoldHoldingRequest(10m, 8000m, 900m, openingDate, null, Guid.NewGuid(), HoldingDate: openingDate),
+                CancellationToken.None);
+        }
+
+        if (includeProvident)
+        {
+            await new ProvidentFundService(repository, dates).SetOpeningAsync(
+                new ProvidentOpeningRequest(5000m, openingDate, null, Guid.NewGuid()),
+                CancellationToken.None);
+        }
 
         return new TestContext(
             db,

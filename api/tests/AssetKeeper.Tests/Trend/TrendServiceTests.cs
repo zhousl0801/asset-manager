@@ -29,6 +29,9 @@ public sealed class TrendServiceTests
         Assert.Null(beforeProvident.Provident);
         Assert.Null(beforeProvident.TotalAssets);
         Assert.False(beforeProvident.IsComplete);
+        Assert.False(beforeProvident.HasProvident);
+        Assert.True(beforeProvident.HasFunds);
+        Assert.True(beforeProvident.HasGold);
 
         var latest = trend.Points.Single(point => point.Date == Today);
         Assert.True(latest.IsComplete);
@@ -36,17 +39,25 @@ public sealed class TrendServiceTests
         Assert.Equal(2000m, latest.Provident);
         Assert.Equal(1000m, latest.FundValue);
         Assert.Equal(9000m, latest.GoldValue);
+        Assert.True(latest.HasCash);
+        Assert.True(latest.HasProvident);
+        Assert.True(latest.HasFunds);
+        Assert.True(latest.HasGold);
     }
 
     [Fact]
     public async Task Ranges_ClampToLedgerStartAndLimitDays()
     {
         await using var context = await CreateAsync();
+        var week = await context.Trend.GetAsync(TrendRange.Week, CancellationToken.None);
         var month = await context.Trend.GetAsync(TrendRange.Month, CancellationToken.None);
         var quarter = await context.Trend.GetAsync(TrendRange.Quarter, CancellationToken.None);
 
+        Assert.NotNull(week);
         Assert.NotNull(month);
         Assert.NotNull(quarter);
+        Assert.Equal(Today.AddDays(-6), week.From);
+        Assert.Equal(7, week.Points.Count);
         Assert.Equal(Today.AddDays(-29), month.From);
         Assert.Equal(30, month.Points.Count);
         Assert.Equal(Today.AddDays(-60), quarter.From);

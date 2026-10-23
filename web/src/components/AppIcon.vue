@@ -12,6 +12,7 @@ const paths: Record<string, string[]> = {
   cash: ['M3 6h18v13H3zM3 10h18M16 15h2'],
   home: ['M3 10l9-7 9 7v11H3zM9 21v-8h6v8'],
   gold: ['M7 7h10l4 12H3zM8 11h8'],
+  wallet: ['M3 7h18v12H3zM3 7l2-3h14l2 3M16 13h2'],
   chevron: ['M9 5l7 7-7 7'],
   filter: ['M4 6h16M7 12h10M10 18h4'],
   tag: ['M3 3h8l10 10-8 8L3 11zM7 7h.01'],

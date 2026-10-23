@@ -1,4 +1,4 @@
-export type TrendRange = 'month' | 'quarter' | 'year' | 'all'
+export type TrendRange = 'week' | 'month' | 'quarter' | 'year' | 'all'
 
 export interface AssetTrendPoint {
   date: string
@@ -12,6 +12,10 @@ export interface AssetTrendPoint {
   goldValue: number | null
   goldPendingArrival: number
   isComplete: boolean
+  hasCash: boolean
+  hasProvident: boolean
+  hasFunds: boolean
+  hasGold: boolean
 }
 
 export interface AssetTrend {

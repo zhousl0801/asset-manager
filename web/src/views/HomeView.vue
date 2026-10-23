@@ -4,25 +4,18 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { fetchAssetTrend, fetchMonthChange } from '../api/ledger'
 import { fetchPlanOverview } from '../api/plans'
-import AppNav from '../components/AppNav.vue'
 import AppIcon from '../components/AppIcon.vue'
-import EmptyState from '../components/EmptyState.vue'
+import AppNav from '../components/AppNav.vue'
+import AssetDistribution from '../components/AssetDistribution.vue'
 import AssetTrendChart from '../components/AssetTrendChart.vue'
+import BottomSheet from '../components/BottomSheet.vue'
+import EmptyState from '../components/EmptyState.vue'
 import { useLedgerStore } from '../stores/ledger'
-import { formatBusinessDate, formatMoney, formatSignedMoney } from '../utils/format'
+import { formatBusinessDate, formatMoney, formatSignedMoney, todayInBusinessTimeZone } from '../utils/format'
+import { buildScopedTrend } from '../utils/trend'
 import type { MonthChange } from '../types/ledger'
 import type { AutoPlan, PlanOccurrence, PlanOverview, PlanType } from '../types/plan'
 import type { AssetTrend, AssetTrendPoint, TrendRange } from '../types/trend'
-
-interface AssetCard {
-  key: string
-  label: string
-  icon: string
-  amount: number | null
-  note: string
-  isConfigured: boolean
-  to: { name: 'cash' | 'provident' | 'funds' | 'gold' }
-}
 
 interface PlanPreviewRow {
   key: string
@@ -39,88 +32,73 @@ const planTypeLabels: Record<PlanType, string> = {
   fundSip: '基金定投'
 }
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
+const rangeOptions: { value: TrendRange; label: string }[] = [
+  { value: 'week', label: '7日' },
+  { value: 'month', label: '1月' },
+  { value: 'quarter', label: '3月' },
+  { value: 'all', label: '全部' }
+]
 
 const router = useRouter()
 const ledgerStore = useLedgerStore()
 const { overview, isLoading, errorMessage } = storeToRefs(ledgerStore)
+const today = todayInBusinessTimeZone()
 const trend = ref<AssetTrend | null>(null)
 const trendRange = ref<TrendRange>('month')
 const trendSelection = ref<AssetTrendPoint | null>(null)
 const trendLoading = ref(false)
 const trendError = ref('')
 const monthChange = ref<MonthChange | null>(null)
-const monthChangeExpanded = ref(false)
 const monthChangeError = ref('')
 const planOverview = ref<PlanOverview | null>(null)
 const planError = ref('')
-const rangeOptions: { value: TrendRange; label: string }[] = [
-  { value: 'month', label: '近1月' },
-  { value: 'quarter', label: '近3月' },
-  { value: 'year', label: '今年' },
-  { value: 'all', label: '全部' }
-]
+const addSheetOpen = ref(false)
+const changeSheetOpen = ref(false)
 
-const assetCards = computed<AssetCard[]>(() => {
+const recordedCount = computed(() => {
   const ledger = overview.value
 
   if (!ledger) {
-    return []
+    return 0
   }
 
-  return [
-    {
-      key: 'cash',
-      label: '现金',
-      icon: 'cash',
-      amount: ledger.cash.amount,
-      note: ledger.cash.note ?? '统一余额',
-      isConfigured: ledger.cash.isConfigured,
-      to: { name: 'cash' }
-    },
-    {
-      key: 'fund',
-      label: '基金',
-      icon: 'chart',
-      amount: ledger.fund.amount,
-      note: ledger.fund.note ?? '尚未录入',
-      isConfigured: ledger.fund.isConfigured,
-      to: { name: 'funds' }
-    },
-    {
-      key: 'provident',
-      label: '公积金',
-      icon: 'home',
-      amount: ledger.providentFund.amount,
-      note: ledger.providentFund.note ?? '尚未录入',
-      isConfigured: ledger.providentFund.isConfigured,
-      to: { name: 'provident' }
-    },
-    {
-      key: 'gold',
-      label: '积存金',
-      icon: 'gold',
-      amount: ledger.gold.amount,
-      note: ledger.gold.note ?? '尚未录入',
-      isConfigured: ledger.gold.isConfigured,
-      to: { name: 'gold' }
-    }
-  ]
+  return [ledger.cash, ledger.providentFund, ledger.fund, ledger.gold]
+    .filter((asset) => asset.isConfigured && !asset.notHeld)
+    .length
 })
 
-const hasUnconfiguredAssets = computed(() => assetCards.value.some((asset) => !asset.isConfigured))
-
-const trendLatest = computed<AssetTrendPoint | null>(() => {
-  const points = trend.value?.points ?? []
-
-  for (let index = points.length - 1; index >= 0; index -= 1) {
-    const point = points[index]
-
-    if (point && point.totalAssets !== null) {
-      return point
-    }
+const daysRecorded = computed(() => {
+  if (!overview.value) {
+    return 0
   }
 
-  return points[points.length - 1] ?? null
+  return Math.max(0, daysBetween(overview.value.startDate, today))
+})
+
+const trendReady = computed(() => daysRecorded.value >= 7)
+const trendProgress = computed(() => Math.min(100, Math.round(daysRecorded.value / 7 * 100)))
+const updateDate = computed(() => trend.value?.to ?? today)
+const scopedTrend = computed(() => trend.value ? buildScopedTrend(trend.value) : null)
+const selectedPoint = computed(() => {
+  const scoped = scopedTrend.value
+
+  if (!scoped) {
+    return null
+  }
+
+  const date = trendSelection.value?.date
+
+  return scoped.points.find((point) => point.date === date) ?? scoped.latest
+})
+const addedRecords = computed(() => monthChange.value?.addedRecords ?? 0)
+const changePercent = computed(() => {
+  const change = monthChange.value
+
+  if (!change?.hasComparableData || change.comparableChange === null || !change.comparableBase) {
+    return null
+  }
+
+  return change.comparableChange / change.comparableBase * 100
 })
 
 const planPreview = computed<PlanPreviewRow[]>(() => {
@@ -174,6 +152,17 @@ const planPreview = computed<PlanPreviewRow[]>(() => {
   return rows.sort((first, second) => first.date.localeCompare(second.date)).slice(0, 2)
 })
 
+function daysBetween(from: string, to: string): number {
+  const start = Date.parse(`${from}T00:00:00Z`)
+  const end = Date.parse(`${to}T00:00:00Z`)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return 0
+  }
+
+  return Math.round((end - start) / 86_400_000)
+}
+
 function describePlan(plan: AutoPlan): string {
   const label = planTypeLabels[plan.type]
 
@@ -194,6 +183,37 @@ function monthLabel(date: string): string {
 
 function dayLabel(date: string): string {
   return date.slice(8, 10)
+}
+
+function percentLabel(value: number | null): string {
+  if (value === null) {
+    return ''
+  }
+
+  const sign = value > 0 ? '+' : ''
+
+  return `${sign}${value.toFixed(2)}%`
+}
+
+function changeClass(value: number | null | undefined): string {
+  if (value === null || value === undefined || value === 0) {
+    return ''
+  }
+
+  return value > 0 ? 'gain' : 'loss'
+}
+
+function selectPoint(point: AssetTrendPoint): void {
+  trendSelection.value = point
+}
+
+function openAddSheet(): void {
+  addSheetOpen.value = true
+}
+
+function goTo(path: string): void {
+  addSheetOpen.value = false
+  router.push(path)
 }
 
 async function loadLedger(): Promise<void> {
@@ -253,17 +273,16 @@ onMounted(loadLedger)
 
 <template>
   <main class="page with-nav">
-    <header class="app-header">
-      <div>
-        <p class="app-name">资产管家</p>
-        <p class="app-sub">我的财务总览</p>
+    <header class="home-header">
+      <p class="brand">资产管家</p>
+      <div class="header-actions">
+        <RouterLink class="icon-btn" to="/history" aria-label="历史核对">
+          <AppIcon name="clock" />
+        </RouterLink>
+        <button type="button" class="icon-btn" aria-label="添加记录或资产" @click="openAddSheet">
+          <AppIcon name="plus" />
+        </button>
       </div>
-      <RouterLink class="icon-btn" to="/plans" aria-label="自动记账计划">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 7v5l3 2" />
-        </svg>
-      </RouterLink>
     </header>
 
     <p v-if="isLoading" class="state">正在读取账本…</p>
@@ -274,40 +293,56 @@ onMounted(loadLedger)
     </section>
 
     <template v-else-if="overview">
-      <section class="total">
-        <p class="total-label">
-          {{ overview.isComplete ? '总资产' : '部分资产合计' }}
+      <section class="hero">
+        <p class="hero-label">
+          {{ overview.totalConfirmed ? '总资产' : '已记录资产' }}
           <span class="tag">{{ overview.currency }}</span>
         </p>
-        <h1 class="total-value"><span class="currency">¥</span>{{ formatMoney(overview.totalAssets) }}</h1>
+        <h1 class="hero-value"><span class="currency">¥</span>{{ formatMoney(overview.totalAssets) }}</h1>
+
         <button
-          v-if="monthChange?.isComplete"
+          v-if="monthChange?.hasComparableData"
           type="button"
-          class="change"
-          :aria-expanded="monthChangeExpanded"
-          @click="monthChangeExpanded = !monthChangeExpanded"
+          class="hero-change"
+          :aria-expanded="changeSheetOpen"
+          @click="changeSheetOpen = true"
         >
           <span>本月变化</span>
-          <b>{{ formatSignedMoney(monthChange.totalChange) }}</b>
-          <span class="change-toggle">{{ monthChangeExpanded ? '收起构成 ‹' : '· 查看构成 ›' }}</span>
+          <b :class="changeClass(monthChange.comparableChange)">
+            {{ formatSignedMoney(monthChange.comparableChange ?? 0) }}
+          </b>
+          <span v-if="changePercent !== null" class="change-percent" :class="changeClass(changePercent)">
+            {{ percentLabel(changePercent) }}
+          </span>
+          <span class="info-mark">ⓘ</span>
         </button>
-        <p v-else-if="monthChangeError" class="meta">{{ monthChangeError }}</p>
-        <a v-else-if="monthChange" class="setup-hint" href="#asset-classes">补全资产，查看本月变化 <span>↓</span></a>
-        <div v-if="monthChangeExpanded && monthChange?.isComplete" class="change-breakdown">
-          <div><span>生活结余</span><b>{{ formatSignedMoney(monthChange.livingSurplus) }}</b></div>
-          <div><span>公积金缴存</span><b>{{ formatSignedMoney(monthChange.providentDeposit) }}</b></div>
-          <div><span>投资盈亏</span><b>{{ formatSignedMoney(monthChange.investmentProfit) }}</b></div>
-          <div><span>核对差额</span><b>{{ formatSignedMoney(monthChange.reconciliationDifference) }}</b></div>
-        </div>
-        <p class="meta">
-          统计截至 {{ formatBusinessDate(overview.asOfDate) }}
-        </p>
+        <button
+          v-else
+          type="button"
+          class="hero-change muted"
+          :aria-expanded="changeSheetOpen"
+          @click="changeSheetOpen = true"
+        >
+          <span>本月变化</span>
+          <b>暂无可比数据</b>
+          <span class="info-mark">ⓘ</span>
+        </button>
 
+        <p v-if="addedRecords > 0" class="added-note">
+          含新增记录 {{ formatSignedMoney(addedRecords) }}，不计入变化
+        </p>
+        <p v-if="monthChangeError" class="meta">{{ monthChangeError }}</p>
+
+        <p class="hero-meta">
+          已记录 {{ recordedCount }} 类 · 更新于 {{ formatBusinessDate(updateDate) }}
+          <RouterLink v-if="!overview.coverageComplete" class="text-btn" to="/assets">补全 ›</RouterLink>
+          <RouterLink v-else-if="!overview.coverageConfirmed" class="text-btn" to="/assets">确认完整 ›</RouterLink>
+        </p>
       </section>
 
-      <section class="chart-panel">
+      <section class="trend-panel">
         <div class="section-head">
-          <h2>总资产趋势</h2>
+          <h2>已记录资产趋势</h2>
           <div class="range" role="tablist" aria-label="趋势范围">
             <button
               v-for="option in rangeOptions"
@@ -322,48 +357,46 @@ onMounted(loadLedger)
             </button>
           </div>
         </div>
-        <div class="chart-readout">
-          <span>{{ (trendSelection ?? trendLatest) ? formatBusinessDate((trendSelection ?? trendLatest)!.date) : '按日重算' }}</span>
-          <b>{{ (trendSelection ?? trendLatest)?.totalAssets != null ? `¥${formatMoney((trendSelection ?? trendLatest)!.totalAssets)}` : '依据不足' }}</b>
-        </div>
-        <p v-if="trendLoading && !trend" class="hint">正在读取趋势…</p>
-        <p v-else-if="trendError" class="hint">{{ trendError }}</p>
-        <AssetTrendChart v-else-if="trend && trend.points.length" :trend="trend" @select="trendSelection = $event" />
-        <p v-else class="hint">还没有可展示的趋势数据。</p>
-        <div class="chart-note">
-          <span>点选日期查看历史总额</span>
-          <details class="chart-help">
-            <summary>统计口径 ⓘ</summary>
-            <div class="chart-help-content">
-              <p>账本起始 {{ formatBusinessDate(overview.startDate) }}；{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}。</p>
-              <p v-for="note in trend?.notes ?? []" :key="note">{{ note }}</p>
-              <p>空白表示该日依据不足；虚线只表示已有依据的部分资产合计。</p>
-              <p v-if="!overview.isComplete">{{ hasUnconfiguredAssets ? '部分资产尚未录入，可在资产分类中补充。' : '持仓日期或行情待确认，请前往历史核对。' }}</p>
-            </div>
-          </details>
+
+        <template v-if="trendReady">
+          <div class="chart-readout">
+            <span>{{ selectedPoint ? formatBusinessDate(selectedPoint.date) : '按日重算' }}</span>
+            <b :class="{ faint: !selectedPoint || selectedPoint.value === null }">
+              {{ selectedPoint?.value == null ? '依据不足' : `¥${formatMoney(selectedPoint.value)}` }}
+            </b>
+          </div>
+          <p v-if="trendLoading && !trend" class="hint">正在读取趋势…</p>
+          <p v-else-if="trendError" class="hint">{{ trendError }}</p>
+          <AssetTrendChart v-else-if="trend && scopedTrend" :trend="trend" @select="selectPoint" />
+          <p v-else class="hint">还没有可展示的趋势数据。</p>
+          <div class="chart-note">
+            <span>按住图表拖动查看每日金额</span>
+            <details class="chart-help">
+              <summary>统计口径 ⓘ</summary>
+              <div class="chart-help-content">
+                <p>只累计本月/本区间开始时已记录的类别；新增记录当天用虚线标记，不改变已有曲线口径。</p>
+                <p>账本起始 {{ formatBusinessDate(overview.startDate) }}；{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}。</p>
+                <p v-for="note in trend?.notes ?? []" :key="note">{{ note }}</p>
+                <p>空白表示该日依据不足。</p>
+              </div>
+            </details>
+          </div>
+        </template>
+
+        <div v-else class="trend-wait">
+          <p>记录满 7 天后显示趋势</p>
+          <div class="progress" role="progressbar" :aria-valuenow="daysRecorded" aria-valuemin="0" aria-valuemax="7">
+            <span :style="{ width: `${trendProgress}%` }" />
+          </div>
+          <small>已记录 {{ Math.min(daysRecorded, 7) }}/7 天</small>
         </div>
       </section>
 
-      <div class="section-head">
-        <h2 id="asset-classes">资产分类</h2>
-        <span class="tiny">4 类资产</span>
-      </div>
-      <div class="asset-grid">
-        <RouterLink
-          v-for="asset in assetCards"
-          :key="asset.key"
-          :to="asset.to"
-          class="asset-card"
-          :class="{ unset: !asset.isConfigured }"
-        >
-          <div class="asset-head">
-            <span>{{ asset.label }}</span>
-            <span class="asset-mark"><AppIcon :name="asset.icon" /></span>
-          </div>
-          <b>{{ asset.isConfigured ? (asset.amount === null ? '依据不足' : formatMoney(asset.amount)) : '未录入' }}</b>
-          <small>{{ asset.isConfigured ? asset.note : '点击补充 ›' }}</small>
-        </RouterLink>
-      </div>
+      <AssetDistribution
+        :overview="overview"
+        :changes="monthChange?.assetChanges"
+        :comparable="monthChange?.hasComparableData ?? false"
+      />
 
       <div class="section-head">
         <h2>本月收支</h2>
@@ -413,6 +446,45 @@ onMounted(loadLedger)
     </template>
 
     <AppNav />
+
+    <BottomSheet :open="addSheetOpen" title="添加" subtitle="记录一笔收支，或维护资产余额" @close="addSheetOpen = false">
+      <div class="action-list">
+        <button type="button" class="action-row" @click="goTo('/entry')">
+          <span><b>记一笔</b><small>记录收入、支出或转账</small></span>
+          <AppIcon name="chevron" />
+        </button>
+        <button type="button" class="action-row" @click="goTo('/assets')">
+          <span><b>资产与余额</b><small>更新现金、公积金、基金和积存金</small></span>
+          <AppIcon name="chevron" />
+        </button>
+      </div>
+    </BottomSheet>
+
+    <BottomSheet :open="changeSheetOpen" title="本月变化构成" @close="changeSheetOpen = false">
+      <div v-if="monthChange" class="breakdown">
+        <template v-if="monthChange.hasComparableData">
+          <div class="breakdown-row">
+            <span>市值变动</span>
+            <b :class="changeClass(monthChange.marketValueChange)">{{ formatSignedMoney(monthChange.marketValueChange ?? 0) }}</b>
+          </div>
+          <div class="breakdown-row">
+            <span>净存入·转账</span>
+            <b :class="changeClass(monthChange.netDeposit)">{{ formatSignedMoney(monthChange.netDeposit ?? 0) }}</b>
+          </div>
+          <div class="breakdown-total">
+            <span>本月变化</span>
+            <b :class="changeClass(monthChange.comparableChange)">{{ formatSignedMoney(monthChange.comparableChange ?? 0) }}</b>
+          </div>
+        </template>
+        <p v-else class="hint">账本起始日晚于本月月初，暂无可比基线。记录满一个完整月份后即可看到同口径变化。</p>
+        <div v-if="addedRecords > 0" class="breakdown-row new-record">
+          <span>新增记录（不计入变化）</span>
+          <b>{{ formatSignedMoney(addedRecords) }}</b>
+        </div>
+        <p class="sheet-note">只比较月初和今天都已记录的类别；现金和公积金只叫余额变化，基金和积存金的市值变化才叫收益。</p>
+      </div>
+      <p v-else class="hint">{{ monthChangeError || '本月变化暂时无法读取。' }}</p>
+    </BottomSheet>
   </main>
 </template>
 
@@ -421,44 +493,49 @@ onMounted(loadLedger)
   padding-top: 0;
 }
 
-.app-header {
-  margin: 0 -19px 22px;
-  padding: max(16px, env(safe-area-inset-top)) 19px 14px;
+.home-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 -19px 18px;
+  padding: max(12px, env(safe-area-inset-top)) 19px 12px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
+}
+
+.brand {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .icon-btn {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 9px;
   background: var(--color-bg-surface);
   color: var(--color-brand);
 }
 
-.icon-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .icon-btn:hover {
   background: var(--color-bg-hover);
 }
 
-.total {
-  padding: 0 3px 24px;
+.hero {
+  padding: 0 3px 20px;
 }
 
-.total-label {
+.hero-label {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -475,82 +552,86 @@ onMounted(loadLedger)
   font-size: 10px;
 }
 
-.total-value {
-  margin: 10px 0 12px;
-  font-size: 43px;
+.hero-value {
+  margin: 8px 0 10px;
+  font-size: 40px;
   font-weight: 550;
   letter-spacing: -1.7px;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
 
-.total-value .currency {
+.hero-value .currency {
   margin-right: 5px;
-  font-size: 25px;
+  font-size: 24px;
   font-weight: 400;
   letter-spacing: 0;
 }
 
-.change {
+.hero-change {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
   background: transparent;
   color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.7;
 }
 
-.change b {
+.hero-change b {
   color: var(--color-text-primary);
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
 
-.change-toggle {
-  color: var(--color-brand);
+.hero-change.muted b {
+  color: var(--color-text-secondary);
+  font-weight: 500;
 }
 
-.change-breakdown {
-  display: grid;
-  gap: 8px;
-  margin: 10px 0 2px;
-  padding: 11px 12px;
-  border-radius: 9px;
-  background: var(--color-bg-subtle);
+.change-percent {
+  font-variant-numeric: tabular-nums;
 }
 
-.change-breakdown > div {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+.info-mark {
   color: var(--color-text-secondary);
   font-size: 11px;
 }
 
-.change-breakdown b {
-  color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
+.added-note {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
 }
 
-.meta {
-  margin: 0;
+.hero-meta {
+  margin: 8px 0 0;
   color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.7;
 }
 
-.chart-panel {
-  margin-bottom: 24px;
+.meta {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.gain {
+  color: var(--color-finance-gain) !important;
+}
+
+.loss {
+  color: var(--color-finance-loss) !important;
+}
+
+.trend-panel {
   position: relative;
-  padding: 17px 13px 11px;
+  margin-bottom: 20px;
+  padding: 15px 13px 11px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 13px;
   background: var(--color-bg-surface);
@@ -561,7 +642,7 @@ onMounted(loadLedger)
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .section-head h2 {
@@ -571,7 +652,7 @@ onMounted(loadLedger)
   letter-spacing: -0.2px;
 }
 
-.chart-panel .section-head h2 {
+.trend-panel .section-head h2 {
   font-size: 13px;
 }
 
@@ -610,17 +691,23 @@ onMounted(loadLedger)
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  min-height: 24px;
-  margin: 14px 1px 6px;
+  min-height: 22px;
+  margin: 10px 1px 2px;
   color: var(--color-text-secondary);
   font-size: 10px;
 }
 
 .chart-readout b {
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
+}
+
+.chart-readout b.faint {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .chart-note {
@@ -628,87 +715,79 @@ onMounted(loadLedger)
   justify-content: space-between;
   gap: 10px;
   margin-top: 7px;
-  padding-top: 10px;
+  padding-top: 9px;
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
   font-size: 10px;
 }
 
-.asset-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 25px;
+.trend-wait {
+  padding: 14px 4px 16px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
 }
 
-.asset-card {
+.trend-wait p {
+  margin: 0 0 10px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.trend-wait small {
   display: block;
-  box-sizing: border-box;
-  min-height: 111px;
-  padding: 14px 13px 13px;
+  margin-top: 7px;
+  font-size: 10px;
+}
+
+.progress {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--color-bg-subtle);
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--color-brand);
+  transition: width 0.2s ease;
+}
+
+.chart-help {
+  position: static;
+  color: var(--color-brand);
+}
+
+.chart-help summary {
+  min-height: 28px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.chart-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.chart-help-content {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% - 6px);
+  right: 0;
+  left: 0;
+  padding: 12px 14px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
   background: var(--color-bg-surface);
-  color: inherit;
-  text-decoration: none;
-}
-
-.asset-card:hover {
-  border-color: var(--color-border-control);
-}
-
-.asset-card:active {
-  border-color: var(--color-brand);
-  background: var(--color-bg-selected);
-}
-
-.asset-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   color: var(--color-text-secondary);
+  box-shadow: 0 8px 24px var(--color-shadow);
   font-size: 12px;
+  line-height: 1.7;
 }
 
-.asset-mark .app-icon {
-  width: 17px;
-  height: 17px;
-}
-
-.asset-mark {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  width: 25px;
-  height: 25px;
-  border-radius: 7px;
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.asset-card b {
-  display: block;
-  margin-top: 8px;
-  font-size: 22px;
-  font-weight: 550;
-  letter-spacing: -0.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.asset-card small {
-  display: block;
-  margin-top: 6px;
-  color: var(--color-text-secondary);
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.asset-card.unset b {
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  font-weight: 500;
+.chart-help-content p {
+  margin: 4px 0;
 }
 
 .text-btn {
@@ -726,8 +805,8 @@ onMounted(loadLedger)
 }
 
 .month-card {
-  margin-bottom: 25px;
-  padding: 16px 13px 12px;
+  margin-bottom: 22px;
+  padding: 15px 13px 11px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
   background: var(--color-bg-surface);
@@ -752,8 +831,8 @@ onMounted(loadLedger)
 
 .month-grid b {
   display: block;
-  margin-top: 8px;
-  font-size: 19px;
+  margin-top: 7px;
+  font-size: 18px;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
@@ -763,8 +842,8 @@ onMounted(loadLedger)
 }
 
 .card-foot {
-  margin: 15px 0 0;
-  padding-top: 11px;
+  margin: 13px 0 0;
+  padding-top: 10px;
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
   font-size: 10px;
@@ -797,7 +876,7 @@ onMounted(loadLedger)
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
-  padding: 14px 13px;
+  padding: 13px;
   color: inherit;
   text-decoration: none;
 }
@@ -863,49 +942,93 @@ onMounted(loadLedger)
   line-height: 1.7;
 }
 
-.setup-hint {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  min-height: 28px;
-  margin-bottom: 2px;
-  color: var(--color-brand);
-  font-size: 12px;
-  text-decoration: none;
-}
-.chart-help {
-  position: static;
-  color: var(--color-brand);
-}
-.chart-help summary {
-  min-height: 28px;
-  list-style: none;
-  cursor: pointer;
-}
-.chart-help summary::-webkit-details-marker {
-  display: none;
-}
-.chart-help-content {
-  position: absolute;
-  z-index: 10;
-  top: calc(100% - 6px);
-  right: 0;
-  left: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  box-shadow: 0 8px 24px var(--color-shadow);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.chart-help-content p {
-  margin: 4px 0;
-}
-
 .tiny {
   color: var(--color-text-secondary);
   font-size: 11px;
+}
+
+.action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 11px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.action-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-row b {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.action-row small {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.action-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.breakdown-row,
+.breakdown-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.breakdown-row b,
+.breakdown-total b {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-total {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.new-record {
+  color: var(--color-text-secondary);
+}
+
+.new-record b {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.sheet-note {
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.7;
 }
 </style>

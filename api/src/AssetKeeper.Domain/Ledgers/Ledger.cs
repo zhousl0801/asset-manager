@@ -1,3 +1,4 @@
+using AssetKeeper.Domain.Assets;
 using AssetKeeper.Domain.Cash;
 
 namespace AssetKeeper.Domain.Ledgers;
@@ -28,6 +29,65 @@ public sealed class Ledger
     public int Version { get; private set; }
 
     public long NextFactSequence { get; private set; }
+
+    public bool FundNotHeld { get; private set; }
+
+    public bool ProvidentFundNotHeld { get; private set; }
+
+    public bool GoldNotHeld { get; private set; }
+
+    public bool CoverageConfirmed { get; private set; }
+
+    public bool IsNotHeld(AssetType assetType)
+    {
+        return assetType switch
+        {
+            AssetType.Fund => FundNotHeld,
+            AssetType.ProvidentFund => ProvidentFundNotHeld,
+            AssetType.Gold => GoldNotHeld,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetType), assetType, "不支持的资产类型。")
+        };
+    }
+
+    public bool SetNotHeld(AssetType assetType, bool notHeld, DateTimeOffset now)
+    {
+        var changed = notHeld != IsNotHeld(assetType);
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        switch (assetType)
+        {
+            case AssetType.Fund:
+                FundNotHeld = notHeld;
+                break;
+            case AssetType.ProvidentFund:
+                ProvidentFundNotHeld = notHeld;
+                break;
+            case AssetType.Gold:
+                GoldNotHeld = notHeld;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(assetType), assetType, "不支持的资产类型。");
+        }
+
+        CoverageConfirmed = false;
+        Touch(now);
+        return true;
+    }
+
+    public void SetCoverageConfirmed(bool confirmed, DateTimeOffset now)
+    {
+        if (CoverageConfirmed == confirmed)
+        {
+            return;
+        }
+
+        CoverageConfirmed = confirmed;
+        Touch(now);
+    }
 
     public long AllocateFactSequence() => ++NextFactSequence;
 

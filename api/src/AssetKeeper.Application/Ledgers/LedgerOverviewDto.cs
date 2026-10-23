@@ -12,4 +12,10 @@ public sealed record LedgerOverviewDto(
     AssetOverviewDto ProvidentFund,
     AssetOverviewDto Gold,
     MonthSummaryDto Month,
-    bool IsComplete = false);
+    bool IsComplete = false,
+    bool FundNotHeld = false,
+    bool ProvidentFundNotHeld = false,
+    bool GoldNotHeld = false,
+    bool CoverageConfirmed = false,
+    bool CoverageComplete = false,
+    bool TotalConfirmed = false);

@@ -84,6 +84,52 @@ public sealed class LedgerController : ControllerBase
         return Ok(change);
     }
 
+    [HttpPut("coverage")]
+    [ProducesResponseType<LedgerOverviewDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateCoverage(
+        [FromBody] UpdateAssetCoverageRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _ledgerService.UpdateCoverageAsync(request, cancellationToken);
+
+        if (result.Status == AssetCoverageStatus.NotFound)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "账本尚未初始化",
+                Detail = "请先设置账本起始日期和现金余额。",
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+
+        if (result.Status == AssetCoverageStatus.Conflict)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "账本已发生变化",
+                Detail = string.Join(" ", result.Errors),
+                Status = StatusCodes.Status409Conflict
+            });
+        }
+
+        if (result.Status == AssetCoverageStatus.Invalid || result.Overview is null)
+        {
+            var modelState = new ModelStateDictionary();
+
+            foreach (var error in result.Errors)
+            {
+                modelState.AddModelError(string.Empty, error);
+            }
+
+            return ValidationProblem(modelState);
+        }
+
+        return Ok(result.Overview);
+    }
+
     [HttpPost("initialize")]
     [ProducesResponseType<LedgerOverviewDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]

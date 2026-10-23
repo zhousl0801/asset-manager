@@ -4,14 +4,13 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3Z" /><path d="M9 20v-7h6v7" /></svg>
       <span>总览</span>
     </RouterLink>
+    <RouterLink class="nav-item" active-class="active" to="/assets">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v12H3z" /><path d="M3 7l2-3h14l2 3" /><path d="M16 13h2" /></svg>
+      <span>资产</span>
+    </RouterLink>
     <RouterLink class="nav-item" active-class="active" to="/ledger">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="15" height="18" rx="2" /><path d="M3 7h5M3 12h5M3 17h5M11 8h6M11 12h6" /></svg>
       <span>账本</span>
-    </RouterLink>
-    <RouterLink class="nav-add" to="/entry" aria-label="记一笔">+</RouterLink>
-    <RouterLink class="nav-item" active-class="active" to="/funds">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M7 15l4-5 4 2 5-7" /></svg>
-      <span>投资</span>
     </RouterLink>
     <RouterLink class="nav-item" active-class="active" to="/mine">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></svg>
@@ -67,30 +66,5 @@
 .nav-item.active {
   color: var(--color-brand);
   font-weight: 600;
-}
-
-.nav-add {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 45px;
-  height: 45px;
-  min-height: 45px;
-  margin-top: -8px;
-  border-radius: 14px;
-  background: var(--color-brand);
-  color: var(--color-on-brand);
-  font-size: 29px;
-  font-weight: 300;
-  line-height: 1;
-  text-decoration: none;
-}
-
-.nav-add:hover {
-  background: var(--color-brand-hover);
-}
-
-.nav-add:active {
-  background: var(--color-brand-active);
 }
 </style>

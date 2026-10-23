@@ -448,6 +448,7 @@ public sealed class FundReturnService
     {
         var from = range switch
         {
+            TrendRange.Week => anchor.AddDays(-6),
             TrendRange.Month => new DateOnly(anchor.Year, anchor.Month, 1),
             TrendRange.Quarter => anchor.AddMonths(-3).AddDays(1),
             TrendRange.Year => new DateOnly(anchor.Year, 1, 1),

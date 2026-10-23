@@ -17,6 +17,11 @@ const router = createRouter({
       component: () => import('../views/SetupView.vue')
     },
     {
+      path: '/assets',
+      name: 'assets',
+      component: () => import('../views/AssetsView.vue')
+    },
+    {
       path: '/ledger',
       name: 'ledger',
       component: () => import('../views/LedgerView.vue')

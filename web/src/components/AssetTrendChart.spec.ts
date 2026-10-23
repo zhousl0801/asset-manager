@@ -12,7 +12,8 @@ test('selecting a trend date reports the current point without changing its fina
   const point = {
     date: '2026-10-01', totalAssets: null, knownTotalAssets: 1200, cash: 1200,
     provident: null, fundValue: 0, fundPending: 0, fundPendingArrival: 0,
-    goldValue: 0, goldPendingArrival: 0, isComplete: false
+    goldValue: 0, goldPendingArrival: 0, isComplete: false,
+    hasCash: true, hasProvident: false, hasFunds: false, hasGold: false
   }
   const trend: AssetTrend = { range: 'month', from: point.date, to: point.date, points: [point], notes: [] }
   const view = mount(AssetTrendChart, { props: { trend } })

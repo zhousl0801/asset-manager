@@ -631,6 +631,12 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("CoverageConfirmed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("coverage_confirmed");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -641,9 +647,27 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
 
+                    b.Property<bool>("FundNotHeld")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("fund_not_held");
+
+                    b.Property<bool>("GoldNotHeld")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("gold_not_held");
+
                     b.Property<long>("NextFactSequence")
                         .HasColumnType("bigint")
                         .HasColumnName("next_fact_sequence");
+
+                    b.Property<bool>("ProvidentFundNotHeld")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("provident_fund_not_held");
 
                     b.Property<int>("SingletonSlot")
                         .ValueGeneratedOnAdd()

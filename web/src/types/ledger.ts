@@ -2,6 +2,7 @@ export interface AssetOverview {
   isConfigured: boolean
   amount: number | null
   note: string | null
+  notHeld: boolean
 }
 
 export interface MonthSummary {
@@ -24,6 +25,20 @@ export interface LedgerOverview {
   providentFund: AssetOverview
   gold: AssetOverview
   month: MonthSummary
+  fundNotHeld: boolean
+  providentFundNotHeld: boolean
+  goldNotHeld: boolean
+  coverageConfirmed: boolean
+  coverageComplete: boolean
+  totalConfirmed: boolean
+}
+
+export type AssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
+
+export interface AssetChange {
+  assetType: AssetKey
+  change: number | null
+  isNew: boolean
 }
 
 export interface MonthChange {
@@ -36,6 +51,20 @@ export interface MonthChange {
   reconciliationDifference: number
   isComplete: boolean
   notes: string[]
+  assetChanges: AssetChange[]
+  comparableChange: number | null
+  comparableBase: number | null
+  addedRecords: number | null
+  marketValueChange: number | null
+  netDeposit: number | null
+  hasComparableData: boolean
+}
+
+export interface UpdateAssetCoverageInput {
+  fundNotHeld: boolean
+  providentFundNotHeld: boolean
+  goldNotHeld: boolean
+  coverageConfirmed: boolean
 }
 
 export interface InitializeLedgerInput {

@@ -1,4 +1,4 @@
-import type { InitializeLedgerInput, LedgerOverview, MonthChange } from '../types/ledger'
+import type { InitializeLedgerInput, LedgerOverview, MonthChange, UpdateAssetCoverageInput } from '../types/ledger'
 import type { AssetTrend, TrendRange } from '../types/trend'
 import { apiRequest } from './client'
 
@@ -12,6 +12,13 @@ export function fetchAssetTrend(range: TrendRange): Promise<AssetTrend> {
 
 export function fetchMonthChange(): Promise<MonthChange> {
   return apiRequest<MonthChange>('/api/ledger/month-change')
+}
+
+export function updateAssetCoverage(input: UpdateAssetCoverageInput): Promise<LedgerOverview> {
+  return apiRequest<LedgerOverview>('/api/ledger/coverage', {
+    method: 'PUT',
+    body: JSON.stringify(input)
+  })
 }
 
 export function initializeLedger(input: InitializeLedgerInput): Promise<LedgerOverview> {

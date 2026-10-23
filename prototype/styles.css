@@ -135,3 +135,36 @@ button:disabled { opacity: 1; color: var(--color-text-disabled); background: var
   .range button { font-size: 10px; padding-left: 4px; padding-right: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .app-content { scroll-behavior: auto; } }
+
+/* 2026-10-23 home iteration: recorded assets, scoped trend, distribution list. */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.added-note { color: var(--color-text-secondary); }
+.change-pct { font-variant-numeric: tabular-nums; }
+.chart { height: 120px; }
+.ratio-bar { display: flex; overflow: hidden; height: 8px; margin-bottom: 12px; border-radius: 99px; background: var(--color-bg-subtle); }
+.ratio-segment { height: 100%; }
+.ratio-segment + .ratio-segment { box-shadow: 0 0 0 1px var(--color-bg-surface); }
+.ratio-segment[data-bar="cash"] { background: var(--color-chart-cash); }
+.ratio-segment[data-bar="fund"] { background: var(--color-chart-investment); }
+.ratio-segment[data-bar="provident"] { background: var(--color-chart-property); }
+.ratio-segment[data-bar="gold"] { background: var(--color-chart-receivable); }
+.asset-list { overflow: hidden; margin-bottom: 24px; border: 1px solid var(--color-border-subtle); border-radius: 13px; background: var(--color-bg-surface); }
+.asset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 58px; align-items: center; gap: 10px; width: 100%; padding: 13px; border: 0; border-radius: 0; background: var(--color-bg-surface); color: inherit; text-align: left; }
+.asset-row + .asset-row { border-top: 1px solid var(--color-border-subtle); }
+.asset-row:hover { background: var(--color-bg-hover); }
+.asset-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.asset-title { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.asset-title b { font-weight: 550; }
+.asset-main small, .asset-side small { overflow: hidden; color: var(--color-text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.asset-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.asset-amount { font-size: 13px; font-weight: 550; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.asset-percent { color: var(--color-text-secondary); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.dot-cash { background: var(--color-chart-cash); }
+.dot-fund { background: var(--color-chart-investment); }
+.dot-provident { background: var(--color-chart-property); }
+.dot-gold { background: var(--color-chart-receivable); }
+@media (max-width: 370px) {
+  .asset-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .asset-percent { grid-column: 1 / -1; text-align: left; }
+}

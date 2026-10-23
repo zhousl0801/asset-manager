@@ -30,6 +30,7 @@ public sealed class TrendService
         var today = _dates.Today;
         var from = range switch
         {
+            TrendRange.Week => today.AddDays(-6),
             TrendRange.Month => today.AddDays(-29),
             TrendRange.Quarter => today.AddDays(-89),
             TrendRange.Year => new DateOnly(today.Year, 1, 1),
@@ -47,12 +48,16 @@ public sealed class TrendService
         for (var date = from; date <= today; date = date.AddDays(1))
         {
             var result = calculator.Calculate(data, facts, date, currentDate: today);
-            var fundValue = result.Funds.Count == 0
+            var recordedFunds = result.Funds
+                .Where(item => item.CoverageFrom is not null && item.CoverageFrom <= date)
+                .ToList();
+            var fundValue = recordedFunds.Count == 0
                 ? (decimal?)null
-                : result.Funds.Any(item => item.Value is null)
+                : recordedFunds.Any(item => item.Value is null)
                     ? null
-                    : result.Funds.Sum(item => item.Value ?? 0m);
-            var goldValue = result.Gold is null ? null : result.Gold.Value;
+                    : recordedFunds.Sum(item => item.Value ?? 0m);
+            var hasGold = result.Gold?.CoverageFrom is DateOnly goldFrom && goldFrom <= date;
+            var goldValue = hasGold ? result.Gold!.Value : null;
             var point = new AssetTrendPointDto(
                 date,
                 result.TotalAssets,
@@ -60,11 +65,15 @@ public sealed class TrendService
                 result.CashBalance,
                 result.ProvidentBalance,
                 fundValue,
-                result.Funds.Sum(item => item.PendingAmount),
-                result.Funds.Sum(item => item.PendingArrivalAmount),
+                recordedFunds.Sum(item => item.PendingAmount),
+                recordedFunds.Sum(item => item.PendingArrivalAmount),
                 goldValue,
-                result.Gold?.PendingArrivalAmount ?? 0m,
-                result.TotalAssets is not null);
+                hasGold ? result.Gold!.PendingArrivalAmount : 0m,
+                result.TotalAssets is not null,
+                result.CashBalance is not null,
+                result.ProvidentBalance is not null,
+                recordedFunds.Count > 0,
+                hasGold);
             points.Add(point);
             anyIncomplete |= !point.IsComplete;
         }

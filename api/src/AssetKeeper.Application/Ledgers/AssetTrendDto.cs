@@ -11,7 +11,11 @@ public sealed record AssetTrendPointDto(
     decimal FundPendingArrival,
     decimal? GoldValue,
     decimal GoldPendingArrival,
-    bool IsComplete);
+    bool IsComplete,
+    bool HasCash = false,
+    bool HasProvident = false,
+    bool HasFunds = false,
+    bool HasGold = false);
 
 public sealed record AssetTrendDto(
     TrendRange Range,
