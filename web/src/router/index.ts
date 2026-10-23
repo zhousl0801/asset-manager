@@ -37,6 +37,11 @@ const router = createRouter({
       component: () => import('../views/BackupView.vue')
     },
     {
+      path: '/quotes',
+      name: 'quotes',
+      component: () => import('../views/QuoteStatusView.vue')
+    },
+    {
       path: '/cash',
       name: 'cash',
       component: () => import('../views/CashView.vue')

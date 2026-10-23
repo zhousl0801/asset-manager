@@ -19,7 +19,8 @@ public sealed class AssetKeeperApiFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["PlanScheduler:Enabled"] = "false"
+                ["PlanScheduler:Enabled"] = "false",
+                ["QuoteRefreshScheduler:Enabled"] = "false"
             });
         });
         builder.ConfigureServices(services =>
