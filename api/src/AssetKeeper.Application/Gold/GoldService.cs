@@ -71,6 +71,12 @@ public sealed class GoldService
                 transaction.Note))
             .ToList();
         var pendingArrivalAmount = pendingArrivals.Sum(item => item.Amount);
+        // 自动行情刷新只用于估值；交易与持仓记录保留买卖、核对和手动报价。
+        var activities = transactions
+            .Where(transaction => transaction.Kind != AssetTransactionKind.GoldQuote
+                || transaction.QuoteSource == "manual")
+            .Select(Map)
+            .ToList();
 
         return new GoldOverviewDto(
             holding is not null,
@@ -83,7 +89,7 @@ public sealed class GoldService
             holding?.HoldingProfit ?? 0m,
             holding?.RealizedProfit ?? 0m,
             ledger.CashAccount?.Balance ?? 0m,
-            transactions.Select(Map).ToList(),
+            activities,
             holding?.Version ?? 0,
             replay.Gold?.CanRebuild ?? true,
             replay.Gold?.Value is not null,

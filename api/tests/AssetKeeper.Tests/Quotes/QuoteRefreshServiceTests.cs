@@ -93,6 +93,43 @@ public sealed class QuoteRefreshServiceTests
         Assert.Null(context.Repository.GoldHolding.LastQuoteSource);
     }
 
+    [Fact]
+    public async Task GoldRefresh_HidesAutomaticQuoteUpdatesFromHoldingRecords()
+    {
+        var quote = new ExternalGoldQuote(910m, Today, "sina_shfe_au0", Now);
+        var context = await CreateAsync(null, new StubGoldProvider(quote));
+        await context.Gold.SaveHoldingAsync(
+            new SaveGoldHoldingRequest(30m, 25600m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today),
+            CancellationToken.None);
+
+        var result = await context.Gold.RefreshQuoteAsync(CancellationToken.None);
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, result.Status);
+        Assert.True(result.Result!.Updated);
+        Assert.NotNull(overview);
+        Assert.DoesNotContain(overview.Activities, activity => activity.Type == GoldActivityType.Quote);
+        Assert.Contains(context.Repository.AssetTransactions,
+            transaction => transaction.Kind == AssetTransactionKind.GoldQuote);
+    }
+
+    [Fact]
+    public async Task ManualGoldQuoteUpdate_StaysInHoldingRecords()
+    {
+        var context = await CreateAsync();
+        await context.Gold.SaveHoldingAsync(
+            new SaveGoldHoldingRequest(30m, 25600m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today),
+            CancellationToken.None);
+
+        await context.Gold.UpdateQuoteAsync(
+            new UpdateGoldQuoteRequest(920m, Today, Guid.NewGuid()),
+            CancellationToken.None);
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+
+        Assert.NotNull(overview);
+        Assert.Contains(overview.Activities, activity => activity.Type == GoldActivityType.Quote);
+    }
+
     private static CreateFundPositionRequest PositionRequest()
     {
         return new CreateFundPositionRequest(

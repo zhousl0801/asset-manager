@@ -24,6 +24,7 @@ type SheetKind = 'buy' | 'sell' | 'sellArrival' | 'quote' | 'holding'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
+const QUOTE_STALE_MILLISECONDS = 5 * 60 * 1000
 const overview = ref<GoldOverview | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -124,7 +125,40 @@ const canSubmit = computed(() => {
   }
 })
 
-onMounted(loadOverview)
+onMounted(async () => {
+  await loadOverview()
+  await refreshQuoteWhenStale()
+})
+
+async function refreshQuoteWhenStale(): Promise<void> {
+  const current = overview.value
+
+  if (!current || !current.isConfigured || !current.hasEffectiveQuote || !isQuoteStale(current)) {
+    return
+  }
+
+  try {
+    await refreshGoldQuote()
+  } catch {
+    return
+  }
+
+  await loadOverview()
+}
+
+function isQuoteStale(current: GoldOverview): boolean {
+  if (current.quoteDate !== today) {
+    return true
+  }
+
+  if (!current.lastQuoteAttemptAt) {
+    return true
+  }
+
+  const attemptedAt = Date.parse(current.lastQuoteAttemptAt)
+
+  return Number.isNaN(attemptedAt) || Date.now() - attemptedAt > QUOTE_STALE_MILLISECONDS
+}
 
 async function loadOverview(): Promise<void> {
   isLoading.value = true

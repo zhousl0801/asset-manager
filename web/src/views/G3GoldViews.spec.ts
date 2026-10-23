@@ -1,6 +1,9 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, expect, test, vi } from 'vitest'
 import GoldView from './GoldView.vue'
+import { todayInBusinessTimeZone } from '../utils/format'
+
+const today = todayInBusinessTimeZone()
 
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
@@ -31,7 +34,7 @@ const overview = {
   grams: 30,
   cost: 25600,
   quote: 900,
-  quoteDate: '2026-10-21',
+  quoteDate: today,
   value: 27000,
   averageCost: 853.33,
   holdingProfit: 1400,
@@ -40,8 +43,8 @@ const overview = {
   activities: [] as unknown[],
   pendingArrivalAmount: 0,
   pendingArrivals: [] as unknown[],
-  lastQuoteAttemptAt: null,
-  lastQuoteSource: 'manual',
+  lastQuoteAttemptAt: new Date().toISOString(),
+  lastQuoteSource: 'sina_shfe_au0',
   lastQuoteError: null
 }
 
@@ -156,5 +159,40 @@ test('gold pending arrival is shown and can be received into cash', async () => 
   expect(mocks.arrive).toHaveBeenCalledTimes(1)
   expect(mocks.arrive.mock.calls[0]![0]).toBe('gp1')
   expect(mocks.arrive.mock.calls[0]![1]).toMatchObject({ amount: 898 })
+  view.unmount()
+})
+
+test('opening the page refreshes a stale gold quote', async () => {
+  const stale = structuredClone(overview)
+  stale.quoteDate = '2026-10-01'
+  stale.lastQuoteAttemptAt = '2026-10-01T02:00:00Z'
+  mocks.overview
+    .mockResolvedValueOnce(stale)
+    .mockResolvedValue(structuredClone(overview))
+  mocks.refresh.mockResolvedValue({
+    updated: true,
+    source: 'sina_shfe_au0',
+    quote: 910,
+    quoteDate: today,
+    obtainedAt: new Date().toISOString(),
+    lastAttemptAt: new Date().toISOString(),
+    value: 27300,
+    cashBalance: 10000
+  })
+
+  const view = mount(GoldView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  expect(mocks.overview).toHaveBeenCalledTimes(2)
+  view.unmount()
+})
+
+test('opening the page keeps a fresh gold quote without refreshing', async () => {
+  const view = mount(GoldView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(mocks.refresh).not.toHaveBeenCalled()
+  expect(mocks.overview).toHaveBeenCalledTimes(1)
   view.unmount()
 })
