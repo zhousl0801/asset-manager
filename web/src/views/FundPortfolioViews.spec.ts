@@ -243,6 +243,21 @@ test('switching group filters total, funds, pending items and activities consist
   view.unmount()
 })
 
+test('a collapsed search keeps its scope visible and can be cleared', async () => {
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+  await view.get('.portfolio-toolbar input').setValue('纳指')
+  view.get<HTMLDetailsElement>('.portfolio-settings').element.open = false
+
+  expect(view.get('.hero-balance').text()).toContain('1,800.00')
+  expect(view.get('.hero-label').text()).toContain('搜索「纳指」')
+  expect(view.get('.portfolio-settings summary').text()).toContain('已筛选：纳指')
+  await view.get('.active-search button').trigger('click')
+  expect(view.get('.hero-balance').text()).toContain('2,400.00')
+  expect(view.find('.active-search').exists()).toBe(false)
+  view.unmount()
+})
+
 test('expanded fund keeps A and C share classes separate and shows platform rows', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()

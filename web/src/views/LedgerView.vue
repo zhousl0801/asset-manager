@@ -5,6 +5,9 @@ import { fetchEntryPeriod, fetchEntryStats } from '../api/entries'
 import { fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import AppIcon from '../components/AppIcon.vue'
+import EmptyState from '../components/EmptyState.vue'
+import PageHeader from '../components/PageHeader.vue'
 import LedgerStatsChart from '../components/LedgerStatsChart.vue'
 import { ExpenseCategories, IncomeCategories } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
@@ -252,17 +255,11 @@ function goBack(): void {
 
 <template>
   <main class="page ledger-page with-nav">
-    <header class="ledger-header">
-      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
-      <h1>账本</h1>
-      <button type="button" class="add-button" @click="openEntry()">＋ 记一笔</button>
-    </header>
-    <RouterLink class="back-link history-entry-link" to="/history">历史核对与资产回看 ›</RouterLink>
+    <PageHeader title="我的账本" back-label="总览" @back="goBack">
+      <template #actions><button type="button" class="icon-button" aria-label="记一笔" @click="openEntry()"><AppIcon name="plus" /></button></template>
+    </PageHeader>
 
-    <div class="view-tabs" role="tablist" aria-label="账本视图">
-      <button type="button" :class="{ active: view === 'list' }" @click="switchView('list')">明细</button>
-      <button type="button" :class="{ active: view === 'chart' }" @click="switchView('chart')">图表</button>
-    </div>
+
 
     <section class="period-panel">
       <div class="period-top">
@@ -306,7 +303,14 @@ function goBack(): void {
       </div>
     </section>
 
+    <div class="view-tabs ui-segmented" role="tablist" aria-label="账本视图">
+      <button type="button" role="tab" :aria-selected="view === 'list'" :class="{ active: view === 'list' }" @click="switchView('list')">明细</button>
+      <button type="button" role="tab" :aria-selected="view === 'chart'" :class="{ active: view === 'chart' }" @click="switchView('chart')">图表</button>
+    </div>
+
     <template v-if="view === 'list'">
+    <details class="filter-disclosure ui-disclosure" :open="hasFilters">
+      <summary><span><AppIcon name="search" /> 搜索与筛选</span><span v-if="hasFilters">已筛选</span></summary>
     <div class="filter-bar">
       <div class="kind-tabs" role="tablist" aria-label="收支类型">
         <button
@@ -342,6 +346,9 @@ function goBack(): void {
       </div>
     </div>
 
+    <button v-if="hasFilters && groupedEntries.length" type="button" class="back-link" @click="clearFilters">清除筛选</button>
+    </details>
+
     <p v-if="isLoading && !summary" class="state">正在读取记录…</p>
 
     <section v-else-if="errorMessage" class="state">
@@ -367,7 +374,7 @@ function goBack(): void {
             class="entry-row"
             @click="openEntry(entry.id)"
           >
-            <span class="entry-mark">{{ entry.category.slice(0, 1) }}</span>
+            <span class="entry-mark"><AppIcon :name="entry.category" /></span>
             <span class="entry-copy">
               <span class="entry-title">{{ entry.category }}</span>
               <small v-if="entry.note">{{ entry.note }}</small>
@@ -377,18 +384,13 @@ function goBack(): void {
         </div>
       </section>
 
-      <div v-if="!groupedEntries.length" class="empty-state">
-        <p>{{ hasFilters ? '没有符合条件的记录' : '这段时间还没有记录' }}</p>
-        <button
-          v-if="hasFilters"
-          type="button"
-          class="secondary-button"
-          @click="clearFilters"
-        >
-          清除筛选
-        </button>
-        <button v-else type="button" class="primary-button" @click="openEntry()">记一笔</button>
-      </div>
+      <EmptyState
+        v-if="!groupedEntries.length"
+        :title="hasFilters ? '没有符合条件的记录' : '这个周期还没有记录'"
+        :description="hasFilters ? '清除筛选，查看这段时间的全部收支。' : '记下第一笔收入或支出，让日常收支更清楚。'"
+        :action-label="hasFilters ? '清除筛选' : '记一笔'"
+        @action="hasFilters ? clearFilters() : openEntry()"
+      />
 
       <p class="list-note">{{ summary?.entries.length ?? 0 }} 笔日常收支</p>
     </template>
@@ -458,6 +460,7 @@ function goBack(): void {
         </section>
       </template>
     </template>
+    <RouterLink class="back-link ledger-history" to="/history">历史核对与资产回看 ›</RouterLink>
     <AppNav />
   </main>
 </template>
@@ -497,29 +500,30 @@ function goBack(): void {
 }
 
 .view-tabs {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.filter-disclosure {
+  margin-bottom: 16px;
+}
+.filter-disclosure summary .app-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+}
+.filter-disclosure > summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+}
+.filter-disclosure[open] {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ledger-history {
   display: flex;
-  gap: 2px;
-  width: fit-content;
-  margin-bottom: 14px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--color-bg-subtle);
-}
-
-.view-tabs button {
-  min-height: 30px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
+  justify-content: center;
+  margin-top: 24px;
   font-size: 11px;
-}
-
-.view-tabs button.active {
-  background: var(--color-bg-surface);
-  color: var(--color-brand);
-  font-weight: 600;
 }
 
 .stats-direction {
@@ -651,8 +655,8 @@ function goBack(): void {
 }
 
 .period-panel {
-  margin-bottom: 14px;
-  padding: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
   background: var(--color-bg-surface);
@@ -660,6 +664,7 @@ function goBack(): void {
 
 .period-top {
   display: flex;
+  flex-direction: row-reverse;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
@@ -738,8 +743,8 @@ function goBack(): void {
 
 .summary-grid b {
   display: block;
-  margin-top: 6px;
-  font-size: 18px;
+  margin-top: 8px;
+  font-size: clamp(16px, 5vw, 20px);
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
@@ -804,7 +809,7 @@ function goBack(): void {
 }
 
 .day-group {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .day-header {
@@ -878,7 +883,7 @@ function goBack(): void {
 .entry-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

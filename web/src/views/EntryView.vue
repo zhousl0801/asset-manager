@@ -6,6 +6,7 @@ import { createEntry, fetchEntry, reverseEntry, updateEntry } from '../api/entri
 import { fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AmountKeypad from '../components/AmountKeypad.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { categoriesFor } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
 import { applyAmountKey, evaluateAmountExpression, type AmountKey } from '../utils/amount'
@@ -260,7 +261,7 @@ function handleKeydown(event: KeyboardEvent): void {
     return
   }
 
-  const isButtonFocused = target?.closest('button') !== null
+  const isInteractiveFocused = Boolean(target?.closest('button, summary, a'))
 
   if (/^[0-9.+-]$/.test(event.key)) {
     event.preventDefault()
@@ -283,7 +284,7 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 
   if (event.key === 'Enter') {
-    if (isButtonFocused) {
+    if (isInteractiveFocused) {
       return
     }
 
@@ -307,6 +308,8 @@ function handleKeydown(event: KeyboardEvent): void {
       <div class="kind-tabs" role="tablist" aria-label="收支方向">
         <button
           type="button"
+          role="tab"
+          :aria-selected="form.kind === 'expense'"
           :class="{ active: form.kind === 'expense' }"
           :disabled="!canEdit"
           @click="setKind('expense')"
@@ -315,6 +318,8 @@ function handleKeydown(event: KeyboardEvent): void {
         </button>
         <button
           type="button"
+          role="tab"
+          :aria-selected="form.kind === 'income'"
           :class="{ active: form.kind === 'income' }"
           :disabled="!canEdit"
           @click="setKind('income')"
@@ -349,7 +354,7 @@ function handleKeydown(event: KeyboardEvent): void {
             :aria-pressed="form.category === category"
             @click="chooseCategory(category)"
           >
-            <span class="category-mark">{{ category.slice(0, 1) }}</span>
+            <span class="category-mark"><AppIcon :name="category" /></span>
             <span>{{ category }}</span>
           </button>
         </div>
@@ -378,8 +383,11 @@ function handleKeydown(event: KeyboardEvent): void {
           </label>
         </div>
 
+        <details class="entry-options ui-disclosure" :open="!!form.relatedCashAdjustmentId">
+          <summary>更多选项</summary>
         <CashAdjustmentLink v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="form.kind === 'income' ? (amount ?? 0) : -(amount ?? 0)" :disabled="isSaving || !canEdit" />
         <RouterLink class="back-link" to="/history">历史记录更正与撤销 ›</RouterLink>
+        </details>
         <button
           v-if="isEditing && canEdit"
           type="button"
@@ -503,14 +511,15 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .entry-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 16px 20px;
 }
 
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px 4px;
 }
 
 .category-tile {
@@ -518,7 +527,8 @@ function handleKeydown(event: KeyboardEvent): void {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 9px 2px;
+  min-height: 76px;
+  padding: 8px 2px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
@@ -531,7 +541,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .category-tile.active {
-  border-color: var(--color-brand);
+  border-color: transparent;
   background: var(--color-brand-soft);
   color: var(--color-brand);
 }
@@ -540,8 +550,8 @@ function handleKeydown(event: KeyboardEvent): void {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--color-bg-surface);
   color: var(--color-brand);
@@ -557,6 +567,14 @@ function handleKeydown(event: KeyboardEvent): void {
 .category-tile:disabled .category-mark {
   background: var(--color-bg-disabled);
   color: var(--color-text-disabled);
+}
+
+.entry-options {
+  margin-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.entry-options .back-link {
+  font-size: 12px;
 }
 
 .entry-fields {

@@ -20,6 +20,9 @@ import {
 import { fetchPlanOverview } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import AppIcon from '../components/AppIcon.vue'
+import EmptyState from '../components/EmptyState.vue'
+import PageHeader from '../components/PageHeader.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
@@ -1361,11 +1364,40 @@ function goBack(): void {
 
 <template>
   <main class="page funds-page with-nav">
-    <header class="funds-header">
-      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
-      <h1>基金</h1>
-      <RouterLink class="back-link" to="/history">历史核对</RouterLink>
-    </header>
+    <PageHeader title="投资" back-label="总览" @back="goBack">
+      <template #actions>
+        <details class="investment-actions">
+          <summary class="icon-button" aria-label="记录投资"><AppIcon name="plus" /></summary>
+          <div class="funds-actions" @click="($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">
+        <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
+        <button
+          type="button"
+          class="action-primary"
+          :disabled="!overview?.positions.length"
+          @click="openSheet('buy')"
+        >
+          买入
+        </button>
+        <button
+          type="button"
+          class="action-secondary"
+          :disabled="!overview?.positions.length"
+          @click="openSheet('sell')"
+        >
+          卖出
+        </button>
+        <button
+          type="button"
+          class="action-secondary"
+          :disabled="!overview?.positions.length"
+          @click="openSheet('quote')"
+        >
+          更新净值
+        </button>
+      </div>
+        </details>
+      </template>
+    </PageHeader>
 
     <p v-if="isLoading && !overview" class="state">正在读取基金…</p>
 
@@ -1378,9 +1410,10 @@ function goBack(): void {
       <section class="funds-hero">
         <p class="hero-label">
           {{ activeGroupLabel }}
+          <span v-if="searchText.trim()" class="hero-search" :title="searchText">· 搜索「{{ searchText.trim() }}」</span>
           <span class="hero-tag">{{ scope.historyConfirmed ? '已确认持仓' : '持仓日期待确认' }}</span>
         </p>
-        <h2 class="hero-balance"><span>¥</span>{{ scope.hasEffectiveQuotes ? formatMoney(scope.assetValue) : '行情待补' }}</h2>
+        <h2 class="hero-balance"><span v-if="scope.hasEffectiveQuotes">¥</span>{{ scope.hasEffectiveQuotes ? formatMoney(scope.assetValue) : '行情待补' }}</h2>
         <p class="hero-meta">
           {{ scopedFunds.length }} 只基金 · 持仓成本 {{ formatMoney(scope.cost) }}
           <template v-if="scope.pendingBuyAmount > 0"> · 含待确认 ¥{{ formatMoney(scope.pendingBuyAmount) }}</template>
@@ -1404,33 +1437,6 @@ function goBack(): void {
         </div>
       </section>
 
-      <div class="funds-actions">
-        <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
-        <button
-          type="button"
-          class="action-primary"
-          :disabled="overview.positions.length === 0"
-          @click="openSheet('buy')"
-        >
-          买入
-        </button>
-        <button
-          type="button"
-          class="action-secondary"
-          :disabled="overview.positions.length === 0"
-          @click="openSheet('sell')"
-        >
-          卖出
-        </button>
-        <button
-          type="button"
-          class="action-secondary"
-          :disabled="overview.positions.length === 0"
-          @click="openSheet('quote')"
-        >
-          更新净值
-        </button>
-      </div>
 
       <div class="group-bar">
         <div class="group-chips" role="tablist" aria-label="投资分组">
@@ -1449,6 +1455,14 @@ function goBack(): void {
         <button type="button" class="group-manage" @click="openGroupSheet">管理</button>
       </div>
 
+      <div class="view-tabs ui-segmented" role="tablist" aria-label="投资视图">
+        <button type="button" role="tab" :aria-selected="activeView === 'positions'" :class="{ active: activeView === 'positions' }" @click="setView('positions')">持仓</button>
+        <button type="button" role="tab" :aria-selected="activeView === 'returns'" :class="{ active: activeView === 'returns' }" @click="setView('returns')">收益</button>
+        <button type="button" role="tab" :aria-selected="activeView === 'activities'" :class="{ active: activeView === 'activities' }" @click="setView('activities')">交易</button>
+        <button type="button" role="tab" :aria-selected="activeView === 'plans'" :class="{ active: activeView === 'plans' }" @click="setView('plans')">定投</button>
+      </div>
+      <details v-if="allFunds.length" class="portfolio-settings ui-disclosure">
+        <summary><span><AppIcon name="filter" /> {{ searchText.trim() ? `已筛选：${searchText.trim()}` : '搜索、排序与指标' }}</span></summary>
       <div class="portfolio-toolbar">
         <input v-model="searchText" type="search" placeholder="搜索基金名称、代码或平台" aria-label="搜索基金" />
         <select v-model="sortKey" aria-label="排序方式">
@@ -1470,8 +1484,16 @@ function goBack(): void {
       </div>
       <p v-if="metricNotice" class="summary-note">{{ metricNotice }}</p>
 
+      </details>
+      <div v-if="searchText.trim()" class="active-search">
+        <span>当前仅显示搜索结果</span>
+        <button type="button" class="back-link" @click="searchText = ''">清除搜索</button>
+      </div>
+
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
+      <details v-if="scopedPendingBuys.length || scopedSellApplications.length || scopedPendingArrivals.length" class="pending-overview ui-disclosure">
+        <summary><span>待处理交易</span><b>{{ scopedPendingBuys.length + scopedSellApplications.length + scopedPendingArrivals.length }} 笔待核对</b></summary>
       <template v-if="scopedPendingBuys.length">
         <div class="section-head">
           <h2>买入待确认</h2>
@@ -1536,12 +1558,9 @@ function goBack(): void {
         </section>
       </template>
 
-      <div class="view-tabs" role="tablist" aria-label="投资视图">
-        <button type="button" :class="{ active: activeView === 'positions' }" @click="setView('positions')">持仓</button>
-        <button type="button" :class="{ active: activeView === 'returns' }" @click="setView('returns')">收益</button>
-        <button type="button" :class="{ active: activeView === 'activities' }" @click="setView('activities')">交易</button>
-        <button type="button" :class="{ active: activeView === 'plans' }" @click="setView('plans')">定投</button>
-      </div>
+
+
+      </details>
 
       <template v-if="activeView === 'positions' || activeView === 'returns'">
         <FundReturnsPanel
@@ -1558,6 +1577,11 @@ function goBack(): void {
           </span>
         </div>
 
+        <div v-if="sortedFunds.length" class="fund-columns" aria-hidden="true">
+          <span>基金 / 类别</span>
+          <div><span v-for="metric in metricDisplay(sortedFunds[0]!)" :key="metric.key">{{ metric.label }}</span></div>
+          <span />
+        </div>
         <section v-if="sortedFunds.length" class="fund-list">
           <article v-for="fund in sortedFunds" :key="fund.key" class="fund-card">
             <header
@@ -1565,34 +1589,24 @@ function goBack(): void {
               tabindex="0"
               @click="toggleFund(fund.key)"
               @keydown.enter="toggleFund(fund.key)"
+              @keydown.space.prevent="toggleFund(fund.key)"
+              :aria-expanded="expandedFund === fund.key"
             >
               <div class="fund-title">
                 <strong>{{ fund.name }}</strong>
                 <small>
                   {{ fund.groupName ?? '未分组' }} · {{ fund.platformCount }} 个平台 · 净值日期
-                  {{ fund.latestNetValueDate ? formatBusinessDate(fund.latestNetValueDate) : '待补' }}
+                  {{ fund.latestNetValueDate ? fund.latestNetValueDate.slice(5) : '待补' }}
                 </small>
               </div>
-              <div class="fund-headline">
-                <template v-if="activeView === 'positions'">
-                  <b>{{ fund.hasEffectiveQuotes ? `¥${formatMoney(fund.assetValue)}` : '行情待补' }}</b>
-                </template>
-                <template v-else>
-                  <b :class="{ profit: fund.holdingProfit > 0, loss: fund.holdingProfit < 0 }">
-                    {{ fund.hasEffectiveQuotes ? formatSignedMoney(fund.holdingProfit) : '行情待补' }}
-                  </b>
-                  <small>{{ fund.hasEffectiveQuotes && fund.cost > 0 ? `${formatSignedMoney(fund.holdingProfit / fund.cost * 100)}%` : '—' }}</small>
-                </template>
-                <span class="expand-mark">{{ expandedFund === fund.key ? '收起' : '展开' }}</span>
+              <div class="fund-metrics">
+                <div v-for="metric in metricDisplay(fund)" :key="metric.key">
+                  <span>{{ metric.label }}</span>
+                  <b :class="metric.tone">{{ metric.value }}</b>
+                </div>
               </div>
+              <AppIcon class="expand-mark" :class="{ expanded: expandedFund === fund.key }" name="chevron" />
             </header>
-
-            <div class="fund-metrics">
-              <div v-for="metric in metricDisplay(fund)" :key="metric.key">
-                <span>{{ metric.label }}</span>
-                <b :class="metric.tone">{{ metric.value }}</b>
-              </div>
-            </div>
 
             <div v-if="expandedFund === fund.key" class="fund-detail">
               <label class="fund-group-select">
@@ -1642,11 +1656,14 @@ function goBack(): void {
           </article>
         </section>
 
-        <div v-else class="empty-state">
-          <p>{{ allFunds.length ? '当前分组或搜索条件下没有基金。' : '还没有基金持仓' }}</p>
-          <button v-if="!allFunds.length" type="button" class="primary-button" @click="openSheet('opening')">录入已有持仓</button>
-          <button v-else type="button" class="secondary-button" @click="selectGroup('all'); searchText = ''">查看全部基金</button>
-        </div>
+        <EmptyState
+          v-else
+          icon="chart"
+          :title="allFunds.length ? '没有找到基金' : '从第一笔持仓开始'"
+          :description="allFunds.length ? '试试其他分组，或清除搜索条件。' : '录入已有基金，查看持仓价值与收益。'"
+          :action-label="allFunds.length ? '查看全部基金' : '录入已有持仓'"
+          @action="allFunds.length ? (selectGroup('all'), searchText = '') : openSheet('opening')"
+        />
 
         <p v-if="!scope.historyConfirmed || !scope.hasEffectiveQuotes" class="summary-note">
           部分持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。
@@ -1672,7 +1689,7 @@ function goBack(): void {
           </div>
         </section>
 
-        <p v-else class="summary-note">当前范围还没有基金交易记录。</p>
+        <EmptyState v-else compact icon="ledger" title="还没有交易记录" description="记录买入、赎回等投资变动后，可在这里查看。" />
       </template>
 
       <template v-else>
@@ -1699,14 +1716,16 @@ function goBack(): void {
             <RouterLink to="/plans">管理</RouterLink>
           </article>
         </section>
-        <p v-else class="summary-note">
-          当前范围还没有基金定投计划。<RouterLink to="/plans">去自动记账设置</RouterLink>。
-        </p>
+        <EmptyState v-else compact icon="clock" title="还没有定投计划" description="为固定投入设置计划，到期后按计划记账。" action-label="设置定投计划" @action="router.push('/plans')" />
       </template>
 
+      <details class="fund-help ui-disclosure">
+        <summary>投资统计与历史核对</summary>
+        <RouterLink class="back-link" to="/history">历史核对 ›</RouterLink>
       <p class="summary-note">
         基金买卖属于资产流转，不计入生活收支；净值更新只影响估值。分组只改变查看范围，不改持仓、成本和收益。
       </p>
+      </details>
     </template>
 
     <BottomSheet
@@ -2026,9 +2045,8 @@ function goBack(): void {
 }
 
 .funds-hero {
-  padding: 19px 17px 17px;
-  border-radius: 14px;
-  background: var(--color-brand-soft);
+  padding: 0 3px 22px;
+  background: transparent;
 }
 
 .hero-label {
@@ -2051,7 +2069,7 @@ function goBack(): void {
 
 .hero-balance {
   margin: 8px 0 7px;
-  font-size: 38px;
+  font-size: 40px;
   font-weight: 600;
   letter-spacing: -1.1px;
   line-height: 1.2;
@@ -2079,15 +2097,11 @@ function goBack(): void {
   margin-top: 22px;
 }
 
-.hero-metrics > div + div {
-  padding-left: 12px;
-  border-left: 1px solid var(--color-border-subtle);
-}
 
 .hero-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .hero-metrics b {
@@ -2107,19 +2121,86 @@ function goBack(): void {
   color: var(--color-finance-loss);
 }
 
-.funds-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  margin-top: 14px;
+.hero-search {
+  overflow: hidden;
+  max-width: 170px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
+.active-search {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -8px 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.investment-actions {
+  position: relative;
+}
+.investment-actions > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.investment-actions > summary::-webkit-details-marker {
+  display: none;
+}
+.funds-actions {
+  position: absolute;
+  top: 43px;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 6px;
+  width: 180px;
+  padding: 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 14px;
+  background: var(--color-bg-surface);
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
 .funds-actions button {
   min-height: 42px;
-  padding: 0 4px;
-  border-radius: 9px;
-  font-size: 11px;
-  font-weight: 550;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: left;
+}
+.portfolio-settings {
+  margin: 0 0 14px;
+}
+.portfolio-settings summary .app-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+}
+.portfolio-settings[open] {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.pending-overview {
+  margin: 0 0 18px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--color-brand-soft);
+}
+.pending-overview summary {
+  color: var(--color-brand);
+}
+.pending-overview summary b {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+}
+.pending-overview[open] {
+  padding-bottom: 12px;
+}
+.pending-overview .section-head {
+  margin-top: 14px;
+}
+.fund-help {
+  margin-top: 24px;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .action-primary {
@@ -2153,7 +2234,8 @@ function goBack(): void {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 0;
+  margin-bottom: 16px;
 }
 
 .group-chips {
@@ -2182,8 +2264,8 @@ function goBack(): void {
 
 .group-chips button.active {
   border-color: var(--color-brand);
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
   font-weight: 600;
 }
 
@@ -2245,7 +2327,7 @@ function goBack(): void {
 }
 
 .metric-picker button {
-  min-height: 26px;
+  min-height: 32px;
   padding: 0 9px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 999px;
@@ -2261,128 +2343,138 @@ function goBack(): void {
 }
 
 .view-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  margin-top: 20px;
-  padding: 4px;
-  border-radius: 11px;
-  background: var(--color-bg-muted, var(--color-brand-soft));
+  margin-bottom: 8px;
 }
-
-.view-tabs button {
-  min-height: 34px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-}
-
-.view-tabs button.active {
-  background: var(--color-bg-surface);
-  box-shadow: 0 1px 4px rgba(24, 32, 51, 0.08);
-  color: var(--color-brand);
-  font-weight: 600;
-}
-
 .fund-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.fund-card {
   overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--color-bg-surface);
 }
-
+.fund-card {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.fund-card:last-child {
+  border-bottom: 0;
+}
+.fund-card > header, .fund-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 2.1fr) 12px;
+  align-items: center;
+  gap: 8px;
+}
 .fund-card > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px 14px 0;
+  min-height: 84px;
+  padding: 10px 10px;
   cursor: pointer;
 }
-
+.fund-card > header:hover {
+  background: var(--color-bg-hover);
+}
 .fund-title {
   min-width: 0;
 }
-
 .fund-title strong {
   display: block;
+  color: var(--color-text-primary);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 550;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
-
 .fund-title small {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 9px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.7;
 }
-
-.fund-headline {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-
-.fund-headline b {
-  font-size: 15px;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-}
-
-.fund-headline small {
-  color: var(--color-text-secondary);
-  font-size: 9px;
-}
-
-.expand-mark {
-  color: var(--color-brand);
-  font-size: 9px;
-}
-
 .fund-metrics {
-  display: flex;
-  gap: 0;
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--color-border-subtle);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  text-align: right;
 }
-
 .fund-metrics > div {
-  flex: 1;
   min-width: 0;
 }
-
-.fund-metrics > div + div {
-  padding-left: 10px;
-  border-left: 1px solid var(--color-border-subtle);
-}
-
 .fund-metrics span {
-  display: block;
-  color: var(--color-text-secondary);
-  font-size: 9px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-
 .fund-metrics b {
   display: block;
-  margin-top: 4px;
-  overflow: hidden;
   font-size: 11px;
   font-weight: 550;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+.fund-columns {
+  padding: 10px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+.fund-columns > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  text-align: right;
+}
+.expand-mark {
+  width: 12px;
+  height: 16px;
+  color: var(--color-text-secondary);
+}
+.expand-mark.expanded {
+  transform: rotate(90deg);
+}
+
+@media (max-width: 360px) {
+  .fund-columns {
+    display: none;
+  }
+  .fund-card > header {
+    grid-template-columns: minmax(0, 1fr) 12px;
+    row-gap: 10px;
+    padding: 14px 12px;
+  }
+  .fund-title {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .fund-title small {
+    font-size: 11px;
+  }
+  .expand-mark {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .fund-metrics {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    text-align: left;
+  }
+  .fund-metrics span {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    margin-bottom: 5px;
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    clip-path: none;
+  }
+  .fund-metrics b {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
 }
 
 .fund-detail {

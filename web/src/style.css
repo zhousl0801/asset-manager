@@ -1,5 +1,6 @@
 html {
   background: var(--color-bg-page);
+  color-scheme: light;
 }
 
 body {
@@ -24,6 +25,8 @@ textarea {
 
 button {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 button:disabled {
@@ -147,8 +150,103 @@ summary:focus-visible {
   text-decoration: underline;
 }
 
-a.back-link {
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 12px;
+  line-height: 1.5;
   text-decoration: none;
+}
+
+.back-link:hover {
+  background: var(--color-bg-hover);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-brand);
+}
+
+.icon-button:hover {
+  background: var(--color-brand-soft);
+}
+.icon-button:active {
+  background: var(--color-bg-selected);
+}
+
+.ui-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ui-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.ui-disclosure > summary::after {
+  content: '⌄';
+  color: var(--color-brand);
+  font-size: 16px;
+}
+.ui-disclosure[open] > summary::after {
+  transform: rotate(180deg);
+}
+.ui-disclosure > summary:hover {
+  color: var(--color-brand);
+}
+
+.ui-segmented {
+  display: flex;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.ui-segmented button {
+  position: relative;
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.ui-segmented button.active {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.ui-segmented button.active::after {
+  position: absolute;
+  right: 28%;
+  bottom: -1px;
+  left: 28%;
+  height: 2px;
+  background: var(--color-brand);
+  content: '';
+}
+.ui-segmented button:hover {
+  color: var(--color-brand);
 }
 
 .form-stack {

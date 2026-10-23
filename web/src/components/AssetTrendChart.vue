@@ -6,13 +6,15 @@ import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/comp
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { buildTrendOption } from '../utils/trend'
-import type { AssetTrend } from '../types/trend'
+import type { AssetTrend, AssetTrendPoint } from '../types/trend'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer])
 
 const props = defineProps<{
   trend: AssetTrend
 }>()
+
+const emit = defineEmits<{ select: [point: AssetTrendPoint] }>()
 
 const container = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
@@ -28,6 +30,15 @@ onMounted(() => {
 
   chart = echarts.init(container.value, undefined, { renderer: 'canvas' })
   chart.setOption(buildTrendOption(props.trend) as EChartsOption)
+  chart.on('updateAxisPointer', (event: unknown) => {
+    const payload = event as { axesInfo?: { axisDim: string; value: number | string }[] }
+    const value = payload.axesInfo?.find((axis) => axis.axisDim === 'x')?.value
+    const point = typeof value === 'number' && Number.isInteger(value)
+      ? props.trend.points[value]
+      : props.trend.points.find((item) => item.date === value)
+
+    if (point) emit('select', point)
+  })
   window.addEventListener('resize', resize)
 })
 
@@ -53,6 +64,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .trend-chart {
   width: 100%;
-  height: 220px;
+  height: 152px;
 }
 </style>

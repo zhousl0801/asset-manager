@@ -5,6 +5,8 @@ import { RouterLink, useRouter } from 'vue-router'
 import { fetchAssetTrend, fetchMonthChange } from '../api/ledger'
 import { fetchPlanOverview } from '../api/plans'
 import AppNav from '../components/AppNav.vue'
+import AppIcon from '../components/AppIcon.vue'
+import EmptyState from '../components/EmptyState.vue'
 import AssetTrendChart from '../components/AssetTrendChart.vue'
 import { useLedgerStore } from '../stores/ledger'
 import { formatBusinessDate, formatMoney, formatSignedMoney } from '../utils/format'
@@ -15,7 +17,7 @@ import type { AssetTrend, AssetTrendPoint, TrendRange } from '../types/trend'
 interface AssetCard {
   key: string
   label: string
-  mark: string
+  icon: string
   amount: number | null
   note: string
   isConfigured: boolean
@@ -43,6 +45,7 @@ const ledgerStore = useLedgerStore()
 const { overview, isLoading, errorMessage } = storeToRefs(ledgerStore)
 const trend = ref<AssetTrend | null>(null)
 const trendRange = ref<TrendRange>('month')
+const trendSelection = ref<AssetTrendPoint | null>(null)
 const trendLoading = ref(false)
 const trendError = ref('')
 const monthChange = ref<MonthChange | null>(null)
@@ -68,7 +71,7 @@ const assetCards = computed<AssetCard[]>(() => {
     {
       key: 'cash',
       label: '现金',
-      mark: '¥',
+      icon: 'cash',
       amount: ledger.cash.amount,
       note: ledger.cash.note ?? '统一余额',
       isConfigured: ledger.cash.isConfigured,
@@ -77,7 +80,7 @@ const assetCards = computed<AssetCard[]>(() => {
     {
       key: 'fund',
       label: '基金',
-      mark: '↗',
+      icon: 'chart',
       amount: ledger.fund.amount,
       note: ledger.fund.note ?? '尚未录入',
       isConfigured: ledger.fund.isConfigured,
@@ -86,7 +89,7 @@ const assetCards = computed<AssetCard[]>(() => {
     {
       key: 'provident',
       label: '公积金',
-      mark: '住',
+      icon: 'home',
       amount: ledger.providentFund.amount,
       note: ledger.providentFund.note ?? '尚未录入',
       isConfigured: ledger.providentFund.isConfigured,
@@ -95,7 +98,7 @@ const assetCards = computed<AssetCard[]>(() => {
     {
       key: 'gold',
       label: '积存金',
-      mark: '金',
+      icon: 'gold',
       amount: ledger.gold.amount,
       note: ledger.gold.note ?? '尚未录入',
       isConfigured: ledger.gold.isConfigured,
@@ -208,6 +211,7 @@ async function loadLedger(): Promise<void> {
 
 async function loadTrend(range: TrendRange): Promise<void> {
   trendRange.value = range
+  trendSelection.value = null
   trendLoading.value = true
   trendError.value = ''
 
@@ -217,6 +221,7 @@ async function loadTrend(range: TrendRange): Promise<void> {
     trend.value = null
     trendError.value = '趋势暂时无法读取，请稍后重试。'
   } finally {
+    trendSelection.value = null
     trendLoading.value = false
   }
 }
@@ -287,7 +292,7 @@ onMounted(loadLedger)
           <span class="change-toggle">{{ monthChangeExpanded ? '收起构成 ‹' : '· 查看构成 ›' }}</span>
         </button>
         <p v-else-if="monthChangeError" class="meta">{{ monthChangeError }}</p>
-        <p v-else-if="monthChange" class="meta">本月变化依据不足，完成资产录入并补全行情后可查看构成。</p>
+        <a v-else-if="monthChange" class="setup-hint" href="#asset-classes">补全资产，查看本月变化 <span>↓</span></a>
         <div v-if="monthChangeExpanded && monthChange?.isComplete" class="change-breakdown">
           <div><span>生活结余</span><b>{{ formatSignedMoney(monthChange.livingSurplus) }}</b></div>
           <div><span>公积金缴存</span><b>{{ formatSignedMoney(monthChange.providentDeposit) }}</b></div>
@@ -295,11 +300,9 @@ onMounted(loadLedger)
           <div><span>核对差额</span><b>{{ formatSignedMoney(monthChange.reconciliationDifference) }}</b></div>
         </div>
         <p class="meta">
-          统计截至 {{ formatBusinessDate(overview.asOfDate) }} · 起始 {{ formatBusinessDate(overview.startDate) }}
+          统计截至 {{ formatBusinessDate(overview.asOfDate) }}
         </p>
-        <p v-if="!overview.isComplete" class="meta">
-          {{ hasUnconfiguredAssets ? '部分资产尚未录入，点击资产卡片补充。' : '持仓日期或行情依据待确认，请前往历史核对。' }}
-        </p>
+
       </section>
 
       <section class="chart-panel">
@@ -320,23 +323,29 @@ onMounted(loadLedger)
           </div>
         </div>
         <div class="chart-readout">
-          <span>{{ trendLatest ? formatBusinessDate(trendLatest.date) : '按日重算' }}</span>
-          <b>{{ trendLatest && trendLatest.totalAssets !== null ? `¥${formatMoney(trendLatest.totalAssets)}` : '依据不足' }}</b>
+          <span>{{ (trendSelection ?? trendLatest) ? formatBusinessDate((trendSelection ?? trendLatest)!.date) : '按日重算' }}</span>
+          <b>{{ (trendSelection ?? trendLatest)?.totalAssets != null ? `¥${formatMoney((trendSelection ?? trendLatest)!.totalAssets)}` : '依据不足' }}</b>
         </div>
         <p v-if="trendLoading && !trend" class="hint">正在读取趋势…</p>
         <p v-else-if="trendError" class="hint">{{ trendError }}</p>
-        <AssetTrendChart v-else-if="trend && trend.points.length" :trend="trend" />
+        <AssetTrendChart v-else-if="trend && trend.points.length" :trend="trend" @select="trendSelection = $event" />
         <p v-else class="hint">还没有可展示的趋势数据。</p>
         <div class="chart-note">
           <span>点选日期查看历史总额</span>
-          <span class="tiny">{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}</span>
+          <details class="chart-help">
+            <summary>统计口径 ⓘ</summary>
+            <div class="chart-help-content">
+              <p>账本起始 {{ formatBusinessDate(overview.startDate) }}；{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}。</p>
+              <p v-for="note in trend?.notes ?? []" :key="note">{{ note }}</p>
+              <p>空白表示该日依据不足；虚线只表示已有依据的部分资产合计。</p>
+              <p v-if="!overview.isComplete">{{ hasUnconfiguredAssets ? '部分资产尚未录入，可在资产分类中补充。' : '持仓日期或行情待确认，请前往历史核对。' }}</p>
+            </div>
+          </details>
         </div>
-        <p v-for="note in trend?.notes ?? []" :key="note" class="hint">{{ note }}</p>
-        <p class="hint">完整总资产为空白表示该日依据不足；虚线为已有依据的部分资产合计，不作为完整总额。</p>
       </section>
 
       <div class="section-head">
-        <h2>资产分类</h2>
+        <h2 id="asset-classes">资产分类</h2>
         <span class="tiny">4 类资产</span>
       </div>
       <div class="asset-grid">
@@ -349,10 +358,10 @@ onMounted(loadLedger)
         >
           <div class="asset-head">
             <span>{{ asset.label }}</span>
-            <span class="asset-mark">{{ asset.mark }}</span>
+            <span class="asset-mark"><AppIcon :name="asset.icon" /></span>
           </div>
           <b>{{ asset.isConfigured ? (asset.amount === null ? '依据不足' : formatMoney(asset.amount)) : '未录入' }}</b>
-          <small>{{ asset.note }}</small>
+          <small>{{ asset.isConfigured ? asset.note : '点击补充 ›' }}</small>
         </RouterLink>
       </div>
 
@@ -383,7 +392,7 @@ onMounted(loadLedger)
 
       <div class="section-head">
         <h2>自动记账</h2>
-        <RouterLink class="text-btn" to="/plans">管理计划 ›</RouterLink>
+        <RouterLink v-if="planPreview.length" class="text-btn" to="/plans">管理计划 ›</RouterLink>
       </div>
       <div v-if="planOverview" class="plan-box">
         <RouterLink v-for="row in planPreview" :key="row.key" class="plan-row" to="/plans">
@@ -397,10 +406,10 @@ onMounted(loadLedger)
           </span>
           <span class="plan-amount">{{ row.amount === null ? '›' : `¥${formatMoney(row.amount)}` }}</span>
         </RouterLink>
-        <p v-if="!planPreview.length" class="hint">还没有自动记账计划。</p>
+        <EmptyState v-if="!planPreview.length" compact icon="clock" title="让固定收支自动记录" description="工资、缴存和定投，到期后按计划记账。" action-label="设置自动记账" @action="router.push('/plans')" />
       </div>
       <p v-else-if="planError" class="hint">{{ planError }}</p>
-      <p class="tiny plan-note">计划执行异常会在这里显示，并保留处理入口。</p>
+      <p v-if="planPreview.length" class="tiny plan-note">待处理计划会在这里提醒。</p>
     </template>
 
     <AppNav />
@@ -446,7 +455,7 @@ onMounted(loadLedger)
 }
 
 .total {
-  padding: 0 3px 22px;
+  padding: 0 3px 24px;
 }
 
 .total-label {
@@ -540,6 +549,7 @@ onMounted(loadLedger)
 
 .chart-panel {
   margin-bottom: 24px;
+  position: relative;
   padding: 17px 13px 11px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 13px;
@@ -658,6 +668,11 @@ onMounted(loadLedger)
   align-items: center;
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+
+.asset-mark .app-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .asset-mark {
@@ -846,6 +861,47 @@ onMounted(loadLedger)
   color: var(--color-text-secondary);
   font-size: 10px;
   line-height: 1.7;
+}
+
+.setup-hint {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 2px;
+  color: var(--color-brand);
+  font-size: 12px;
+  text-decoration: none;
+}
+.chart-help {
+  position: static;
+  color: var(--color-brand);
+}
+.chart-help summary {
+  min-height: 28px;
+  list-style: none;
+  cursor: pointer;
+}
+.chart-help summary::-webkit-details-marker {
+  display: none;
+}
+.chart-help-content {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% - 6px);
+  right: 0;
+  left: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  box-shadow: 0 8px 24px var(--color-shadow);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.chart-help-content p {
+  margin: 4px 0;
 }
 
 .tiny {
