@@ -16,7 +16,7 @@
 
 开发记录先看[功能迭代总览](docs/development/README.md)；分轮详情：[现金闭环与资产流转](docs/development/2026-10-21-开发记录-现金闭环与资产流转.md)、[G0 正确性收口](docs/development/2026-10-21-开发记录-G0正确性收口.md)、[G1 业务事实与历史重算](docs/development/2026-10-22-开发记录-G1业务事实与历史重算.md)、[G2 基金买入待确认](docs/development/2026-10-22-开发记录-G2基金买入待确认.md)、[G2 基金赎回闭环](docs/development/2026-10-22-开发记录-G2基金赎回闭环.md)、[G2 积存金卖出待到账](docs/development/2026-10-22-开发记录-G2积存金卖出待到账.md)、[真实行情接入](docs/development/2026-10-22-开发记录-真实行情接入.md)、[自动记账计划与后台任务](docs/development/2026-10-22-开发记录-自动记账计划与后台任务.md)、[完整趋势图](docs/development/2026-10-22-开发记录-完整趋势图.md)、[首页原型对齐与本月变化](docs/development/2026-10-22-开发记录-首页原型对齐与本月变化.md)、[分类维护与账本图表](docs/development/2026-10-22-开发记录-分类维护与账本图表.md)、[投资分组与组合视角](docs/development/2026-10-22-开发记录-投资分组与组合视角.md)、[投资收益走势与收益日历](docs/development/2026-10-22-开发记录-投资收益走势与收益日历.md)、[数据导出与完整备份恢复](docs/development/2026-10-22-开发记录-数据导出与完整备份恢复.md)、[行情定时刷新与失败重试](docs/development/2026-10-23-开发记录-行情定时刷新与失败重试.md)、[资产总览口径与首页重构](docs/development/2026-10-23-开发记录-资产总览口径与首页重构.md)。
 
-本轮已完成四个重点页面的 [UI 收口与原型对照验收](docs/development/2026-10-23-开发记录-UI收口与原型对照验收.md)，并完成 [资产总览口径与首页重构](docs/development/2026-10-23-开发记录-资产总览口径与首页重构.md)。相关改动已提交：`5d300e4`（UI 收口与原型对照验收）和 `f8fb4c8`（资产总览口径与首页重构）；功能分支 `feat/g2-inflight-transactions` 已合入 `main` 并推送，仓库已加入最小 CI（后端构建 / 测试，前端类型检查 / 测试 / 构建）。尚未部署或执行云端写入。后续范围：截图识别、真实 iPhone / PWA 验收、云端部署；当前仅本人使用，认证暂缓。多实例部署前需补充分布式任务锁和运行监控。
+本轮已完成四个重点页面的 [UI 收口与原型对照验收](docs/development/2026-10-23-开发记录-UI收口与原型对照验收.md)，并完成 [资产总览口径与首页重构](docs/development/2026-10-23-开发记录-资产总览口径与首页重构.md)。相关改动已提交：`5d300e4`（UI 收口与原型对照验收）和 `f8fb4c8`（资产总览口径与首页重构）；积存金自动报价修复提交为 `d89b312`，最小 CI 与本文档同步提交为 `adc1aa9`；功能分支 `feat/g2-inflight-transactions` 已合入 `main` 并推送，仓库已加入最小 CI（后端构建 / 测试，前端类型检查 / 测试 / 构建）。尚未部署或执行云端写入。后续范围：截图识别、真实 iPhone / PWA 验收、云端部署；当前仅本人使用，认证暂缓。多实例部署前需补充分布式任务锁和运行监控。
 
 ## 技术基线
 
@@ -250,7 +250,7 @@ dotnet tool restore
 dotnet ef database update --project src/AssetKeeper.Infrastructure --startup-project src/AssetKeeper.Api
 ```
 
-原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，现有开发库已应用至第 11 个；投资分组新增第十二个迁移 `AddFundGroups`，使用分组接口前需先备份并应用该迁移；资产覆盖新增第十三个迁移 `AddAssetCoverage`（账本表增加“不持有”和“已确认覆盖”四个布尔列），已在备份后应用到现有开发库。发现多个历史账本时迁移会主动拒绝，不删除数据。
+原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，投资分组新增第十二个迁移 `AddFundGroups`，资产覆盖新增第十三个迁移 `AddAssetCoverage`（账本表增加“不持有”和“已确认覆盖”四个布尔列）；现有开发库已应用至第 13 个迁移，使用分组接口前无需再补迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
 
 ## 本地开发
 
