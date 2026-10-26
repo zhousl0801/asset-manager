@@ -456,7 +456,6 @@ function goBack(): void {
         </section>
       </template>
     </template>
-    <RouterLink class="back-link ledger-history" to="/history">历史核对与资产回看 ›</RouterLink>
     <AppNav />
   </main>
 </template>

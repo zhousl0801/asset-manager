@@ -150,7 +150,6 @@ function goBack(): void {
     <header class="provident-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>公积金</h1>
-      <RouterLink class="back-link" to="/history">历史核对</RouterLink>
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取公积金…</p>
@@ -191,6 +190,8 @@ function goBack(): void {
         <button type="button" class="action-primary" @click="openSheet('deposit')">补记缴存</button>
         <button type="button" class="action-secondary" @click="openSheet('withdrawal')">记录提取</button>
       </div>
+      <RouterLink class="monthly-deposit-link" :to="{ name: 'plans', query: { new: 'providentDeposit' } }">设置每月缴存 ›</RouterLink>
+      <p class="form-note">按计划自动记入账本，不会向单位或公积金账户发起真实缴款。</p>
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
       <p v-if="!overview.isConfigured" class="hint">

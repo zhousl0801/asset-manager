@@ -567,7 +567,6 @@ function goBack(): void {
     <header class="gold-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>平台积存金</h1>
-      <RouterLink class="back-link" to="/history">历史核对</RouterLink>
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取积存金…</p>
@@ -665,7 +664,7 @@ function goBack(): void {
         尚未记录积存金持仓。可先录入已有持仓，或直接记录买入。
       </p>
 
-      <p v-if="!overview.historyConfirmed || !overview.hasEffectiveQuote" class="hint">持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。</p>
+      <p v-if="!overview.historyConfirmed || !overview.hasEffectiveQuote" class="hint">持仓日期或行情依据不足，当前估值可能不完整。</p>
       <div class="section-head">
         <h2>交易与持仓记录</h2>
         <span class="meta">按业务日期</span>

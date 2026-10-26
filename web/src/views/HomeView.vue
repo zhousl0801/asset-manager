@@ -276,9 +276,6 @@ onMounted(loadLedger)
     <header class="home-header">
       <p class="brand">资产管家</p>
       <div class="header-actions">
-        <RouterLink class="icon-btn" to="/history" aria-label="历史核对">
-          <AppIcon name="clock" />
-        </RouterLink>
         <button type="button" class="icon-btn" aria-label="添加记录或资产" @click="openAddSheet">
           <AppIcon name="plus" />
         </button>

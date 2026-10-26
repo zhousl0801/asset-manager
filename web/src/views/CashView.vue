@@ -267,7 +267,6 @@ function handleKeydown(event: KeyboardEvent): void {
       <h1>现金</h1>
       <button type="button" class="reconcile-link" @click="openReconcile">核对余额</button>
     </header>
-    <RouterLink class="back-link history-entry-link" to="/history">历史核对与资产回看 ›</RouterLink>
 
     <p v-if="isLoading && !overview" class="state">正在读取现金…</p>
 

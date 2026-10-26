@@ -4,7 +4,6 @@ import HomeView from '../views/HomeView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/history', name: 'history', component: () => import('../views/HistoryView.vue') },
     { path: '/plans', name: 'plans', component: () => import('../views/PlanView.vue') },
     {
       path: '/',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   fetchPlanOverview,
   pausePlan,
@@ -35,6 +35,7 @@ import type {
 } from '../types/plan'
 
 const router = useRouter()
+const route = useRoute()
 const today = todayInBusinessTimeZone()
 const overview = ref<PlanOverview | null>(null)
 const positions = ref<FundPosition[]>([])
@@ -124,7 +125,12 @@ watch(
   }
 )
 
-onMounted(load)
+onMounted(() => {
+  if (route.query.new === 'providentDeposit' || route.query.new === 'salaryIncome') {
+    openNew(route.query.new)
+  }
+  void load()
+})
 
 async function load(): Promise<void> {
   isLoading.value = true
@@ -390,7 +396,6 @@ function goBack(): void {
     <header class="plan-header">
       <button type="button" class="back-link" @click="goBack">‹ 总览</button>
       <h1>自动记账</h1>
-      <RouterLink class="back-link" to="/history">历史核对</RouterLink>
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取自动计划…</p>

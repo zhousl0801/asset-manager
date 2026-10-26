@@ -1575,7 +1575,7 @@ function goBack(): void {
         />
 
         <p v-if="!scope.historyConfirmed || !scope.hasEffectiveQuotes" class="summary-note">
-          部分持仓日期或行情依据待核对，当前缓存仅供核对，请到历史核对确认。
+          部分持仓日期或行情依据不足，当前估值可能不完整。
         </p>
       </template>
 
@@ -1629,8 +1629,7 @@ function goBack(): void {
       </template>
 
       <details class="fund-help ui-disclosure">
-        <summary>投资统计与历史核对</summary>
-        <RouterLink class="back-link" to="/history">历史核对 ›</RouterLink>
+        <summary>投资统计</summary>
       <p class="summary-note">
         基金买卖属于资产流转，不计入生活收支；净值更新只影响估值。分组只改变查看范围，不改持仓、成本和收益。
       </p>
