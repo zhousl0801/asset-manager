@@ -113,7 +113,7 @@ public sealed class BatchQuoteRefreshTests
     {
         var provider = new ScriptedGoldProvider(
             _ => throw new QuoteUnavailableException("金价暂时不可用"),
-            _ => new ExternalGoldQuote(910m, Today, "sina_shfe_au0", Now));
+            _ => new ExternalGoldQuote(910m, Today, "icbc", Now));
         var context = await CreateAsync(null, provider);
         await context.Gold.SaveHoldingAsync(
             new SaveGoldHoldingRequest(10m, 8000m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today),

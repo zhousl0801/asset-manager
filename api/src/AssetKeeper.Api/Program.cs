@@ -65,7 +65,7 @@ builder.Services.AddHttpClient<IFundQuoteProvider, EastmoneyFundQuoteProvider>((
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetKeeper/1.0");
 });
-builder.Services.AddHttpClient<IGoldQuoteProvider, SinaGoldQuoteProvider>((services, client) =>
+builder.Services.AddHttpClient<IGoldQuoteProvider, IcbcGoldQuoteProvider>((services, client) =>
 {
     var options = services.GetRequiredService<IOptions<QuoteProviderOptions>>().Value;
     client.BaseAddress = new Uri(options.GoldBaseUrl);

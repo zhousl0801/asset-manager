@@ -49,10 +49,11 @@ public sealed class FundReturnService
             return EmptyResult(range, today, today, ["当前分组没有基金持仓。"]);
         }
 
+        var familyKeys = FundIdentity.FamilyKeys(positions);
         var fundNames = positions
-            .GroupBy(position => position.Name, StringComparer.Ordinal)
+            .GroupBy(position => familyKeys[position.Id], StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-        var fundNameById = positions.ToDictionary(position => position.Id, position => position.Name);
+        var fundNameById = familyKeys;
         var groupNames = groups.ToDictionary(group => group.Id, group => group.Name);
         var anchorDate = anchor ?? today;
 
@@ -393,12 +394,13 @@ public sealed class FundReturnService
             ? Round(rows.Where(row => row.DailyProfit is not null).Sum(row => row.DailyProfit!.Value))
             : (decimal?)null;
         var coveredPositions = rows.Count(row => row.DailyProfit is not null);
+        var familyKeys = FundIdentity.FamilyKeys(positions);
         var disclosedFunds = rows
             .Where(row => row.HasDisclosure)
-            .Select(row => row.Name)
+            .Select(row => familyKeys[row.PositionId])
             .Distinct(StringComparer.Ordinal)
             .Count();
-        var totalFunds = rows.Select(row => row.Name).Distinct(StringComparer.Ordinal).Count();
+        var totalFunds = familyKeys.Values.Distinct(StringComparer.Ordinal).Count();
         var isComplete = coveredPositions == rows.Count;
 
         if (disclosedFunds == 0)
@@ -434,13 +436,15 @@ public sealed class FundReturnService
         Guid? groupId,
         bool ungrouped)
     {
+        var effectiveGroupIds = FundIdentity.EffectiveGroupIds(positions);
+
         if (groupId is not null)
         {
-            return positions.Where(position => position.FundGroupId == groupId.Value).ToList();
+            return positions.Where(position => effectiveGroupIds[position.Id] == groupId.Value).ToList();
         }
 
         return ungrouped
-            ? positions.Where(position => position.FundGroupId is null).ToList()
+            ? positions.Where(position => effectiveGroupIds[position.Id] is null).ToList()
             : positions.ToList();
     }
 
@@ -679,11 +683,11 @@ public sealed class FundReturnService
                 .Where(date => date is not null)
                 .OrderByDescending(date => date)
                 .FirstOrDefault();
-            var groupId = members.Select(position => position.FundGroupId).FirstOrDefault(id => id is not null);
+            var groupId = FundIdentity.EffectiveGroupIds(members)[members[0].Id];
 
             return new FundReturnSummaryDto(
                 item.Key,
-                item.Key,
+                members[0].Name,
                 groupId,
                 groupId is null ? null : groupNames.GetValueOrDefault(groupId.Value),
                 openingValue,

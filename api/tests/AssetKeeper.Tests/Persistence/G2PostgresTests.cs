@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AssetKeeper.Tests.Persistence;
 
+[Collection("PlanExecution")]
 public sealed class G2PostgresTests
 {
     private static readonly DateOnly Today = new(2026, 10, 21);

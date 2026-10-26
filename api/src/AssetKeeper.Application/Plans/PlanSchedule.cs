@@ -4,7 +4,7 @@ namespace AssetKeeper.Application.Plans;
 
 public static class PlanSchedule
 {
-    public static IReadOnlyList<PlanDuePeriod> GetDuePeriods(AutoPlan plan, DateOnly from, DateOnly toDate)
+    public static IReadOnlyList<PlanDuePeriod> GetDuePeriods(AutoPlan plan, DateOnly from, DateOnly toDate, TradingCalendar? calendar = null)
     {
         if (toDate < from || plan.GenerateFrom > toDate)
         {
@@ -14,7 +14,17 @@ public static class PlanSchedule
         var start = plan.GenerateFrom > from ? plan.GenerateFrom : from;
         var periods = new List<PlanDuePeriod>();
 
-        if (plan.Cycle == AutoPlanCycle.Monthly)
+        if (plan.Cycle == AutoPlanCycle.TradingDay)
+        {
+            for (var date = start; date <= toDate; date = date.AddDays(1))
+            {
+                if ((calendar ?? TradingCalendar.Default).GetDay(date).IsTradingDay)
+                {
+                    periods.Add(new PlanDuePeriod(PeriodKeyFor(plan, date), date, plan.Time));
+                }
+            }
+        }
+        else if (plan.Cycle == AutoPlanCycle.Monthly)
         {
             var cursor = new DateOnly(start.Year, start.Month, 1);
 
@@ -47,16 +57,21 @@ public static class PlanSchedule
         return periods;
     }
 
-    public static PlanDuePeriod? GetNextDue(AutoPlan plan, DateOnly from)
+    public static PlanDuePeriod? GetNextDue(AutoPlan plan, DateOnly from, TradingCalendar? calendar = null)
     {
         var start = plan.GenerateFrom > from ? plan.GenerateFrom : from;
-        var periods = GetDuePeriods(plan, start, start.AddYears(2));
+        var periods = GetDuePeriods(plan, start, start.AddYears(2), calendar);
 
         return periods.Count == 0 ? null : periods[0];
     }
 
     public static string PeriodKeyFor(AutoPlan plan, DateOnly dueDate)
     {
+        if (plan.Cycle == AutoPlanCycle.TradingDay)
+        {
+            return $"T{dueDate:yyyy-MM-dd}";
+        }
+
         return plan.Cycle == AutoPlanCycle.Monthly
             ? $"{dueDate.Year:D4}-{dueDate.Month:D2}"
             : $"W{dueDate:yyyy-MM-dd}";
@@ -73,11 +88,16 @@ public static class PlanSchedule
         };
     }
 
-    public static bool IsDueOn(AutoPlan plan, DateOnly date)
+    public static bool IsDueOn(AutoPlan plan, DateOnly date, TradingCalendar? calendar = null)
     {
         if (date < plan.GenerateFrom)
         {
             return false;
+        }
+
+        if (plan.Cycle == AutoPlanCycle.TradingDay)
+        {
+            return (calendar ?? TradingCalendar.Default).GetDay(date).IsTradingDay;
         }
 
         if (plan.Cycle == AutoPlanCycle.Monthly)

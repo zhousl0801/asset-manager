@@ -1,4 +1,5 @@
 import type {
+  PlanOccurrence,
   PlanOverview,
   PlanPreview,
   PlanRunResult,
@@ -40,6 +41,19 @@ export function skipOccurrence(occurrenceId: string, requestId: string): Promise
 
 export function retryOccurrence(occurrenceId: string, requestId: string): Promise<unknown> {
   return apiRequest(`/api/ledger/plans/occurrences/${encodeURIComponent(occurrenceId)}/retry`, {
+    method: 'POST',
+    body: JSON.stringify({ requestId })
+  })
+}
+
+export interface RecordOccurrenceResult {
+  occurrence: PlanOccurrence
+  recorded: boolean
+  error: string | null
+}
+
+export function recordOccurrence(occurrenceId: string, requestId: string): Promise<RecordOccurrenceResult> {
+  return apiRequest<RecordOccurrenceResult>(`/api/ledger/plans/occurrences/${encodeURIComponent(occurrenceId)}/record`, {
     method: 'POST',
     body: JSON.stringify({ requestId })
   })

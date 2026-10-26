@@ -1,6 +1,7 @@
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Mutations;
 using AssetKeeper.Application.Provident;
 using AssetKeeper.Domain.Ledgers;
 using AssetKeeper.Domain.Plans;
@@ -114,6 +115,78 @@ public sealed class PlanExecutionService
             }
 
             return new PlanRunResultDto(created, completed, waiting, failed);
+        }
+        finally
+        {
+            RunLock.Release();
+        }
+    }
+
+    public Task<AssetOperationResult<RecordOccurrenceResultDto>> RecordOccurrenceAsync(
+        Guid occurrenceId,
+        PlanActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        return new MutationExecutor(_ledgerRepository, _dates).ExecuteAsync(
+            "plan.occurrence.record",
+            request.RequestId,
+            new { OccurrenceId = occurrenceId, Request = request },
+            () => RecordOccurrenceCoreAsync(occurrenceId, cancellationToken),
+            result => result.Status is AssetOperationStatus.Success,
+            result => result,
+            AssetOperationResult<RecordOccurrenceResultDto>.Conflict,
+            message => AssetOperationResult<RecordOccurrenceResultDto>.Invalid(new[] { message }),
+            cancellationToken);
+    }
+
+    private async Task<AssetOperationResult<RecordOccurrenceResultDto>> RecordOccurrenceCoreAsync(
+        Guid occurrenceId,
+        CancellationToken cancellationToken)
+    {
+        if (!await RunLock.WaitAsync(0, cancellationToken))
+        {
+            return AssetOperationResult<RecordOccurrenceResultDto>.Conflict("已有计划执行任务在运行，请稍后重试。");
+        }
+
+        try
+        {
+            var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+
+            if (ledger is null)
+            {
+                return AssetOperationResult<RecordOccurrenceResultDto>.NotFound("账本尚未初始化。");
+            }
+
+            var occurrence = await _planRepository.GetOccurrenceForUpdateAsync(
+                ledger.Id,
+                occurrenceId,
+                cancellationToken);
+
+            if (occurrence is null)
+            {
+                return AssetOperationResult<RecordOccurrenceResultDto>.NotFound("执行期次不存在。");
+            }
+
+            if (occurrence.Status is PlanOccurrenceStatus.Completed or PlanOccurrenceStatus.Skipped)
+            {
+                return AssetOperationResult<RecordOccurrenceResultDto>.Invalid(new[] { "已记账或已跳过的期次不能补记。" });
+            }
+
+            if (_dates.ToBusinessInstant(occurrence.DueDate, occurrence.DueTime) > _dates.UtcNow)
+            {
+                return AssetOperationResult<RecordOccurrenceResultDto>.Invalid(new[] { "该期次尚未到期，请等待自动执行。" });
+            }
+
+            // 补记沿用原期次的业务日期和金额；入账本身仍以期次标识作为 requestId 防重。
+            var status = await ExecuteOccurrenceAsync(ledger.Id, occurrence, cancellationToken);
+            var current = await _planRepository.GetOccurrenceForUpdateAsync(ledger.Id, occurrenceId, cancellationToken)
+                ?? occurrence;
+            var recorded = status == PlanOccurrenceStatus.Completed;
+
+            return AssetOperationResult<RecordOccurrenceResultDto>.Success(new RecordOccurrenceResultDto(
+                PlanService.Map(current),
+                recorded,
+                recorded ? null : current.ErrorMessage));
         }
         finally
         {

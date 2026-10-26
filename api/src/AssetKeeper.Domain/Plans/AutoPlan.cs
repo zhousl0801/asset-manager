@@ -76,7 +76,8 @@ public sealed class AutoPlan
         TimeOnly time,
         DateOnly startDate,
         Guid? fundPositionId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        DateOnly generationFloor)
     {
         if (type != Type)
         {
@@ -85,6 +86,11 @@ public sealed class AutoPlan
 
         SetValues(type, name, amount, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
         GenerateFrom = GenerateFrom > startDate ? GenerateFrom : startDate;
+        if (cycle == AutoPlanCycle.TradingDay && GenerateFrom < generationFloor)
+        {
+            GenerateFrom = generationFloor;
+        }
+
         UpdatedAt = now;
         Version++;
     }
@@ -157,7 +163,19 @@ public sealed class AutoPlan
             throw new ArgumentException("工资、缴存和提取计划仅支持每月周期。", nameof(cycle));
         }
 
-        if (cycle == AutoPlanCycle.Monthly)
+        if (!Enum.IsDefined(type) || !Enum.IsDefined(cycle))
+        {
+            throw new ArgumentException("计划类型或周期无效。");
+        }
+
+        if (cycle == AutoPlanCycle.TradingDay)
+        {
+            if (dayOfMonth is not null || dayOfWeek is not null)
+            {
+                throw new ArgumentException("交易日计划不填写每月日期或星期。");
+            }
+        }
+        else if (cycle == AutoPlanCycle.Monthly)
         {
             if (dayOfMonth is null || dayOfMonth < 1 || dayOfMonth > 31 || dayOfWeek is not null)
             {

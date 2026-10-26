@@ -17,7 +17,9 @@ public sealed record PlanDto(
     Guid? FundPositionId,
     string? FundPositionName,
     DateOnly? NextDueDate,
-    int Version);
+    int Version,
+    FundPlanTarget? FundTarget = null,
+    IReadOnlyList<DateOnly>? UpcomingDates = null);
 
 public sealed record PlanOccurrenceDto(
     Guid Id,
@@ -41,7 +43,8 @@ public sealed record PlanOverviewDto(
     int ActiveCount,
     DateOnly? NextDueDate,
     decimal CashBalance,
-    decimal ProvidentBalance);
+    decimal ProvidentBalance,
+    IReadOnlyList<TradingDayDto> CalendarDays);
 
 public sealed record SavePlanRequest(
     Guid? Id,
@@ -55,9 +58,15 @@ public sealed record SavePlanRequest(
     DateOnly StartDate,
     Guid? FundPositionId,
     Guid RequestId,
-    int? ExpectedVersion);
+    int? ExpectedVersion,
+    FundPlanTarget? FundTarget = null);
 
 public sealed record PlanActionRequest(Guid RequestId);
+
+public sealed record RecordOccurrenceResultDto(
+    PlanOccurrenceDto Occurrence,
+    bool Recorded,
+    string? Error);
 
 public sealed record PlanPreviewRequest(DateOnly Date, decimal? TrialCash);
 
@@ -78,10 +87,13 @@ public sealed record PlanPreviewDto(
     decimal ProvidentStart,
     decimal ProvidentEnd,
     IReadOnlyList<PlanPreviewRow> Rows,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    TradingDayDto? CalendarDay = null);
 
 public sealed record PlanRunResultDto(
     int CreatedOccurrences,
     int Completed,
     int Waiting,
     int Failed);
+
+public sealed record FundPlanTarget(string Name, string? Code, string? ShareClass);

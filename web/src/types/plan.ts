@@ -1,6 +1,6 @@
 export type PlanType = 'salaryIncome' | 'providentDeposit' | 'providentWithdrawal' | 'fundSip'
 
-export type PlanCycle = 'monthly' | 'weekly'
+export type PlanCycle = 'monthly' | 'weekly' | 'tradingDay'
 
 export type OccurrenceStatus = 'pending' | 'completed' | 'waiting' | 'failed' | 'skipped'
 
@@ -20,6 +20,8 @@ export interface AutoPlan {
   fundPositionName: string | null
   nextDueDate: string | null
   version: number
+  fundTarget?: FundPlanTarget | null
+  upcomingDates?: string[]
 }
 
 export interface PlanOccurrence {
@@ -46,6 +48,7 @@ export interface PlanOverview {
   nextDueDate: string | null
   cashBalance: number
   providentBalance: number
+  calendarDays?: TradingDay[]
 }
 
 export interface SavePlanInput {
@@ -61,6 +64,7 @@ export interface SavePlanInput {
   fundPositionId: string | null
   requestId: string
   expectedVersion?: number | null
+  fundTarget?: FundPlanTarget | null
 }
 
 export interface PlanPreviewRow {
@@ -82,6 +86,7 @@ export interface PlanPreview {
   providentEnd: number
   rows: PlanPreviewRow[]
   notes: string[]
+  calendarDay?: TradingDay
 }
 
 export interface PlanRunResult {
@@ -89,4 +94,29 @@ export interface PlanRunResult {
   completed: number
   waiting: number
   failed: number
+}
+
+export interface FundPlanTarget {
+  name: string
+  code: string | null
+  shareClass: string | null
+}
+
+export interface MarketDay {
+  market: string
+  name: string
+  year: number
+  isOpen: boolean
+  isHalfDay: boolean
+  usesWeekdayFallback: boolean
+  version: string | null
+  sourceUrl: string | null
+  publishedOn: string | null
+  verifiedOn: string | null
+}
+
+export interface TradingDay {
+  date: string
+  isTradingDay: boolean
+  markets: MarketDay[]
 }

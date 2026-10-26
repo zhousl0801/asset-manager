@@ -33,31 +33,38 @@ public sealed class QuoteProviderTests
     }
 
     [Fact]
-    public async Task SinaGoldQuote_ParsesCnyPerGramReference()
+    public async Task IcbcGoldQuote_ParsesAccumulationGoldActivePrice()
     {
-        const string payload = "var hq_str_nf_AU0=\"gold,141923,890.180,893.080,875.840,0.000,883.220,883.260,883.280,0.000,890.060,1,1,209927.000,231146,SH,AU,2026-10-22,1\";";
-        var provider = new SinaGoldQuoteProvider(CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new ByteArrayContent(Encoding.ASCII.GetBytes(payload))
-        }));
+        const string payload = """
+            {"sysdate":"2026-10-26 10:26:51","TranErrorCode":"","rf":[{"goldTypeNo":"JC001","RegPrice":"857.92","Active":"0","ProductName":"积存金","proCode":"080020000521","Reg":"2","HighPrice":"859.44","RegDate":"2026-10-26","ActivePrice":"858.01","SellPrice":"858.01","ActiveDate":"2026-10-26","LowPrice":"855.55"}],"TranErrorDisplayMsg":""}
+            """;
+        var provider = new IcbcGoldQuoteProvider(CreateClient(_ => JsonResponse(payload)));
 
         var quote = await provider.GetLatestAsync(CancellationToken.None);
 
-        Assert.Equal(883.280m, quote.Quote);
-        Assert.Equal(new DateOnly(2026, 10, 22), quote.EffectiveDate);
-        Assert.Equal("sina_shfe_au0", quote.Source);
+        Assert.Equal(858.01m, quote.Quote);
+        Assert.Equal(new DateOnly(2026, 10, 26), quote.EffectiveDate);
+        Assert.Equal("icbc", quote.Source);
     }
 
     [Fact]
-    public async Task SinaGoldQuote_WithEmptyPayload_ThrowsUnavailable()
+    public async Task IcbcGoldQuote_WithEmptyRecordList_ThrowsUnavailable()
     {
-        const string payload = "var hq_str_nf_AU0=\"\";";
-        var provider = new SinaGoldQuoteProvider(CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new ByteArrayContent(Encoding.ASCII.GetBytes(payload))
-        }));
+        const string payload = """{"sysdate":"2026-10-26 10:26:51","TranErrorCode":"","rf":[],"TranErrorDisplayMsg":""}""";
+        var provider = new IcbcGoldQuoteProvider(CreateClient(_ => JsonResponse(payload)));
 
         await Assert.ThrowsAsync<QuoteUnavailableException>(() => provider.GetLatestAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task IcbcGoldQuote_WithTranError_ThrowsUnavailable()
+    {
+        const string payload = """{"sysdate":"2026-10-26 10:26:51","TranErrorCode":"ERR","rf":[],"TranErrorDisplayMsg":"系统繁忙"}""";
+        var provider = new IcbcGoldQuoteProvider(CreateClient(_ => JsonResponse(payload)));
+
+        var exception = await Assert.ThrowsAsync<QuoteUnavailableException>(() => provider.GetLatestAsync(CancellationToken.None));
+
+        Assert.Equal("系统繁忙", exception.Message);
     }
 
     private static HttpClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)

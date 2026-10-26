@@ -172,7 +172,7 @@ function priceText(item: QuoteStatusItem): string {
           :disabled="refreshingScope !== null"
           @click="refresh('gold')"
         >
-          {{ refreshingScope === 'gold' ? '刷新中…' : '刷新参考金价' }}
+          {{ refreshingScope === 'gold' ? '刷新中…' : '刷新工行积存金' }}
         </button>
       </div>
     </section>
@@ -230,7 +230,7 @@ function priceText(item: QuoteStatusItem): string {
                 <strong>{{ item.name }}</strong>
                 <span class="quote-tag" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
               </div>
-              <small>{{ itemMeta(item) || (item.assetType === 'gold' ? '参考报价' : '未填写代码或平台') }}</small>
+              <small>{{ itemMeta(item) || (item.assetType === 'gold' ? '工行积存金报价' : '未填写代码或平台') }}</small>
             </div>
             <div class="quote-item-value">
               <b>{{ priceText(item) }}</b>

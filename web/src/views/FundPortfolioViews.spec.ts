@@ -258,7 +258,7 @@ test('a collapsed search keeps its scope visible and can be cleared', async () =
   view.unmount()
 })
 
-test('expanded fund keeps A and C share classes separate and shows platform rows', async () => {
+test('expanded fund keeps A and C share classes separate without channel rows', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
@@ -271,7 +271,9 @@ test('expanded fund keeps A and C share classes separate and shows platform rows
   expect(classes[0]!.text()).toContain('100.0000 份')
   expect(classes[1]!.text()).toContain('C 类')
   expect(classes[1]!.text()).toContain('50.0000 份')
-  expect(view.findAll('.fund-platform-row')).toHaveLength(2)
+  expect(view.findAll('.fund-platform-row')).toHaveLength(0)
+  expect(view.find('.fund-detail').text()).not.toContain('平台甲')
+  expect(view.find('.fund-detail').text()).toContain('按基金代码和类别匹配')
   expect(view.find('.fund-detail').text()).not.toContain('150.0000 份')
 
   view.unmount()

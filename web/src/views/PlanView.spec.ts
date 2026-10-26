@@ -120,3 +120,73 @@ test('preview shows the projected rows and run-now result', async () => {
   expect(view.find('.notice').text()).toContain('已记账 1')
   view.unmount()
 })
+
+
+test('trading-day SIP selects one share class across channels and sends a business target', async () => {
+  const position = { id: 'source-1', name: '测试基金', code: '000001', shareClass: 'C', platform: '渠道甲' }
+  mocks.funds.mockResolvedValue({ positions: [position, { ...position, id: 'source-2', platform: '渠道乙' }] })
+  mocks.save.mockResolvedValue({})
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+  await view.findAll('button').find(button => button.text() === '新建计划')!.trigger('click')
+  const select = (label: string) => [...document.querySelectorAll('label')].find(item => item.querySelector('span')?.textContent === label)!.querySelector('select')!
+  const type = select('计划类型')
+  type.value = 'fundSip'
+  type.dispatchEvent(new Event('change', { bubbles: true }))
+  await flushPromises()
+  const target = select('基金及份额类别')
+  expect(target.options).toHaveLength(2)
+  expect(target.textContent).not.toContain('渠道甲')
+  target.value = 'source-1'
+  target.dispatchEvent(new Event('change', { bubbles: true }))
+  const cycle = select('周期')
+  cycle.value = 'tradingDay'
+  cycle.dispatchEvent(new Event('change', { bubbles: true }))
+  const amount = [...document.querySelectorAll('label')].find(item => item.querySelector('span')?.textContent === '每期金额（元）')!.querySelector('input')!
+  amount.value = '100'
+  amount.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+  expect(select('周期').value).toBe('tradingDay')
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('每月日期')
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('星期')
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+    cycle: 'tradingDay', dayOfMonth: null, dayOfWeek: null, fundPositionId: null,
+    fundTarget: { name: '测试基金', code: '000001', shareClass: 'C' }
+  }))
+  view.unmount()
+})
+
+test('calendar shows official coverage, missing-year fallback and holiday preview', async () => {
+  const markets = [{ name: '中国', market: 'CN', year: 2027, isOpen: true, isHalfDay: false, usesWeekdayFallback: true, sourceUrl: null },
+    { name: '美国', market: 'US', year: 2027, isOpen: false, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: 'https://www.nasdaq.com/market-activity/stock-market-holiday-schedule' }]
+  const day = { date: '2027-01-04', isTradingDay: false, markets }
+  mocks.overview.mockResolvedValue({ ...structuredClone(overview), calendarDays: [day] })
+  mocks.preview.mockResolvedValue({ date: day.date, trialCashStart: 100, trialCashEnd: 100, providentStart: 0, providentEnd: 0, rows: [], notes: [], calendarDay: day })
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+  expect(view.text()).toContain('中国 2027 · 工作日回退')
+  expect(view.text()).toContain('美国 2027 · 官方日历')
+  await view.findAll('button').find(button => button.text() === '试算本期')!.trigger('click')
+  await flushPromises()
+  expect(view.text()).toContain('交易日定投跳过此日')
+  expect(view.text()).toContain('美国：休市')
+  view.unmount()
+})
+
+
+test('editing a SIP with unavailable fund choices shows retry instead of submitting', async () => {
+  mocks.overview.mockResolvedValue({ ...structuredClone(overview), plans: [{ ...overview.plans[0], type: 'fundSip', fundPositionId: 'source-1' }] })
+  mocks.funds.mockRejectedValue(new Error('offline'))
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+  await view.findAll('button').find(button => button.text() === '编辑')!.trigger('click')
+  await flushPromises()
+  expect(document.querySelector('.sheet')!.textContent).toContain('基金类别加载失败，请重试。')
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+  expect(mocks.save).not.toHaveBeenCalled()
+  expect(document.querySelector('button[type="submit"]')!.hasAttribute('disabled')).toBe(true)
+  view.unmount()
+})

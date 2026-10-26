@@ -60,7 +60,7 @@ public sealed class QuoteRefreshServiceTests
     [Fact]
     public async Task GoldRefresh_StoresReferenceSourceAndSyncStatus()
     {
-        var quote = new ExternalGoldQuote(910m, Today, "sina_shfe_au0", Now);
+        var quote = new ExternalGoldQuote(910m, Today, "icbc", Now);
         var context = await CreateAsync(null, new StubGoldProvider(quote));
         await context.Gold.SaveHoldingAsync(
             new SaveGoldHoldingRequest(30m, 25600m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today),
@@ -71,9 +71,9 @@ public sealed class QuoteRefreshServiceTests
         Assert.Equal(AssetOperationStatus.Success, result.Status);
         Assert.True(result.Result!.Updated);
         Assert.Equal(910m, result.Result.Quote);
-        Assert.Equal("sina_shfe_au0", result.Result.Source);
+        Assert.Equal("icbc", result.Result.Source);
         Assert.Equal(910m, context.Repository.GoldHolding!.Quote);
-        Assert.Equal("sina_shfe_au0", context.Repository.GoldHolding.LastQuoteSource);
+        Assert.Equal("icbc", context.Repository.GoldHolding.LastQuoteSource);
         Assert.Null(context.Repository.GoldHolding.LastQuoteError);
     }
 
@@ -96,7 +96,7 @@ public sealed class QuoteRefreshServiceTests
     [Fact]
     public async Task GoldRefresh_HidesAutomaticQuoteUpdatesFromHoldingRecords()
     {
-        var quote = new ExternalGoldQuote(910m, Today, "sina_shfe_au0", Now);
+        var quote = new ExternalGoldQuote(910m, Today, "icbc", Now);
         var context = await CreateAsync(null, new StubGoldProvider(quote));
         await context.Gold.SaveHoldingAsync(
             new SaveGoldHoldingRequest(30m, 25600m, 900m, Today, null, Guid.NewGuid(), HoldingDate: Today),

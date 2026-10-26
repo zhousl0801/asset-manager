@@ -204,7 +204,9 @@ public sealed class FundGroupService
         var now = _dates.UtcNow;
         var changed = new List<Guid>();
 
-        foreach (var item in positions.Where(item => string.Equals(item.Name, position.Name, StringComparison.Ordinal)))
+        var familyKeys = FundIdentity.FamilyKeys(positions);
+
+        foreach (var item in positions.Where(item => familyKeys[item.Id] == familyKeys[position.Id]))
         {
             var tracked = await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, item.Id, cancellationToken);
 
@@ -233,15 +235,18 @@ public sealed class FundGroupService
         IReadOnlyList<FundGroup> groups,
         IReadOnlyList<FundPosition> positions)
     {
+        var familyKeys = FundIdentity.FamilyKeys(positions);
+        var effectiveGroupIds = FundIdentity.EffectiveGroupIds(positions);
+
         return groups
             .Select(group =>
             {
-                var members = positions.Where(position => position.FundGroupId == group.Id).ToList();
+                var members = positions.Where(position => effectiveGroupIds[position.Id] == group.Id).ToList();
                 return new FundGroupDto(
                     group.Id,
                     group.Name,
                     group.SortOrder,
-                    members.Select(position => position.Name).Distinct(StringComparer.Ordinal).Count(),
+                    members.Select(position => familyKeys[position.Id]).Distinct(StringComparer.Ordinal).Count(),
                     members.Count,
                     decimal.Round(members.Sum(position => position.Value), 2));
             })

@@ -1,6 +1,8 @@
 using AssetKeeper.Application.Assets;
+using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Mutations;
+using AssetKeeper.Domain.Assets;
 using AssetKeeper.Domain.Plans;
 
 namespace AssetKeeper.Application.Plans;
@@ -37,7 +39,7 @@ public sealed class PlanService
         var positionNames = positions.ToDictionary(position => position.Id, position => position.DisplayName);
         var provident = await _ledgerRepository.GetProvidentFundAccountAsync(ledger.Id, cancellationToken);
         var today = _dates.Today;
-        var mappedPlans = plans.Select(plan => Map(plan, positionNames, today)).ToList();
+        var mappedPlans = plans.Select(plan => Map(plan, positionNames, today, positions)).ToList();
         var nextDue = mappedPlans.Where(plan => plan.IsActive && plan.NextDueDate is not null)
             .Select(plan => plan.NextDueDate)
             .Min();
@@ -49,7 +51,8 @@ public sealed class PlanService
             mappedPlans.Count(plan => plan.IsActive),
             nextDue,
             ledger.CashAccount?.Balance ?? 0m,
-            provident?.Balance ?? 0m);
+            provident?.Balance ?? 0m,
+            TradingCalendar.Default.GetDays(today, today.AddDays(45)));
     }
 
     public Task<AssetOperationResult<PlanDto>> SaveAsync(SavePlanRequest request, CancellationToken cancellationToken)
@@ -103,30 +106,43 @@ public sealed class PlanService
             {
                 return AssetOperationResult<PlanDto>.Invalid(new[] { "该类型已有主计划，请编辑现有计划。" });
             }
-
-            if (request.Type == AutoPlanType.FundSip && plans.Any(item => IsSameSip(item, request)))
-            {
-                return AssetOperationResult<PlanDto>.Invalid(new[] { "已存在相同基金、金额和周期的定投计划，请核对。" });
-            }
         }
 
+        var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
         string? positionName = null;
 
         if (request.Type == AutoPlanType.FundSip)
         {
-            if (request.FundPositionId is not Guid positionId)
-            {
-                return AssetOperationResult<PlanDto>.Invalid(new[] { "基金定投必须选择基金持仓。" });
-            }
+            FundPosition? position;
 
-            var position = await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, positionId, cancellationToken);
+            if (request.FundTarget is { } target)
+            {
+                var targetKey = FundIdentity.ClassKey(target.Name, target.Code, target.ShareClass);
+                position = positions.Where(item => FundIdentity.ClassKey(item) == targetKey).OrderBy(item => item.Id).FirstOrDefault();
+            }
+            else
+            {
+                position = positions.FirstOrDefault(item => item.Id == request.FundPositionId);
+            }
 
             if (position is null)
             {
-                return AssetOperationResult<PlanDto>.NotFound("基金持仓不存在。");
+                return AssetOperationResult<PlanDto>.Invalid(["请选择已有基金及份额类别。"]);
             }
 
+            request = request with { FundPositionId = position.Id };
             positionName = position.DisplayName;
+
+            if ((plan is null || plan.IsActive) && plans.Any(item => item.Id != request.Id && IsSameSip(item, request, positions)))
+            {
+                return AssetOperationResult<PlanDto>.Conflict("已存在相同基金类别、金额、周期和时间的有效定投计划。");
+            }
+        }
+
+        if (plan is null && request.Cycle == AutoPlanCycle.TradingDay)
+        {
+            var earliest = request.StartDate > _dates.Today ? request.StartDate.AddDays(-1) : _dates.Today;
+            request = request with { StartDate = TradingCalendar.Default.NextTradingDay(earliest) };
         }
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? DefaultName(request.Type, positionName) : request.Name.Trim();
@@ -152,6 +168,8 @@ public sealed class PlanService
             }
             else
             {
+                var generationFloor = plan.Cycle == AutoPlanCycle.TradingDay
+                    && _dates.ToBusinessInstant(_dates.Today, request.Time) > now ? _dates.Today : _dates.Today.AddDays(1);
                 plan.Update(
                     request.Type,
                     name,
@@ -162,7 +180,8 @@ public sealed class PlanService
                     request.Time,
                     request.StartDate,
                     request.FundPositionId,
-                    now);
+                    now,
+                    generationFloor);
             }
 
             var positionNames = new Dictionary<Guid, string>();
@@ -173,8 +192,8 @@ public sealed class PlanService
             }
 
             return plan.Version == 0
-                ? AssetOperationResult<PlanDto>.Created(Map(plan, positionNames, _dates.Today))
-                : AssetOperationResult<PlanDto>.Success(Map(plan, positionNames, _dates.Today));
+                ? AssetOperationResult<PlanDto>.Created(Map(plan, positionNames, _dates.Today, positions))
+                : AssetOperationResult<PlanDto>.Success(Map(plan, positionNames, _dates.Today, positions));
         }
         catch (ArgumentException exception)
         {
@@ -236,6 +255,19 @@ public sealed class PlanService
         try
         {
             transition(plan);
+
+            if (plan.IsActive && plan.Type == AutoPlanType.FundSip)
+            {
+                var plans = await _planRepository.GetPlansAsync(ledger.Id, cancellationToken);
+                var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
+                var target = new SavePlanRequest(plan.Id, plan.Type, plan.Name, plan.Amount, plan.Cycle,
+                    plan.DayOfMonth, plan.DayOfWeek, plan.Time, plan.StartDate, plan.FundPositionId, Guid.Empty, null);
+
+                if (plans.Any(item => item.Id != plan.Id && IsSameSip(item, target, positions)))
+                {
+                    return AssetOperationResult<PlanDto>.Conflict("已存在相同基金类别、金额、周期和时间的有效定投计划。");
+                }
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -334,13 +366,19 @@ public sealed class PlanService
         var startProvident = providentBalance;
         var rows = new List<PlanPreviewRow>();
 
-        foreach (var plan in plans.Where(plan => PlanSchedule.IsDueOn(plan, request.Date))
+        foreach (var plan in plans.Where(plan => PlanSchedule.IsDueOn(plan, request.Date)
+            || plan.Cycle == AutoPlanCycle.TradingDay && plan.GenerateFrom <= request.Date)
             .OrderBy(plan => plan.Time)
             .ThenBy(plan => PlanSchedule.TypeOrder(plan.Type))
             .ThenBy(plan => plan.Id))
         {
             var periodKey = PlanSchedule.PeriodKeyFor(plan, request.Date);
             var occurrence = await _planRepository.FindOccurrenceAsync(plan.Id, periodKey, cancellationToken);
+
+            if (occurrence is null && !PlanSchedule.IsDueOn(plan, request.Date))
+            {
+                continue;
+            }
 
             if (!plan.IsActive && occurrence is null)
             {
@@ -403,13 +441,18 @@ public sealed class PlanService
             startProvident,
             providentBalance,
             rows,
-            new[] { "仅试算所选日，不含中间日期的其他收支、行情或资金变动。", "计划只生成账本记录，不验证银行或平台的实际资金操作。" }));
+            new[] { "仅试算所选日，不含中间日期的其他收支、行情或资金变动。", "基金定投生成待确认买入并扣减账本现金，不向基金平台下单。" },
+            TradingCalendar.Default.GetDay(request.Date)));
     }
 
-    private static bool IsSameSip(AutoPlan plan, SavePlanRequest request)
+    private static bool IsSameSip(AutoPlan plan, SavePlanRequest request, IReadOnlyList<FundPosition> positions)
     {
+        var existing = positions.FirstOrDefault(position => position.Id == plan.FundPositionId);
+        var requested = positions.FirstOrDefault(position => position.Id == request.FundPositionId);
+
         return plan.Type == AutoPlanType.FundSip
-            && plan.FundPositionId == request.FundPositionId
+            && existing is not null && requested is not null
+            && FundIdentity.ClassKey(existing) == FundIdentity.ClassKey(requested)
             && plan.Amount == request.Amount
             && plan.Cycle == request.Cycle
             && plan.DayOfMonth == request.DayOfMonth
@@ -441,13 +484,16 @@ public sealed class PlanService
         };
     }
 
-    private static PlanDto Map(
+    private PlanDto Map(
         AutoPlan plan,
         IReadOnlyDictionary<Guid, string> positionNames,
-        DateOnly today)
+        DateOnly today,
+        IReadOnlyList<FundPosition>? positions = null)
     {
         string? positionName = plan.FundPositionId is Guid id ? positionNames.GetValueOrDefault(id) : null;
-        var next = plan.IsActive ? PlanSchedule.GetNextDue(plan, today) : null;
+        var from = _dates.ToBusinessInstant(today, plan.Time) <= _dates.UtcNow ? today.AddDays(1) : today;
+        var next = plan.IsActive ? PlanSchedule.GetNextDue(plan, from) : null;
+        var position = positions?.FirstOrDefault(item => item.Id == plan.FundPositionId);
 
         return new PlanDto(
             plan.Id,
@@ -464,7 +510,9 @@ public sealed class PlanService
             plan.FundPositionId,
             positionName,
             next?.DueDate,
-            plan.Version);
+            plan.Version,
+            position is null ? null : new FundPlanTarget(position.Name, position.Code, position.ShareClass),
+            plan.IsActive ? PlanSchedule.GetDuePeriods(plan, from, from.AddDays(90)).Take(10).Select(period => period.DueDate).ToList() : []);
     }
 
     public static PlanOccurrenceDto Map(PlanOccurrence occurrence)

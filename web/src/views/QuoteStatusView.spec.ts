@@ -46,7 +46,7 @@ const status = {
       lastSource: null, lastError: '行情服务不可用', status: 'failed'
     },
     {
-      assetType: 'gold', positionId: null, name: '积存金参考报价', code: null, platform: null,
+      assetType: 'gold', positionId: null, name: '工行积存金报价', code: null, platform: null,
       price: null, priceDate: null, lastAttemptAt: null,
       lastSource: null, lastError: null, status: 'notRecorded'
     }
@@ -101,7 +101,7 @@ test('scope buttons refresh only that asset class', async () => {
   await flushPromises()
   expect(mocks.refresh).toHaveBeenLastCalledWith('funds')
 
-  await view.findAll('button').find((button) => button.text() === '刷新参考金价')!.trigger('click')
+  await view.findAll('button').find((button) => button.text() === '刷新工行积存金')!.trigger('click')
   await flushPromises()
   expect(mocks.refresh).toHaveBeenLastCalledWith('gold')
   view.unmount()

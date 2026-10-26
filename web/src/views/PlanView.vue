@@ -37,6 +37,8 @@ const router = useRouter()
 const today = todayInBusinessTimeZone()
 const overview = ref<PlanOverview | null>(null)
 const positions = ref<FundPosition[]>([])
+const positionsLoading = ref(false)
+const positionsError = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
 const notice = ref('')
@@ -63,6 +65,32 @@ const form = reactive({
   fundPositionId: ''
 })
 
+const fundChoices = computed(() => {
+  const choices = new Map<string, FundPosition & { sourceIds: string[] }>()
+
+  for (const position of positions.value) {
+    const normalize = (value: string | null) => (value ?? '').normalize('NFKC').replace(/\s/g, '').toUpperCase()
+    const key = `${position.code ? `code:${normalize(position.code)}` : `name:${normalize(position.name)}`}|${normalize(position.shareClass)}`
+    const existing = choices.get(key)
+
+    if (existing) existing.sourceIds.push(position.id)
+    else choices.set(key, { ...position, sourceIds: [position.id] })
+  }
+
+  return [...choices.values()]
+})
+const calendarCoverage = computed(() => {
+  const markets = new Map<string, NonNullable<PlanOverview['calendarDays']>[number]['markets'][number]>()
+
+  for (const day of overview.value?.calendarDays ?? []) {
+    for (const market of day.markets) markets.set(`${market.market}-${market.year}`, market)
+  }
+
+  return [...markets.values()]
+})
+const nextTradingDates = computed(() => (overview.value?.calendarDays ?? [])
+  .filter(day => day.date > today && day.isTradingDay).slice(0, 10))
+
 const typeOptions: { value: PlanType; label: string }[] = [
   { value: 'salaryIncome', label: '工资到账' },
   { value: 'providentDeposit', label: '公积金缴存' },
@@ -79,7 +107,7 @@ const canSubmit = computed(() => {
     return false
   }
 
-  if (form.type === 'fundSip' && !form.fundPositionId) {
+  if (form.type === 'fundSip' && !fundChoices.value.some(item => item.id === form.fundPositionId)) {
     return false
   }
 
@@ -118,14 +146,17 @@ async function load(): Promise<void> {
 }
 
 async function loadPositions(): Promise<void> {
-  if (positions.value.length > 0) {
-    return
-  }
-
+  positionsLoading.value = true
+  positionsError.value = ''
   try {
     positions.value = (await fetchFundOverview()).positions
+    const choice = fundChoices.value.find(item => item.sourceIds.includes(form.fundPositionId))
+    if (choice) form.fundPositionId = choice.id
   } catch {
     positions.value = []
+    positionsError.value = '基金类别加载失败，请重试。'
+  } finally {
+    positionsLoading.value = false
   }
 }
 
@@ -181,8 +212,10 @@ async function submit(): Promise<void> {
     return
   }
 
-  if (form.type === 'fundSip' && !form.fundPositionId) {
-    formError.value = '请选择基金持仓。'
+  const target = fundChoices.value.find(item => item.id === form.fundPositionId)
+
+  if (form.type === 'fundSip' && !target) {
+    formError.value = positionsError.value || '请选择基金及份额类别。'
     return
   }
 
@@ -192,11 +225,13 @@ async function submit(): Promise<void> {
     name: form.name.trim(),
     amount,
     cycle: form.type === 'fundSip' ? form.cycle : 'monthly',
-    dayOfMonth: (form.type === 'fundSip' && form.cycle === 'weekly') ? null : Number(form.dayOfMonth),
+    dayOfMonth: (form.type === 'fundSip' && form.cycle !== 'monthly') ? null : Number(form.dayOfMonth),
     dayOfWeek: (form.type === 'fundSip' && form.cycle === 'weekly') ? Number(form.dayOfWeek) : null,
     time: form.time.length === 5 ? `${form.time}:00` : form.time,
     startDate: form.startDate,
-    fundPositionId: form.type === 'fundSip' ? form.fundPositionId : null,
+    fundPositionId: null,
+    fundTarget: form.type === 'fundSip' && target
+      ? { name: target.name, code: target.code, shareClass: target.shareClass } : null,
     requestId: createRequestId(),
     expectedVersion: editingPlan.value?.version ?? null
   }
@@ -298,6 +333,10 @@ function typeLabel(type: PlanType): string {
 function scheduleText(plan: AutoPlan): string {
   const time = plan.time.slice(0, 5)
 
+  if (plan.cycle === 'tradingDay') {
+    return `三地交易日 ${time}（中国时间）`
+  }
+
   if (plan.cycle === 'weekly') {
     return `每周${weekdayLabels[(plan.dayOfWeek ?? 1) - 1]} ${time}`
   }
@@ -354,6 +393,21 @@ function goBack(): void {
         </p>
       </section>
 
+      <section v-if="calendarCoverage.length" class="preview-card calendar-card" aria-label="三地交易日历">
+        <strong>三地交易日历</strong>
+        <p class="plan-meta">中国、美国、香港在同一日期均开市才执行，半日市照常。以下为创建新计划可选的近期交易日。</p>
+        <div class="calendar-dates">
+          <span v-for="day in nextTradingDates" :key="day.date">{{ formatBusinessDate(day.date) }}</span>
+        </div>
+        <div v-for="market in calendarCoverage" :key="`${market.market}-${market.year}`" class="calendar-source">
+          <span>{{ market.name }} {{ market.year }} · {{ market.usesWeekdayFallback ? '工作日回退' : '官方日历' }}</span>
+          <a v-if="market.sourceUrl" :href="market.sourceUrl" target="_blank" rel="noopener noreferrer">查看来源</a>
+          <small v-if="market.publishedOn">发布 {{ market.publishedOn }}</small>
+          <small v-else-if="market.verifiedOn">核验 {{ market.verifiedOn }}（来源未标发布日期）</small>
+        </div>
+        <p class="plan-meta">未维护年份按各市场周一至周五回退；日历补齐仅影响未来日期。基金临时暂停申购需自行核对。</p>
+      </section>
+
       <div class="plan-actions">
         <button type="button" class="action-primary" @click="openNew('salaryIncome')">新建计划</button>
         <button type="button" class="action-secondary" :disabled="busyAction === 'run'" @click="runNow">
@@ -381,6 +435,9 @@ function goBack(): void {
             开始 {{ formatBusinessDate(plan.startDate) }} ·
             {{ plan.isActive ? `下一期 ${plan.nextDueDate ? formatBusinessDate(plan.nextDueDate) : '待生成'}` : '已暂停' }}
             <template v-if="plan.fundPositionName"> · {{ plan.fundPositionName }}</template>
+          </p>
+          <p v-if="plan.cycle === 'tradingDay' && plan.upcomingDates?.length" class="plan-meta">
+            近期排期：{{ plan.upcomingDates.map(date => date.slice(5)).join(' · ') }}
           </p>
           <footer>
             <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
@@ -458,6 +515,10 @@ function goBack(): void {
         </button>
         <p v-if="previewError" class="form-error" role="alert">{{ previewError }}</p>
         <template v-if="preview">
+          <p v-if="preview.calendarDay" class="plan-meta">
+            {{ preview.calendarDay.isTradingDay ? '三地均开市' : '交易日定投跳过此日' }} ·
+            {{ preview.calendarDay.markets.map(market => `${market.name}${market.usesWeekdayFallback ? '（工作日回退）' : ''}：${market.isOpen ? (market.isHalfDay ? '半日市' : '开市') : '休市'}`).join(' · ') }}
+          </p>
           <p class="plan-meta">
             现金 {{ formatMoney(preview.trialCashStart) }} → {{ formatMoney(preview.trialCashEnd) }} ·
             公积金 {{ formatMoney(preview.providentStart) }} → {{ formatMoney(preview.providentEnd) }}
@@ -521,20 +582,24 @@ function goBack(): void {
         </label>
 
         <label v-if="form.type === 'fundSip'" class="form-field">
-          <span>基金持仓</span>
-          <select v-model="form.fundPositionId">
+          <span>基金及份额类别</span>
+          <select v-model="form.fundPositionId" :disabled="positionsLoading">
             <option value="">请选择</option>
-            <option v-for="position in positions" :key="position.id" :value="position.id">
-              {{ position.shareClass ? `${position.name} ${position.shareClass}` : position.name }} · {{ position.platform ?? '未填写平台' }}
+            <option v-for="position in fundChoices" :key="position.id" :value="position.id">
+              {{ position.name }} · {{ position.shareClass || '未标类别' }} · {{ position.code || '按名称匹配' }}
             </option>
           </select>
         </label>
 
+        <p v-if="form.type === 'fundSip' && positionsError" class="form-error" role="alert">
+          {{ positionsError }} <button type="button" class="small-button" @click="loadPositions">重新加载基金</button>
+        </p>
         <label v-if="form.type === 'fundSip'" class="form-field">
           <span>周期</span>
           <select v-model="form.cycle">
             <option value="monthly">每月</option>
             <option value="weekly">每周</option>
+            <option value="tradingDay">交易日（中国、美国、香港均开市）</option>
           </select>
         </label>
 
@@ -544,16 +609,19 @@ function goBack(): void {
           <small>当月没有该日期时按当月最后一天执行。</small>
         </label>
 
-        <label v-else class="form-field">
+        <label v-else-if="form.cycle === 'weekly'" class="form-field">
           <span>星期</span>
           <select v-model="form.dayOfWeek">
             <option v-for="(label, index) in weekdayLabels" :key="label" :value="String(index + 1)">周{{ label }}</option>
           </select>
         </label>
 
+        <p v-if="form.type === 'fundSip' && form.cycle === 'tradingDay'" class="form-note">
+          新计划最早从创建后的下一个合格交易日开始，不补做创建当天；所选开始日期休市时顺延。
+        </p>
         <div class="form-row">
           <label class="form-field">
-            <span>执行时间</span>
+            <span>执行时间（中国时区）</span>
             <input v-model="form.time" type="time" />
           </label>
           <label class="form-field">
@@ -563,7 +631,7 @@ function goBack(): void {
         </div>
 
         <p class="form-note">
-          工资与公积金默认各维护一条主计划；基金定投可有多条。保存或修改不会立即生成历史记录。
+          保存不会立即扣款。基金定投到期时扣减账本现金并生成待确认买入，需自行核对实际份额和净值，不向销售平台下单。
         </p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
         <div class="form-actions">
@@ -630,6 +698,13 @@ function goBack(): void {
   font-size: 10px;
   line-height: 1.6;
 }
+
+.calendar-card { margin-top: 14px; }
+.calendar-dates { display: flex; flex-wrap: wrap; gap: 6px; }
+.calendar-dates span { padding: 5px 8px; border-radius: 6px; background: var(--color-brand-soft); font-size: 11px; }
+.calendar-source { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; color: var(--color-text-secondary); }
+.calendar-source a { color: var(--color-brand); }
+.calendar-source small { flex-basis: 100%; }
 
 .plan-actions {
   display: grid;

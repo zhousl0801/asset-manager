@@ -27,7 +27,10 @@ public sealed record FundShareClassDto(
     decimal RealizedProfit,
     decimal? NetValue,
     DateOnly? NetValueDate,
-    IReadOnlyList<FundPlatformHoldingDto> Platforms);
+    IReadOnlyList<FundPlatformHoldingDto> Platforms,
+    string Key,
+    string? Code,
+    string IdentityBasis);
 
 public sealed record FundPlatformHoldingDto(
     Guid PositionId,

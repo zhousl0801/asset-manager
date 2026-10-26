@@ -530,8 +530,8 @@ function activityMeta(activity: GoldActivity): string {
 
 function quoteSourceLabel(source: string | null): string {
   switch (source) {
-    case 'sina_shfe_au0':
-      return '上期所黄金连续（参考）'
+    case 'icbc':
+      return '工商银行积存金'
     case 'manual':
       return '手动录入'
     default:
@@ -546,12 +546,12 @@ async function refreshQuote(): Promise<void> {
   try {
     const result = await refreshGoldQuote()
     notice.value = result.updated
-      ? `已获取参考报价 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
-      : `参考报价已是最新 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
+      ? `已获取工行积存金报价 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
+      : `工行积存金报价已是最新 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
     sheet.value = null
     await loadOverview()
   } catch (error) {
-    formError.value = getApiErrorMessage(error, '获取参考报价失败，已保留最近有效值。')
+    formError.value = getApiErrorMessage(error, '获取工行积存金报价失败，已保留最近有效值。')
   } finally {
     refreshingQuote.value = false
   }
@@ -659,7 +659,7 @@ function goBack(): void {
           <small>已实现盈亏 {{ formatSignedMoney(overview.realizedProfit) }}</small>
         </div>
       </div>
-      <p class="summary-note">自动获取的是上期所黄金连续参考价，不是平台积存金报价；可继续手动录入平台报价。</p>
+      <p class="summary-note">自动获取的是工商银行积存金价格（主动积存价）；如在其他平台积存，可继续手动录入平台报价。</p>
 
       <p v-if="!overview.isConfigured" class="hint">
         尚未记录积存金持仓。可先录入已有持仓，或直接记录买入。
@@ -882,7 +882,7 @@ function goBack(): void {
           :disabled="isSaving || refreshingQuote"
           @click="refreshQuote"
         >
-          {{ refreshingQuote ? '获取中…' : '获取参考报价' }}
+          {{ refreshingQuote ? '获取中…' : '获取工行报价' }}
         </button>
         <CashAdjustmentLink v-if="sheet === 'buy' || (sheet === 'sell' && form.settlement === 'received')" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>

@@ -95,6 +95,21 @@ public sealed class PlansController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("occurrences/{occurrenceId:guid}/record")]
+    [ProducesResponseType<RecordOccurrenceResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RecordOccurrence(
+        Guid occurrenceId,
+        [FromBody] PlanActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _executionService.RecordOccurrenceAsync(occurrenceId, request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     [HttpPost("preview")]
     [ProducesResponseType<PlanPreviewDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

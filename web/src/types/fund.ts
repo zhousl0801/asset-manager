@@ -57,6 +57,9 @@ export interface FundPlatformHolding {
 }
 
 export interface FundShareClass {
+  key?: string
+  code?: string | null
+  identityBasis?: string
   shareClass: string | null
   shares: number
   cost: number

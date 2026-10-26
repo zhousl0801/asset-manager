@@ -115,6 +115,60 @@ public sealed class FundGroupServiceTests
         Assert.Equal(2, overview.Groups[0].PositionCount);
     }
 
+    [Fact]
+    public async Task Overview_MatchesCodeAcrossNameAliasesAndKeepsDifferentCodesSeparate()
+    {
+        await using var context = await CreateAsync();
+        await context.Funds.CreatePositionAsync(
+            new("另一名称", "000002", "C", "第三来源", 25m, 200m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
+            CancellationToken.None);
+        await context.Funds.CreatePositionAsync(
+            new("纳指基金", "000003", "C", "第四来源", 10m, 100m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
+            CancellationToken.None);
+
+        var overview = (await context.Funds.GetOverviewAsync(CancellationToken.None))!;
+        var fund = Assert.Single(overview.Funds!);
+        Assert.Equal(3, fund.Classes.Count);
+        var cClass = fund.Classes.Single(item => item.Platforms.Any(source => source.Code == "000002"));
+        Assert.Equal(75m, cClass.Shares);
+        Assert.Equal(700m, cClass.Cost);
+        Assert.Equal(50m, cClass.HoldingProfit);
+        Assert.Equal(overview.TotalValue, fund.Value);
+        Assert.Equal(4, overview.Positions.Count);
+    }
+
+    [Fact]
+    public async Task AliasSources_WithDifferentOriginalGroupsUseOnePortfolioScope()
+    {
+        await using var context = await CreateAsync();
+        var firstGroup = (await context.Groups.CreateAsync(new("组合一"), CancellationToken.None)).Group!;
+        var secondGroup = (await context.Groups.CreateAsync(new("组合二"), CancellationToken.None)).Group!;
+        var sources = await context.Db.FundPositions.ToListAsync();
+        foreach (var source in sources)
+        {
+            source.AssignGroup(firstGroup.Id, Now);
+        }
+        await context.Db.SaveChangesAsync();
+        var alias = await context.Funds.CreatePositionAsync(new("别名", "000002", "C", "第三来源", 25m, 250m,
+            10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
+        var original = await context.Db.FundPositions.SingleAsync(position => position.Id == alias.Result!.Position.Id);
+        original.AssignGroup(secondGroup.Id, Now);
+        await context.Db.SaveChangesAsync();
+
+        var overview = (await context.Funds.GetOverviewAsync(CancellationToken.None))!;
+        var fund = Assert.Single(overview.Funds!);
+        Assert.Equal(firstGroup.Id, fund.GroupId);
+        Assert.Equal(fund.Value, overview.Groups!.Single(group => group.Id == firstGroup.Id).ConfirmedValue);
+        Assert.Equal(0, overview.Groups!.Single(group => group.Id == secondGroup.Id).FundCount);
+        Assert.Equal(0m, (await context.Groups.GetAsync(CancellationToken.None))!.Single(group => group.Id == secondGroup.Id).ConfirmedValue);
+        var returns = new FundReturnService(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)));
+        var first = (await returns.GetAsync(TrendRange.All, null, firstGroup.Id, false, CancellationToken.None))!;
+        var second = (await returns.GetAsync(TrendRange.All, null, secondGroup.Id, false, CancellationToken.None))!;
+        Assert.Equal(fund.AssetValue, first.ClosingAssetValue);
+        Assert.Empty(second.Funds);
+        Assert.Equal(secondGroup.Id, original.FundGroupId);
+    }
+
     private static async Task<TestContext> CreateAsync()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()

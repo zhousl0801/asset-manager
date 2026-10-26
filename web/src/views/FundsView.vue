@@ -52,7 +52,7 @@ import type { AutoPlan } from '../types/plan'
 type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'sellConfirm' | 'sellArrival' | 'quote'
 type PortfolioView = 'positions' | 'returns' | 'activities' | 'plans'
 type GroupScope = 'all' | 'ungrouped' | string
-type FundMetricKey = 'value' | 'profit' | 'rate' | 'cost' | 'weight' | 'platforms' | 'pending'
+type FundMetricKey = 'value' | 'profit' | 'rate' | 'cost' | 'weight' | 'pending'
 type FundSortKey = 'value' | 'profit' | 'rate' | 'name'
 
 const metricStorageKey = 'asset-keeper.fund.metrics'
@@ -63,7 +63,6 @@ const metricOptions: { key: FundMetricKey; label: string }[] = [
   { key: 'rate', label: '收益率' },
   { key: 'cost', label: '持仓成本' },
   { key: 'weight', label: '占比' },
-  { key: 'platforms', label: '平台数' },
   { key: 'pending', label: '待确认' }
 ]
 const sortOptions: { key: FundSortKey; label: string }[] = [
@@ -192,8 +191,7 @@ const scopedFunds = computed(() => {
 
     return fund.name.toLowerCase().includes(search)
       || fund.classes.some((fundClass) => fundClass.platforms.some((platform) =>
-        (platform.code ?? '').toLowerCase().includes(search)
-        || (platform.platform ?? '').toLowerCase().includes(search)))
+        (platform.code ?? '').toLowerCase().includes(search)))
   })
 })
 
@@ -530,8 +528,6 @@ function metricDisplay(fund: FundSummary): { key: FundMetricKey; label: string; 
           value: total > 0 ? `${formatMoney(fund.assetValue / total * 100)}%` : '—',
           tone: ''
         }
-      case 'platforms':
-        return { key, label: '平台', value: `${fund.platformCount} 个`, tone: '' }
       case 'pending':
         return {
           key,
@@ -565,18 +561,20 @@ function buildFallbackFunds(
     const byClass = new Map<string, FundPosition[]>()
 
     for (const member of members) {
-      const key = member.shareClass ?? ''
+      const key = `${member.code?.trim() || member.name.normalize('NFKC').replace(/\s/g, '')}|${member.shareClass?.trim().toUpperCase() ?? ''}`
       const classMembers = byClass.get(key) ?? []
       classMembers.push(member)
       byClass.set(key, classMembers)
     }
 
-    for (const [shareClass, classMembers] of byClass) {
+    for (const [key, classMembers] of byClass) {
       const netValues = [...new Set(classMembers.map((member) => member.netValue))]
       const netValueDates = [...new Set(classMembers.map((member) => member.netValueDate))]
 
       classes.push({
-        shareClass: shareClass || null,
+        key,
+        code: classMembers[0]?.code ?? null,
+        shareClass: classMembers[0]?.shareClass || null,
         shares: classMembers.reduce((sum, member) => sum + member.shares, 0),
         cost: classMembers.reduce((sum, member) => sum + member.cost, 0),
         value: classMembers.reduce((sum, member) => sum + member.value, 0),
@@ -781,6 +779,10 @@ async function moveFund(fund: FundSummary, event: Event): Promise<void> {
 }
 
 function planCycleLabel(plan: AutoPlan): string {
+  if (plan.cycle === 'tradingDay') {
+    return '三地交易日'
+  }
+
   if (plan.cycle === 'weekly') {
     const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
     return `每周${weekdays[plan.dayOfWeek ?? 0] ?? ''}`
@@ -1464,7 +1466,7 @@ function goBack(): void {
       <details v-if="allFunds.length" class="portfolio-settings ui-disclosure">
         <summary><span><AppIcon name="filter" /> {{ searchText.trim() ? `已筛选：${searchText.trim()}` : '搜索、排序与指标' }}</span></summary>
       <div class="portfolio-toolbar">
-        <input v-model="searchText" type="search" placeholder="搜索基金名称、代码或平台" aria-label="搜索基金" />
+        <input v-model="searchText" type="search" placeholder="搜索基金名称或代码" aria-label="搜索基金" />
         <select v-model="sortKey" aria-label="排序方式">
           <option v-for="option in sortOptions" :key="option.key" :value="option.key">按{{ option.label }}</option>
         </select>
@@ -1595,7 +1597,7 @@ function goBack(): void {
               <div class="fund-title">
                 <strong>{{ fund.name }}</strong>
                 <small>
-                  {{ fund.groupName ?? '未分组' }} · {{ fund.platformCount }} 个平台 · 净值日期
+                  {{ fund.groupName ?? '未分组' }} · {{ fund.classes.length }} 个类别 · 净值日期
                   {{ fund.latestNetValueDate ? fund.latestNetValueDate.slice(5) : '待补' }}
                 </small>
               </div>
@@ -1619,7 +1621,7 @@ function goBack(): void {
 
               <section
                 v-for="(fundClass, index) in fund.classes"
-                :key="fundClass.shareClass ?? index"
+                :key="fundClass.key ?? index"
                 class="fund-class"
               >
                 <header>
@@ -1627,30 +1629,21 @@ function goBack(): void {
                   <span>{{ formatQuantity(fundClass.shares) }} 份 · 成本 ¥{{ formatMoney(fundClass.cost) }}</span>
                 </header>
                 <p class="fund-class-meta">
-                  净值 {{ fundClass.netValue === null ? '各平台不一致' : formatQuantity(fundClass.netValue) }}
+                  净值 {{ fundClass.netValue === null ? '来源净值不一致' : formatQuantity(fundClass.netValue) }}
                   <template v-if="fundClass.netValueDate"> · {{ formatBusinessDate(fundClass.netValueDate) }}</template>
                   · 估值 ¥{{ formatMoney(fundClass.value) }}
-                  · 收益 {{ formatSignedMoney(fundClass.holdingProfit) }}
+                  · 持有盈亏 {{ formatSignedMoney(fundClass.holdingProfit) }}
+                  · 已实现盈亏 {{ formatSignedMoney(fundClass.realizedProfit) }}
                 </p>
-                <div
-                  v-for="platform in fundClass.platforms"
-                  :key="platform.positionId"
-                  class="fund-platform-row"
-                >
-                  <div>
-                    <strong>{{ platform.platform || '未填平台' }}</strong>
-                    <small>{{ platform.code || '未填代码' }}</small>
-                  </div>
-                  <div class="fund-platform-value">
-                    <b>{{ formatQuantity(platform.shares) }} 份</b>
-                    <small>成本 ¥{{ formatMoney(platform.cost) }} · 估值 ¥{{ formatMoney(platform.value) }}</small>
-                  </div>
-                </div>
+                <p class="fund-class-meta">
+                  {{ fundClass.code ?? fundClass.platforms[0]?.code ?? '未填代码' }} ·
+                  {{ fundClass.identityBasis ?? (fundClass.platforms[0]?.code ? '按基金代码和类别匹配' : '按规范化基金名称和类别匹配') }}
+                </p>
               </section>
 
               <p class="summary-note">
                 同一基金的 A/C 类分别列示份额和净值，不合并份额，也不平均净值。
-                <template v-if="!fund.hasEffectiveQuotes"> 部分平台行情依据不足，估值仅供参考。</template>
+                <template v-if="!fund.hasEffectiveQuotes"> 部分持仓行情依据不足，估值仅供参考。</template>
               </p>
             </div>
           </article>

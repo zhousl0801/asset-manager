@@ -44,7 +44,7 @@ const overview = {
   pendingArrivalAmount: 0,
   pendingArrivals: [] as unknown[],
   lastQuoteAttemptAt: new Date().toISOString(),
-  lastQuoteSource: 'sina_shfe_au0',
+  lastQuoteSource: 'icbc',
   lastQuoteError: null
 }
 
@@ -97,7 +97,7 @@ test('gold sale can be recorded as pending arrival without cash', async () => {
 test('quote sheet can fetch the reference gold quote', async () => {
   mocks.refresh.mockResolvedValue({
     updated: true,
-    source: 'sina_shfe_au0',
+    source: 'icbc',
     quote: 910,
     quoteDate: '2026-10-21',
     obtainedAt: '2026-10-21T02:00:00Z',
@@ -113,12 +113,12 @@ test('quote sheet can fetch the reference gold quote', async () => {
   await flushPromises()
 
   const fetchButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.sheet button'))
-    .find((button) => button.textContent?.includes('获取参考报价'))!
+    .find((button) => button.textContent?.includes('获取工行报价'))!
   fetchButton.click()
   await flushPromises()
 
   expect(mocks.refresh).toHaveBeenCalledTimes(1)
-  expect(view.find('.notice').text()).toContain('已获取参考报价 910.00')
+  expect(view.find('.notice').text()).toContain('已获取工行积存金报价 910.00')
   view.unmount()
 })
 
@@ -171,7 +171,7 @@ test('opening the page refreshes a stale gold quote', async () => {
     .mockResolvedValue(structuredClone(overview))
   mocks.refresh.mockResolvedValue({
     updated: true,
-    source: 'sina_shfe_au0',
+    source: 'icbc',
     quote: 910,
     quoteDate: today,
     obtainedAt: new Date().toISOString(),

@@ -165,13 +165,16 @@ public sealed class FundService
             .GroupBy(item => item.PositionId)
             .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
 
+        var familyKeys = FundIdentity.FamilyKeys(positions);
+        var effectiveGroupIds = FundIdentity.EffectiveGroupIds(positions);
+
         return positions
-            .GroupBy(position => position.Name, StringComparer.Ordinal)
+            .GroupBy(position => familyKeys[position.Id], StringComparer.Ordinal)
             .Select(group =>
             {
                 var members = group.OrderBy(position => position.ShareClass).ThenBy(position => position.Platform).ToList();
                 var classes = members
-                    .GroupBy(position => position.ShareClass ?? string.Empty, StringComparer.Ordinal)
+                    .GroupBy(FundIdentity.ClassKey, StringComparer.Ordinal)
                     .Select(classGroup =>
                     {
                         var classMembers = classGroup
@@ -182,7 +185,7 @@ public sealed class FundService
                         var netValueDates = classMembers.Select(position => position.NetValueDate).Distinct().ToList();
 
                         return new FundShareClassDto(
-                            string.IsNullOrWhiteSpace(classGroup.Key) ? null : classGroup.Key,
+                            string.IsNullOrWhiteSpace(classMembers[0].ShareClass) ? null : FundIdentity.Normalize(classMembers[0].ShareClass),
                             decimal.Round(classMembers.Sum(position => position.Shares), 4),
                             decimal.Round(classMembers.Sum(position => position.Cost), 2),
                             decimal.Round(classMembers.Sum(position => position.Value), 2),
@@ -203,14 +206,17 @@ public sealed class FundService
                                 position.Value,
                                 position.HoldingProfit,
                                 position.RealizedProfit,
-                                replayStates[position.Id].Value is not null)).ToList());
+                                replayStates[position.Id].Value is not null)).ToList(),
+                            classGroup.Key,
+                            classMembers[0].Code,
+                            string.IsNullOrWhiteSpace(classMembers[0].Code) ? "按规范化基金名称和类别匹配" : "按基金代码和类别匹配");
                     })
                     .OrderBy(fundClass => fundClass.ShareClass, StringComparer.Ordinal)
                     .ToList();
                 var pendingBuyAmount = members.Sum(position => pendingBuyAmounts.GetValueOrDefault(position.Id));
                 var pendingArrivalAmount = members.Sum(position => pendingArrivalAmounts.GetValueOrDefault(position.Id));
                 var value = decimal.Round(members.Sum(position => position.Value), 2);
-                var groupId = members.Select(position => position.FundGroupId).FirstOrDefault(id => id is not null);
+                var groupId = effectiveGroupIds[members[0].Id];
                 var platformCount = members
                     .Select(position => position.Platform)
                     .Where(platform => !string.IsNullOrWhiteSpace(platform))
@@ -219,7 +225,7 @@ public sealed class FundService
 
                 return new FundSummaryDto(
                     group.Key,
-                    group.Key,
+                    members[0].Name,
                     groupId,
                     groupId is null ? null : groupNames.GetValueOrDefault(groupId.Value),
                     value,
@@ -250,10 +256,8 @@ public sealed class FundService
                 group.Name,
                 group.SortOrder,
                 funds.Count(fund => fund.GroupId == group.Id),
-                positions.Count(position => position.FundGroupId == group.Id),
-                decimal.Round(positions
-                    .Where(position => position.FundGroupId == group.Id)
-                    .Sum(position => position.Value), 2)))
+                funds.Where(fund => fund.GroupId == group.Id).Sum(fund => fund.Classes.Sum(fundClass => fundClass.Platforms.Count)),
+                decimal.Round(funds.Where(fund => fund.GroupId == group.Id).Sum(fund => fund.Value), 2)))
             .ToList();
     }
 

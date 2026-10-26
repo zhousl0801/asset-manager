@@ -40,6 +40,22 @@ public sealed class PlanScheduleTests
         Assert.Equal(new DateOnly(2026, 11, 5), period.DueDate);
     }
 
+    [Theory]
+    [InlineData("2026-10-17", false)]
+    [InlineData("2026-10-19", false)] // Hong Kong only
+    [InlineData("2026-11-26", false)] // United States only
+    [InlineData("2026-09-25", false)] // China only
+    [InlineData("2026-12-24", true)] // half day in US and HK
+    [InlineData("2027-01-04", true)] // unmaintained year
+    public void TradingDayPlan_UsesThreeMarkets(string dateText, bool expected)
+    {
+        var date = DateOnly.Parse(dateText);
+        var plan = Plan((AutoPlanCycle)2, startDate: new DateOnly(2026, 1, 1));
+
+        Assert.Equal(expected, PlanSchedule.IsDueOn(plan, date));
+        Assert.Equal(expected, PlanSchedule.GetDuePeriods(plan, date, date).Count == 1);
+    }
+
     private static AutoPlan Plan(AutoPlanCycle cycle, int? dayOfMonth = null, int? dayOfWeek = null, DateOnly? startDate = null)
     {
         return AutoPlan.Create(
