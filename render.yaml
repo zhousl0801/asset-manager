@@ -1,0 +1,21 @@
+services:
+  - type: pserv
+    name: asset-manager-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    plan: starter
+    region: oregon
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__Default
+        fromDatabase:
+          name: asset-manager-db
+          property: connectionString
+
+databases:
+  - name: asset-manager-db
+    plan: basic-256mb
+    region: oregon
+    postgresMajorVersion: "17"
