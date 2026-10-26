@@ -4,7 +4,7 @@
 
 ## 设计依据
 
-- 产品文档：[产品设计 V1.0](../docs/product/资产管家-产品设计文档-V1.0.md)。
+- 产品文档：[产品设计 V1.1](../docs/product/资产管家-产品设计文档-V1.1.md)。
 - 最终整合线框：[仓库内归档](../docs/design/wireframes/index.html)。
 - 配色：[UI 配色规范](../docs/design/UI配色规范.md)与[CSS 变量](../docs/design/ui-color-tokens.css)。业务含义以产品文档为准，不采用配色规范早期示例中的净资产、房产、负债和多现金账户。
 
