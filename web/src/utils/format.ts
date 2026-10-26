@@ -75,7 +75,7 @@ export function parseAmount(value: string): number | null {
 export function parseQuantity(value: string): number | null {
   const quantity = parseDecimal(value, 4)
 
-  if (quantity === null || !quantity.isPositive() || quantity.greaterThan(1_000_000)) {
+  if (quantity === null || quantity.isZero() || quantity.isNegative() || quantity.greaterThan(1_000_000)) {
     return null
   }
 
@@ -95,7 +95,7 @@ export function parseNonNegativeQuantity(value: string): number | null {
 export function parsePrice(value: string): number | null {
   const price = parseDecimal(value, 4)
 
-  if (price === null || !price.isPositive()) {
+  if (price === null || price.isZero() || price.isNegative()) {
     return null
   }
 

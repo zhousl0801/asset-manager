@@ -17,6 +17,7 @@ public sealed class FundReturnEndpointsTests
     public async Task ReturnsEndpoint_ReturnsIntervalAndHoldingSeparately()
     {
         using var factory = new AssetKeeperApiFactory();
+        factory.Quotes.Date = new DateOnly(2026, 9, 20);
         using var client = factory.CreateClient();
         await client.PostAsJsonAsync("/api/ledger/initialize", new
         {
@@ -24,8 +25,8 @@ public sealed class FundReturnEndpointsTests
             cashBalance = 10000m
         });
         var position = await CreatePositionAsync(client);
-        await UpdateQuoteAsync(client, position, 11m, "2026-09-30");
-        await UpdateQuoteAsync(client, position, 12m, "2026-10-10");
+        await UpdateQuoteAsync(factory, client, position, 11m, "2026-09-30");
+        await UpdateQuoteAsync(factory, client, position, 12m, "2026-10-10");
 
         var response = await client.GetAsync("/api/ledger/funds/returns?range=month&anchor=2026-10-21");
 
@@ -49,6 +50,7 @@ public sealed class FundReturnEndpointsTests
     public async Task DayEndpoint_RequiresDate()
     {
         using var factory = new AssetKeeperApiFactory();
+        factory.Quotes.Date = new DateOnly(2026, 9, 20);
         using var client = factory.CreateClient();
         await client.PostAsJsonAsync("/api/ledger/initialize", new
         {
@@ -83,15 +85,11 @@ public sealed class FundReturnEndpointsTests
         return result!.Position.Id;
     }
 
-    private static async Task UpdateQuoteAsync(HttpClient client, Guid positionId, decimal netValue, string date)
+    private static async Task UpdateQuoteAsync(AssetKeeperApiFactory factory, HttpClient client, Guid positionId, decimal netValue, string date)
     {
-        var response = await client.PostAsJsonAsync("/api/ledger/funds/quote", new
-        {
-            positionId,
-            netValue,
-            netValueDate = date,
-            requestId = Guid.NewGuid()
-        });
+        factory.Quotes.NetValue = netValue;
+        factory.Quotes.Date = DateOnly.Parse(date);
+        var response = await client.PostAsync($"/api/ledger/funds/{positionId}/quote/refresh", null);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }

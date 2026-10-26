@@ -48,6 +48,9 @@ public sealed class G0PostgresTests
         await SeedGoldAsync(database);
         await using var first = database.CreateContext();
         await using var second = database.CreateContext();
+        // Both writers must start from the same ledger version, regardless of task scheduling.
+        await first.Ledgers.LoadAsync();
+        await second.Ledgers.LoadAsync();
         await first.CashAccounts.LoadAsync();
         await first.GoldHoldings.LoadAsync();
         await second.CashAccounts.LoadAsync();
@@ -138,7 +141,7 @@ public sealed class G0PostgresTests
         Assert.Equal(1234.56m, (await context.CashAccounts.SingleAsync()).Balance);
         Assert.Equal(1, (await context.Ledgers.SingleAsync()).SingletonSlot);
         Assert.Empty(await context.MutationReceipts.ToListAsync());
-        Assert.Equal(13, (await context.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Equal(14, (await context.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Equal(18, await context.EntryCategories.CountAsync());
     }
 

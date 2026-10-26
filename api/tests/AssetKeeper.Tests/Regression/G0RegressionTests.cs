@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using System.Text.Json;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Cash;
@@ -50,7 +51,7 @@ public sealed class G0RegressionTests
     {
         await using var context = await CreateContextAsync(3000m);
         var service = new FundService(context.Repository, context.Dates);
-        var opening = await service.CreatePositionAsync(new("基金", null, null, null, 100m, 1000m, 10m, Today.AddDays(-20), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, new("基金", "000001", null, null, 100m, 1000m, 10m, Today.AddDays(-20), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
         var id = opening.Result!.Position.Id;
         var sellApply = await service.ApplySellAsync(new(id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         await service.ConfirmSellAsync(sellApply.Result!.Activity.Id,

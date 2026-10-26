@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
@@ -26,9 +27,9 @@ public sealed class TradingDayPostgresTests
             var repository = new LedgerRepository(seed);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 1000m), CancellationToken.None);
             var funds = new FundService(repository, Dates);
-            await funds.CreatePositionAsync(new(target.Name, target.Code, target.ShareClass, "来源一", 10m, 100m,
+            await TestFundQuotes.CreatePositionAsync(repository, Dates, new(target.Name, target.Code, target.ShareClass, "来源一", 10m, 100m,
                 10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
-            await funds.CreatePositionAsync(new("别名", target.Code, target.ShareClass, "来源二", 5m, 50m,
+            await TestFundQuotes.CreatePositionAsync(repository, Dates, new("别名", target.Code, target.ShareClass, "来源二", 5m, 50m,
                 10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
         }
 

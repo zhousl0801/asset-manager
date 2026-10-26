@@ -179,7 +179,7 @@ const overview = {
   pendingAmount: 300,
   pendingBuys: [{
     transactionId: 'pb1', positionId: 'b', positionName: '债券基金', amount: 300,
-    businessDate: '2026-10-21', note: '定投'
+    businessDate: '2026-10-21', tradeDate: '2026-10-21', confirmationDate: '2026-10-23', fee: 0, canCancel: false, note: '定投'
   }],
   pendingArrivalAmount: 0,
   sellApplications: [],
@@ -258,7 +258,7 @@ test('a collapsed search keeps its scope visible and can be cleared', async () =
   view.unmount()
 })
 
-test('expanded fund keeps A and C share classes separate without channel rows', async () => {
+test('expanded fund keeps A and C share classes separate with platform actions', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
@@ -272,7 +272,7 @@ test('expanded fund keeps A and C share classes separate without channel rows', 
   expect(classes[1]!.text()).toContain('C 类')
   expect(classes[1]!.text()).toContain('50.0000 份')
   expect(view.findAll('.fund-platform-row')).toHaveLength(0)
-  expect(view.find('.fund-detail').text()).not.toContain('平台甲')
+  expect(view.find('.holding-action-row').text()).toContain('平台甲')
   expect(view.find('.fund-detail').text()).toContain('按基金代码和类别匹配')
   expect(view.find('.fund-detail').text()).not.toContain('150.0000 份')
 

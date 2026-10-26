@@ -82,7 +82,7 @@ export function evaluateAmountExpression(expression: string): number | null {
 
   const total = terms.reduce((sum, term) => sum.plus(term), new Decimal(0))
 
-  if (!total.isFinite() || !total.isPositive() || total.greaterThan(MaximumAmount)) {
+  if (!total.isFinite() || total.isZero() || total.isNegative() || total.greaterThan(MaximumAmount)) {
     return null
   }
 

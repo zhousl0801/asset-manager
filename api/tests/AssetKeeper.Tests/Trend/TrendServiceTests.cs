@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
@@ -72,7 +73,7 @@ public sealed class TrendServiceTests
         await new LedgerService(repository, dates).InitializeAsync(
             new(Today.AddDays(-60), 1000m),
             CancellationToken.None);
-        await new FundService(repository, dates).CreatePositionAsync(
+        await TestFundQuotes.CreatePositionAsync(repository, dates,
             new("测试基金", "000001", "A", "测试", 100m, 1000m, 10m, Today.AddDays(-50), null, Guid.NewGuid(),
                 HoldingDate: Today.AddDays(-50)),
             CancellationToken.None);

@@ -92,7 +92,6 @@ public sealed class BackupGoldHolding
     public DateTimeOffset? LastQuoteAttemptAt { get; set; }
     public string? LastQuoteSource { get; set; }
     public string? LastQuoteError { get; set; }
-    public int ConfirmationDelayDays { get; set; } = 2;
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; }
 }
@@ -177,6 +176,7 @@ public sealed class BackupFundPosition
     public string? LastQuoteSource { get; set; }
     public string? LastQuoteError { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public int ConfirmationDelayDays { get; set; } = 2;
     public int Version { get; set; }
 }
 

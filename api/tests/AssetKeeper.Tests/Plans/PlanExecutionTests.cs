@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
@@ -286,7 +287,7 @@ public sealed class PlanExecutionTests
     {
         await using var context = await CreateAsync(1000m);
         var firstPosition = await CreatePositionAsync(context);
-        var alias = await context.Funds.CreatePositionAsync(
+        var alias = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)),
             new("基金别名", "000001", "A", "另一来源", 1m, 10m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
         var first = await SavePlanAsync(context, AutoPlanType.FundSip, 100m, firstPosition, AutoPlanCycle.TradingDay, new TimeOnly(9, 0), Today);
         var request = Request(AutoPlanType.FundSip, 100m, alias.Result!.Position.Id, AutoPlanCycle.TradingDay, new TimeOnly(9, 0), Today);
@@ -390,7 +391,7 @@ public sealed class PlanExecutionTests
 
     private static async Task<Guid> CreatePositionAsync(TestContext context)
     {
-        var result = await context.Funds.CreatePositionAsync(
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)),
             new("测试基金", "000001", "A", "测试", 100m, 1000m, 10m, Today.AddDays(-20), null, Guid.NewGuid(),
                 HoldingDate: Today.AddDays(-20)),
             CancellationToken.None);

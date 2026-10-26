@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
@@ -30,16 +31,16 @@ public sealed class G2PostgresTests
             var repository = new LedgerRepository(context);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
             var funds = new FundService(repository, Dates);
-            var position = await funds.CreatePositionAsync(
-                new("基金", null, null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
+            var position = await TestFundQuotes.CreatePositionAsync(repository, Dates,
+                new("基金", "000001", null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
                 CancellationToken.None);
             var pending = await funds.BuyAsync(
-                new(position.Result!.Position.Id, 300m, Today, null, Guid.NewGuid()),
+                new(position.Result!.Position.Id, 300m, Today, null, Guid.NewGuid(), Fee: 2m),
                 CancellationToken.None);
             pendingId = pending.Result!.Activity.Id;
             var confirm = await funds.ConfirmBuyAsync(
                 pendingId,
-                new ConfirmFundBuyRequest(10m, 30m, Today, 2m, Today, null, Guid.NewGuid()),
+                new ConfirmFundBuyRequest(10m, 29.8m, Today, 2m, Today, null, Guid.NewGuid()),
                 CancellationToken.None);
             Assert.Equal(AssetOperationStatus.Created, confirm.Status);
         }
@@ -58,7 +59,7 @@ public sealed class G2PostgresTests
 
         var overview = await new FundService(new LedgerRepository(readback), Dates).GetOverviewAsync(CancellationToken.None);
         Assert.NotNull(overview);
-        Assert.Equal(3300m, overview.TotalValue);
+        Assert.Equal(3278m, overview.TotalValue);
         Assert.Equal(0m, overview.PendingAmount);
     }
 
@@ -118,7 +119,7 @@ public sealed class G2PostgresTests
             var repository = new LedgerRepository(context);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
             var funds = new FundService(repository, Dates, new StubFundQuoteProvider());
-            var position = await funds.CreatePositionAsync(
+            var position = await TestFundQuotes.CreatePositionAsync(repository, Dates,
                 new("基金", "000001", null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
                 CancellationToken.None);
             positionId = position.Result!.Position.Id;
@@ -194,7 +195,7 @@ public sealed class G2PostgresTests
             var repository = new LedgerRepository(context);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 10000m), CancellationToken.None);
             var funds = new FundService(repository, Dates);
-            var position = await funds.CreatePositionAsync(
+            var position = await TestFundQuotes.CreatePositionAsync(repository, Dates,
                 new("基金", null, null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)),
                 CancellationToken.None);
             var apply = await funds.ApplySellAsync(

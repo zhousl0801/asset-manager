@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.History;
@@ -27,7 +28,7 @@ public sealed class G1PostgresTests
             var repository = new LedgerRepository(seed);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 1000m), CancellationToken.None);
             var funds = new FundService(repository, Dates);
-            await funds.CreatePositionAsync(new("旧持仓", null, null, null, 100m, 1000m, 12m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
+            await TestFundQuotes.CreatePositionAsync(repository, Dates, new("旧持仓", null, null, null, 100m, 1000m, 12m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
             await seed.GetService<IMigrator>().MigrateAsync("20261021075435_CloseG0Correctness");
         }
 
@@ -54,14 +55,14 @@ public sealed class G1PostgresTests
     }
 
     [PostgresFact]
-    public async Task MigratedLatestQuote_CanBeCorrectedThroughItsOriginalFact()
+    public async Task MigratedLatestQuote_RejectsManualPriceCorrection()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using (var seed = database.CreateContext())
         {
             var repository = new LedgerRepository(seed);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 1000m), CancellationToken.None);
-            await new FundService(repository, Dates).CreatePositionAsync(new("旧持仓", null, null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
+            await TestFundQuotes.CreatePositionAsync(repository, Dates, new("旧持仓", null, null, null, 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
             await seed.GetService<IMigrator>().MigrateAsync("20261021075435_CloseG0Correctness");
         }
 
@@ -73,22 +74,21 @@ public sealed class G1PostgresTests
         var request = new HistoryChangeRequest(Guid.NewGuid(), history.LedgerVersion, fact.Source, fact.Id, fact.Version, "correct",
             Today, fact.Sequence, fact.Amount, fact.Quantity, 20m, Today.AddDays(-1), null, null, fact.Note, "更正旧净值日期与金额");
         var preview = await service.PreviewAsync(request, CancellationToken.None);
-        Assert.Equal(AssetOperationStatus.Success, preview.Status);
-        Assert.Equal(2000m, preview.Result!.After.Funds.Single().Value);
-        Assert.Equal(AssetOperationStatus.Success, (await service.ChangeAsync(new(request, preview.Result.PreviewToken), CancellationToken.None)).Status);
-        Assert.Equal(2000m, (await new FundService(new LedgerRepository(context), Dates).GetOverviewAsync(CancellationToken.None))!.TotalValue);
+        Assert.Equal(AssetOperationStatus.Invalid, preview.Status);
+        Assert.Contains(preview.Errors, error => error.Contains("不能手动更正"));
+        Assert.Equal(1000m, (await new FundService(new LedgerRepository(context), Dates).GetOverviewAsync(CancellationToken.None))!.TotalValue);
         Assert.DoesNotContain(await context.PriceObservations.ToListAsync(), quote => quote.SourceTransactionId is null);
     }
 
     [PostgresFact]
-    public async Task MigratedUnmatchedSnapshot_HasAnEditableQuoteFact()
+    public async Task MigratedUnmatchedSnapshot_RejectsManualPriceCorrection()
     {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using (var seed = database.CreateContext())
         {
             var repository = new LedgerRepository(seed);
             await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 1000m), CancellationToken.None);
-            await new FundService(repository, Dates).CreatePositionAsync(new("旧持仓", null, null, null, 100m, 1000m, 10m, Today.AddDays(-1), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-1)), CancellationToken.None);
+            await TestFundQuotes.CreatePositionAsync(repository, Dates, new("旧持仓", null, null, null, 100m, 1000m, 10m, Today.AddDays(-1), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-1)), CancellationToken.None);
             // A legacy cached quote can come from a buy whose independent quote date was not retained.
             (await seed.FundPositions.SingleAsync()).UpdateQuote(12m, Today, DateTimeOffset.UtcNow);
             await seed.SaveChangesAsync();
@@ -106,8 +106,9 @@ public sealed class G1PostgresTests
         var request = new HistoryChangeRequest(Guid.NewGuid(), history.LedgerVersion, quote.Source, quote.Id, quote.Version, "correct",
             Today, quote.Sequence, 0m, null, 15m, Today, null, null, quote.Note, "更正迁移行情");
         var preview = await service.PreviewAsync(request, CancellationToken.None);
-        Assert.Equal(1500m, preview.Result!.After.Funds.Single().Value);
-        Assert.Equal(AssetOperationStatus.Success, (await service.ChangeAsync(new(request, preview.Result.PreviewToken), CancellationToken.None)).Status);
+        Assert.Equal(AssetOperationStatus.Invalid, preview.Status);
+        Assert.Contains(preview.Errors, error => error.Contains("不能手动更正"));
+        Assert.Equal(1200m, (await service.GetAsync(null, CancellationToken.None))!.Snapshot.Funds.Single().Value);
         Assert.DoesNotContain(await context.PriceObservations.ToListAsync(), price => price.SourceTransactionId is null);
     }
 
@@ -119,7 +120,7 @@ public sealed class G1PostgresTests
         var repository = new LedgerRepository(context);
         await new LedgerService(repository, Dates).InitializeAsync(new(Today.AddMonths(-1), 100m), CancellationToken.None);
         var funds = new FundService(repository, Dates);
-        var opening = await funds.CreatePositionAsync(new("基金", null, null, null, 10m, 100m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(repository, Dates, new("基金", null, null, null, 10m, 100m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today.AddDays(-20)), CancellationToken.None);
         var result = await funds.BuyAsync(new(opening.Result!.Position.Id, 200m, Today.AddDays(-1), null, Guid.NewGuid()), CancellationToken.None);
         Assert.Equal(AssetOperationStatus.Invalid, result.Status);
         await using var readback = database.CreateContext();

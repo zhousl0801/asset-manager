@@ -110,6 +110,7 @@ export interface PendingFundBuy {
   amount: number
   fee: number
   businessDate: string
+  tradeDate: string
   note: string | null
   confirmationDate: string
   canCancel: boolean

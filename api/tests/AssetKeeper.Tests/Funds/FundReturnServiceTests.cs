@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Infrastructure.Persistence;
@@ -93,9 +94,7 @@ public sealed class FundReturnServiceTests
     public async Task PartialClassDisclosure_MarksDayPartialAndOnlySumsDisclosedClasses()
     {
         await using var context = await CreateAsync(withClassC: true);
-        await context.Funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(context.ClassCPositionId, 13m, new DateOnly(2026, 10, 15), Guid.NewGuid()),
-            CancellationToken.None);
+        await TestFundQuotes.RefreshAsync(new LedgerRepository(context.Db), new BusinessDateProvider(new FixedTimeProvider(Now)), context.ClassCPositionId, 13m, new DateOnly(2026, 10, 15));
 
         var result = await context.Returns.GetAsync(TrendRange.Month, Today, null, false, CancellationToken.None);
 
@@ -141,7 +140,7 @@ public sealed class FundReturnServiceTests
             new InitializeLedgerRequest(new DateOnly(2026, 9, 1), 10000m),
             CancellationToken.None);
         var funds = new FundService(repository, dates);
-        var opening = await funds.CreatePositionAsync(
+        var opening = await TestFundQuotes.CreatePositionAsync(repository, dates,
             new CreateFundPositionRequest(
                 "纳指基金",
                 "000001",
@@ -156,7 +155,7 @@ public sealed class FundReturnServiceTests
                 HoldingDate: new DateOnly(2026, 9, 20)),
             CancellationToken.None);
         var classC = withClassC
-            ? await funds.CreatePositionAsync(
+            ? await TestFundQuotes.CreatePositionAsync(repository, dates,
                 new CreateFundPositionRequest(
                     "纳指基金",
                     "000002",
@@ -171,12 +170,8 @@ public sealed class FundReturnServiceTests
                     HoldingDate: new DateOnly(2026, 9, 20)),
                 CancellationToken.None)
             : null;
-        await funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(opening.Result!.Position.Id, 11m, new DateOnly(2026, 9, 30), Guid.NewGuid()),
-            CancellationToken.None);
-        await funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(opening.Result.Position.Id, 12m, new DateOnly(2026, 10, 10), Guid.NewGuid()),
-            CancellationToken.None);
+        await TestFundQuotes.RefreshAsync(repository, dates, opening.Result!.Position.Id, 11m, new DateOnly(2026, 9, 30));
+        await TestFundQuotes.RefreshAsync(repository, dates, opening.Result.Position.Id, 12m, new DateOnly(2026, 10, 10));
 
         await funds.BuyAsync(
             new BuyFundRequest(opening.Result.Position.Id, 300m, new DateOnly(2026, 10, 12), null, Guid.NewGuid()),

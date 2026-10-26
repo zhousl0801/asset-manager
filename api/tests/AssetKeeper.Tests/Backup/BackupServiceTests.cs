@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using System.Text;
 using AssetKeeper.Application.Backup;
 using AssetKeeper.Application.Cash;
@@ -31,6 +32,7 @@ public sealed class BackupServiceTests
 
         Assert.NotNull(export);
         Assert.NotEmpty(export.Entries);
+        Assert.Equal(1, Assert.Single(export.FundPositions).ConfirmationDelayDays);
         Assert.NotEmpty(export.AssetTransactions);
         Assert.NotEmpty(export.Plans);
         Assert.NotEmpty(export.PlanOccurrences);
@@ -62,6 +64,7 @@ public sealed class BackupServiceTests
         Assert.Equal(export.Categories.Count, afterRestore.Categories.Count);
         Assert.Equal(export.FundGroups.Count, afterRestore.FundGroups.Count);
         Assert.Equal(export.FundPositions.Count, afterRestore.FundPositions.Count);
+        Assert.Equal(1, Assert.Single(afterRestore.FundPositions).ConfirmationDelayDays);
         Assert.Equal(export.CashAdjustments.Count, afterRestore.CashAdjustments.Count);
         Assert.Equal(export.PriceObservations.Count, afterRestore.PriceObservations.Count);
         Assert.Equal(export.CashAccount.Balance, afterRestore.CashAccount.Balance);
@@ -219,7 +222,7 @@ public sealed class BackupServiceTests
             new ProvidentDepositRequest(500m, new DateOnly(2026, 10, 3), "缴存", Guid.NewGuid()),
             CancellationToken.None);
         var funds = new FundService(repository, dates);
-        var position = await funds.CreatePositionAsync(
+        var position = await TestFundQuotes.CreatePositionAsync(repository, dates,
             new CreateFundPositionRequest(
                 "纳指基金",
                 "000001",
@@ -231,11 +234,9 @@ public sealed class BackupServiceTests
                 new DateOnly(2026, 9, 20),
                 null,
                 Guid.NewGuid(),
-                HoldingDate: new DateOnly(2026, 9, 20)),
+                HoldingDate: new DateOnly(2026, 9, 20), ConfirmationDelayDays: 1),
             CancellationToken.None);
-        await funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(position.Result!.Position.Id, 11m, new DateOnly(2026, 10, 10), Guid.NewGuid()),
-            CancellationToken.None);
+        await TestFundQuotes.RefreshAsync(repository, dates, position.Result!.Position.Id, 11m, new DateOnly(2026, 10, 10));
         await funds.BuyAsync(
             new BuyFundRequest(position.Result.Position.Id, 300m, new DateOnly(2026, 10, 12), "定投", Guid.NewGuid()),
             CancellationToken.None);

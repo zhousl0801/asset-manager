@@ -7,6 +7,7 @@ using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Provident;
+using AssetKeeper.Tests.Ledgers;
 
 namespace AssetKeeper.Tests.Api;
 
@@ -32,11 +33,16 @@ public sealed class AssetEndpointsTests
     [Fact]
     public async Task AssetFlows_UpdateCashHomeAndCashActivityStream()
     {
-        using var factory = new AssetKeeperApiFactory();
+        using var factory = new AssetKeeperApiFactory
+        {
+            Clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 26, 2, 0, 0, TimeSpan.Zero))
+        };
         using var client = factory.CreateClient();
-        var today = BusinessToday();
+        var today = new DateOnly(2026, 10, 26);
+        factory.Quotes.NetValue = 12m;
+        factory.Quotes.Date = today.AddDays(-7);
         var date = today.ToString("yyyy-MM-dd");
-        await InitializeLedgerAsync(client, 10000m);
+        await InitializeLedgerAsync(client, 10000m, today.AddDays(-7));
 
         var depositResponse = await client.PostAsJsonAsync("/api/ledger/provident/deposits", new
         {
@@ -91,7 +97,7 @@ public sealed class AssetEndpointsTests
             cost = 1000m,
             netValue = 12m,
             netValueDate = date,
-            holdingDate = date,
+            holdingDate = today.AddDays(-7).ToString("yyyy-MM-dd"),
             note = "已有持仓",
             requestId = Guid.NewGuid()
         });
@@ -101,22 +107,14 @@ public sealed class AssetEndpointsTests
         {
             positionId = position.Position.Id,
             amount = 130m,
-            businessDate = date,
+            businessDate = today.AddDays(-7).ToString("yyyy-MM-dd"),
             note = "加仓",
             requestId = Guid.NewGuid()
         });
         var fundBuy = await fundBuyResponse.Content.ReadFromJsonAsync<FundMutationResultDto>(JsonOptions);
         Assert.NotNull(fundBuy);
-        var fundConfirmResponse = await client.PostAsJsonAsync($"/api/ledger/funds/buys/{fundBuy.Activity.Id}/confirm", new
-        {
-            shares = 10m,
-            netValue = 13m,
-            netValueDate = date,
-            fee = 0m,
-            businessDate = date,
-            note = "确认",
-            requestId = Guid.NewGuid()
-        });
+        factory.Quotes.NetValue = 13m;
+        var fundConfirmResponse = await client.PostAsync($"/api/ledger/funds/{position.Position.Id}/quote/refresh", null);
         var fundSellApplyResponse = await client.PostAsJsonAsync("/api/ledger/funds/sells", new
         {
             positionId = position.Position.Id,
@@ -183,7 +181,7 @@ public sealed class AssetEndpointsTests
         Assert.NotNull(funds);
         Assert.Equal(1300m, funds.TotalValue);
         Assert.Single(funds.Positions);
-        Assert.Equal(6, funds.Activities.Count);
+        Assert.Equal(7, funds.Activities.Count);
 
         Assert.NotNull(cash);
         Assert.Equal(12018m, cash.Balance);
@@ -230,12 +228,12 @@ public sealed class AssetEndpointsTests
         Assert.Contains("公积金余额不足。", problem.Errors.SelectMany(error => error.Value));
     }
 
-    private static async Task InitializeLedgerAsync(HttpClient client, decimal cashBalance)
+    private static async Task InitializeLedgerAsync(HttpClient client, decimal cashBalance, DateOnly? startDate = null)
     {
         var today = BusinessToday();
         var response = await client.PostAsJsonAsync("/api/ledger/initialize", new
         {
-            startDate = today.ToString("yyyy-MM-dd"),
+            startDate = (startDate ?? today).ToString("yyyy-MM-dd"),
             cashBalance
         });
 

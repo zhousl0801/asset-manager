@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Infrastructure.Persistence;
@@ -67,7 +68,7 @@ public sealed class AssetCoverageTests
 
         if (includeFund)
         {
-            await new FundService(repository, dates).CreatePositionAsync(
+            await TestFundQuotes.CreatePositionAsync(repository, dates,
                 new CreateFundPositionRequest(
                     "测试基金",
                     "000001",

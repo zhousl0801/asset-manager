@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.Funds;
@@ -30,9 +31,7 @@ public sealed class MonthChangeServiceTests
         await context.Provident.DepositAsync(
             new ProvidentDepositRequest(1000m, new DateOnly(2026, 10, 10), null, Guid.NewGuid()),
             CancellationToken.None);
-        await context.Funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(context.FundPositionId, 12m, new DateOnly(2026, 10, 15), Guid.NewGuid()),
-            CancellationToken.None);
+        await TestFundQuotes.RefreshAsync(new LedgerRepository(context.Db), new BusinessDateProvider(new FixedTimeProvider(Now)), context.FundPositionId, 12m, new DateOnly(2026, 10, 15));
         await context.Gold.UpdateQuoteAsync(
             new UpdateGoldQuoteRequest(950m, new DateOnly(2026, 10, 16), Guid.NewGuid()),
             CancellationToken.None);
@@ -140,7 +139,7 @@ public sealed class MonthChangeServiceTests
             new InitializeLedgerRequest(startDate, 10000m),
             CancellationToken.None);
         var openingDate = startDate;
-        var fund = await new FundService(repository, dates).CreatePositionAsync(
+        var fund = await TestFundQuotes.CreatePositionAsync(repository, dates,
             new CreateFundPositionRequest(
                 "测试基金",
                 "000001",

@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Infrastructure.Persistence;
@@ -119,10 +120,10 @@ public sealed class FundGroupServiceTests
     public async Task Overview_MatchesCodeAcrossNameAliasesAndKeepsDifferentCodesSeparate()
     {
         await using var context = await CreateAsync();
-        await context.Funds.CreatePositionAsync(
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)),
             new("另一名称", "000002", "C", "第三来源", 25m, 200m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
             CancellationToken.None);
-        await context.Funds.CreatePositionAsync(
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)),
             new("纳指基金", "000003", "C", "第四来源", 10m, 100m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
             CancellationToken.None);
 
@@ -149,7 +150,7 @@ public sealed class FundGroupServiceTests
             source.AssignGroup(firstGroup.Id, Now);
         }
         await context.Db.SaveChangesAsync();
-        var alias = await context.Funds.CreatePositionAsync(new("别名", "000002", "C", "第三来源", 25m, 250m,
+        var alias = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), new("别名", "000002", "C", "第三来源", 25m, 250m,
             10m, Today, null, Guid.NewGuid(), HoldingDate: Today), CancellationToken.None);
         var original = await context.Db.FundPositions.SingleAsync(position => position.Id == alias.Result!.Position.Id);
         original.AssignGroup(secondGroup.Id, Now);
@@ -180,10 +181,10 @@ public sealed class FundGroupServiceTests
             new InitializeLedgerRequest(Today.AddDays(-10), 10000m),
             CancellationToken.None);
         var funds = new FundService(repository, dates);
-        await funds.CreatePositionAsync(
+        await TestFundQuotes.CreatePositionAsync(repository, dates,
             new("纳指基金", "000001", "A", "示例平台一", 100m, 1000m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
             CancellationToken.None);
-        await funds.CreatePositionAsync(
+        await TestFundQuotes.CreatePositionAsync(repository, dates,
             new("纳指基金", "000002", "C", "示例平台二", 50m, 500m, 10m, Today, null, Guid.NewGuid(), HoldingDate: Today),
             CancellationToken.None);
 

@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using System.Text.Json;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Funds;
@@ -20,7 +21,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await BuyPendingAsync(funds, positionId, 300m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -48,7 +49,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(funds, positionId, 300m, 10m, 30m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -79,7 +80,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(funds, positionId, 300m, 10m, 30m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -97,7 +98,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(funds, positionId, 300m, 10m, 30m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -115,7 +116,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await BuyAndConfirmAsync(funds, positionId, 300m, 10m, 30m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -133,7 +134,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var pendingActivity = await BuyPendingAsync(funds, positionId, 300m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -161,7 +162,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         await ApplySellAsync(funds, positionId, 10m);
 
         var service = new HistoryService(context.Repository, context.Dates);
@@ -189,7 +190,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var apply = await ApplySellAsync(funds, positionId, 10m);
         await ConfirmSellAsync(funds, apply.Id, 10m, 10m, 100m);
 
@@ -221,7 +222,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var apply = await ApplySellAsync(funds, positionId, 10m);
         var confirm = await ConfirmSellAsync(funds, apply.Id, 10m, 10m, 100m);
         await ArriveSellAsync(funds, confirm.Id, 100m);
@@ -240,7 +241,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var apply = await ApplySellAsync(funds, positionId, 10m);
         var confirm = await ConfirmSellAsync(funds, apply.Id, 10m, 10m, 100m);
         await ArriveSellAsync(funds, confirm.Id, 100m);
@@ -270,7 +271,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var apply = await ApplySellAsync(funds, positionId, 10m);
         var confirm = await ConfirmSellAsync(funds, apply.Id, 10m, 10m, 100m);
         await ArriveSellAsync(funds, confirm.Id, 100m);
@@ -289,7 +290,7 @@ public sealed class G2ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var positionId = await CreatePositionAsync(funds);
+        var positionId = await CreatePositionAsync(context);
         var apply = await ApplySellAsync(funds, positionId, 10m);
         await ConfirmSellAsync(funds, apply.Id, 10m, 10m, 100m);
 
@@ -340,9 +341,9 @@ public sealed class G2ServiceTests
         return result.Result!.Activity;
     }
 
-    private static async Task<Guid> CreatePositionAsync(FundService funds)
+    private static async Task<Guid> CreatePositionAsync(TestContext context)
     {
-        var result = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
 
@@ -378,19 +379,8 @@ public sealed class G2ServiceTests
 
     private static CreateFundPositionRequest Position(DateOnly holdingDate, decimal value, DateOnly valueDate)
     {
-        return JsonSerializer.Deserialize<CreateFundPositionRequest>(JsonSerializer.Serialize(new
-        {
-            Name = "测试基金",
-            Code = "000001",
-            ShareClass = "A",
-            Platform = "测试",
-            Shares = 100m,
-            Cost = 1000m,
-            NetValue = value,
-            NetValueDate = valueDate,
-            HoldingDate = holdingDate,
-            RequestId = Guid.NewGuid()
-        }))!;
+        return new CreateFundPositionRequest("测试基金", "000001", "A", "测试", 100m, 1000m,
+            value, valueDate, null, Guid.NewGuid(), HoldingDate: holdingDate);
     }
 
     private static async Task<TestContext> CreateAsync(decimal balance = 10000m)

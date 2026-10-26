@@ -5,7 +5,7 @@ import FundsView from './FundsView.vue'
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
   buy: vi.fn(),
-  confirm: vi.fn(),
+  cancel: vi.fn(),
   createPosition: vi.fn(),
   sell: vi.fn(),
   confirmSell: vi.fn(),
@@ -18,12 +18,12 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn
 vi.mock('../api/funds', () => ({
   fetchFundOverview: mocks.overview,
   buyFund: mocks.buy,
-  confirmFundBuy: mocks.confirm,
+  cancelFundPending: mocks.cancel,
   createFundPosition: mocks.createPosition,
   sellFund: mocks.sell,
   confirmFundSell: mocks.confirmSell,
   arriveFundSell: mocks.arriveSell,
-  updateFundQuote: mocks.quote,
+  correctFundShares: mocks.quote,
   refreshFundQuote: mocks.refresh
 }))
 
@@ -65,6 +65,10 @@ const overview = {
     positionName: '纳指基金',
     amount: 300,
     businessDate: '2026-10-21',
+    tradeDate: '2026-10-21',
+    confirmationDate: '2026-10-23',
+    fee: 0,
+    canCancel: false,
     note: '定投'
   }]
 }
@@ -75,39 +79,28 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-test('pending buy is shown inside fund assets and can be confirmed with shares and fee', async () => {
-  mocks.confirm.mockResolvedValue({
-    position: overview.positions[0],
-    cashBalance: 9700,
-    activity: { id: 'c1', type: 'buyConfirmed', shares: 10, amount: 300, cashEffect: 0, fee: 2 }
-  })
+test('pending buy shows trade and automatic confirmation dates without manual confirmation', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
-
   expect(view.find('.hero-meta').text()).toContain('含待确认 ¥300.00')
   expect(view.find('.pending-card').text()).toContain('纳指基金')
-  expect(view.find('.pending-card').text()).toContain('¥300.00')
+  expect(view.find('.pending-card').text()).toContain('T 日 2026年10月21日')
+  expect(view.find('.pending-card').text()).toContain('预计 2026年10月23日 按确认净值自动结转')
+  expect(view.find('.pending-card button').exists()).toBe(false)
+  view.unmount()
+})
 
-  await view.find('.confirm-button').trigger('click')
+test('pending buy before cutoff can be cancelled with an idempotent request', async () => {
+  const cancellable = structuredClone(overview)
+  cancellable.pendingBuys[0]!.canCancel = true
+  mocks.overview.mockResolvedValue(cancellable)
+  mocks.cancel.mockResolvedValue({})
+  const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
-
-  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
-  inputs[0]!.value = '10'
-  inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
-  inputs[1]!.value = '30'
-  inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
-  inputs[3]!.value = '2'
-  inputs[3]!.dispatchEvent(new Event('input', { bubbles: true }))
+  await view.get('.pending-card .confirm-button').trigger('click')
   await flushPromises()
-
-  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-  await flushPromises()
-
-  expect(mocks.confirm).toHaveBeenCalledTimes(1)
-  expect(mocks.confirm.mock.calls[0]![0]).toBe('pb1')
-  expect(mocks.confirm.mock.calls[0]![1]).toMatchObject({ shares: 10, netValue: 30, fee: 2 })
-  expect(mocks.confirm.mock.calls[0]![1].requestId).toBeTruthy()
-  expect(mocks.buy).not.toHaveBeenCalled()
+  expect(mocks.cancel).toHaveBeenCalledWith('pb1', expect.any(String))
+  expect(mocks.overview).toHaveBeenCalledTimes(2)
   view.unmount()
 })
 
@@ -151,13 +144,9 @@ test('quote sheet can fetch the latest fund nav from the provider', async () => 
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
-  const quoteButton = view.findAll('button').find((button) => button.text() === '更新净值')!
+  await view.get('.fund-card > header').trigger('click')
+  const quoteButton = view.findAll('button').find((button) => button.text() === '刷新净值')!
   await quoteButton.trigger('click')
-  await flushPromises()
-
-  const fetchButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.sheet button'))
-    .find((button) => button.textContent?.includes('获取最新净值'))!
-  fetchButton.click()
   await flushPromises()
 
   expect(mocks.refresh).toHaveBeenCalledWith('p1')
@@ -213,7 +202,7 @@ test('redemption confirmation submits shares, net value, fee and proceeds', asyn
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
-  const confirmButton = view.findAll('button').find((button) => button.text() === '确认赎回')!
+  const confirmButton = view.findAll('button').find((button) => button.text() === '登记实际结果')!
   await confirmButton.trigger('click')
   await flushPromises()
 

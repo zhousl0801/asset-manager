@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.Funds;
@@ -17,7 +18,7 @@ public sealed class FundServiceTests
     {
         var context = await CreateContextAsync();
 
-        var result = await context.Funds.CreatePositionAsync(PositionRequest(), CancellationToken.None);
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest(), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         Assert.NotNull(result.Result);
@@ -89,7 +90,8 @@ public sealed class FundServiceTests
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
-        var pending = await BuyPendingAsync(context, position.Id, 130m);
+        var pendingResult = await context.Funds.BuyAsync(new(position.Id, 130m, BusinessToday, null, Guid.NewGuid(), Fee: 2m), CancellationToken.None);
+        var pending = pendingResult.Result!.Activity;
 
         var result = await context.Funds.ConfirmBuyAsync(
             pending.Id,
@@ -376,14 +378,12 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task UpdateQuoteAsync_ChangesValueWithoutCashOrCost()
+    public async Task RefreshQuoteAsync_ChangesValueWithoutCashOrCost()
     {
         var context = await CreateContextAsync();
         var position = await CreatePositionAsync(context);
 
-        var result = await context.Funds.UpdateQuoteAsync(
-            new UpdateFundQuoteRequest(position.Id, 14m, BusinessToday, Guid.NewGuid()),
-            CancellationToken.None);
+        var result = await TestFundQuotes.RefreshAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), position.Id, 14m, BusinessToday);
 
         Assert.Equal(AssetOperationStatus.Success, result.Status);
         Assert.NotNull(result.Result);
@@ -405,14 +405,14 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task CreatePositionAsync_WithFutureValueDate_ReturnsInvalid()
+    public async Task CreatePositionAsync_WithFutureProviderValueDate_ReturnsUnavailable()
     {
         var context = await CreateContextAsync();
         var request = PositionRequest() with { NetValueDate = BusinessToday.AddDays(1) };
 
-        var result = await context.Funds.CreatePositionAsync(request, CancellationToken.None);
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), request, CancellationToken.None);
 
-        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Equal(AssetOperationStatus.Unavailable, result.Status);
         Assert.Empty(context.Repository.FundPositions);
     }
 
@@ -527,7 +527,7 @@ public sealed class FundServiceTests
 
     private static async Task<FundPosition> CreatePositionAsync(TestContext context)
     {
-        var result = await context.Funds.CreatePositionAsync(PositionRequest(), CancellationToken.None);
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest(), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         Assert.NotNull(result.Result);

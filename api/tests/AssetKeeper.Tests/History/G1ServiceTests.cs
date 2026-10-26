@@ -1,3 +1,4 @@
+using AssetKeeper.Tests.Quotes;
 using System.Text.Json;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.History;
@@ -24,7 +25,7 @@ public sealed class G1ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
         var id = opening.Result!.Position.Id;
         var sellApply = await funds.ApplySellAsync(new(id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
@@ -45,7 +46,7 @@ public sealed class G1ServiceTests
     public async Task HoldingDate_IsIndependentOfQuoteDate()
     {
         await using var context = await CreateAsync();
-        var result = await new FundService(context.Repository, context.Dates).CreatePositionAsync(Position(Today.AddDays(-20), 15m, Today), CancellationToken.None);
+        var result = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 15m, Today), CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);
         Assert.Equal(Today.AddDays(-20), result.Result!.Activity.BusinessDate);
@@ -83,7 +84,7 @@ public sealed class G1ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
         var sellApply = await funds.ApplySellAsync(new(opening.Result!.Position.Id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
             new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
@@ -130,7 +131,7 @@ public sealed class G1ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 10m, Today.AddDays(-20)), CancellationToken.None);
         var sellApply = await funds.ApplySellAsync(new(opening.Result!.Position.Id, 50m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
         await funds.ConfirmSellAsync(sellApply.Result!.Activity.Id,
             new ConfirmFundSellRequest(50m, 20m, Today.AddDays(-6), 0m, 1000m, Today.AddDays(-6), null, Guid.NewGuid()), CancellationToken.None);
@@ -183,7 +184,7 @@ public sealed class G1ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-20), 10m, Today), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-20), 10m, Today), CancellationToken.None);
         var fact = await context.Db.AssetTransactions.SingleAsync();
         context.Db.Entry(fact).Property(item => item.NeedsDateConfirmation).CurrentValue = true;
         await context.Db.SaveChangesAsync();
@@ -224,29 +225,29 @@ public sealed class G1ServiceTests
     {
         await using var context = await CreateAsync();
         var funds = new FundService(context.Repository, context.Dates);
-        var opening = await funds.CreatePositionAsync(Position(Today.AddDays(-10), 10m, Today.AddDays(-10)), CancellationToken.None);
-        await funds.UpdateQuoteAsync(new(opening.Result!.Position.Id, 20m, Today, Guid.NewGuid()), CancellationToken.None);
+        var opening = await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-10), 10m, Today.AddDays(-10)), CancellationToken.None);
+        await TestFundQuotes.RefreshAsync(context.Repository, context.Dates, opening.Result!.Position.Id, 20m, Today);
         var service = new HistoryService(context.Repository, context.Dates);
         var history = (await service.GetAsync(Today.AddDays(-5), CancellationToken.None))!;
         Assert.Equal(1000m, history.Snapshot.Funds.Single().Value);
         Assert.Equal(Today.AddDays(-10), history.Snapshot.Funds.Single().PriceDate);
-        Assert.Equal("manual", history.Snapshot.Funds.Single().PriceSource);
+        Assert.Equal("test-provider", history.Snapshot.Funds.Single().PriceSource);
         Assert.Null((await service.GetAsync(Today.AddDays(-11), CancellationToken.None))!.Snapshot.Funds.Single().Value);
     }
 
     [Fact]
-    public async Task RemovingOnlyQuote_DoesNotExposeSupersededValueInHome()
+    public async Task RemovingProviderQuoteThroughCorrection_IsRejected()
     {
         await using var context = await CreateAsync();
-        await new FundService(context.Repository, context.Dates).CreatePositionAsync(Position(Today.AddDays(-10), 10m, Today), CancellationToken.None);
+        await TestFundQuotes.CreatePositionAsync(context.Repository, context.Dates, Position(Today.AddDays(-10), 10m, Today), CancellationToken.None);
         var service = new HistoryService(context.Repository, context.Dates);
         var history = (await service.GetAsync(null, CancellationToken.None))!;
         var request = Change(history, history.Facts.Single()) with { Price = null, PriceDate = null };
         var preview = await service.PreviewAsync(request, CancellationToken.None);
-        Assert.Equal(AssetOperationStatus.Success, preview.Status);
-        Assert.Equal(AssetOperationStatus.Success, (await service.ChangeAsync(new(request, preview.Result!.PreviewToken), CancellationToken.None)).Status);
-        Assert.Null((await service.GetAsync(null, CancellationToken.None))!.Snapshot.Funds.Single().Value);
-        Assert.Null((await new LedgerService(context.Repository, context.Dates).GetOverviewAsync(CancellationToken.None))!.Fund.Amount);
+        Assert.Equal(AssetOperationStatus.Invalid, preview.Status);
+        Assert.Contains(preview.Errors, error => error.Contains("不能手动更正"));
+        Assert.Equal(1000m, (await service.GetAsync(null, CancellationToken.None))!.Snapshot.Funds.Single().Value);
+        Assert.Equal(1000m, (await new LedgerService(context.Repository, context.Dates).GetOverviewAsync(CancellationToken.None))!.Fund.Amount);
     }
 
     [Fact]
@@ -275,19 +276,8 @@ public sealed class G1ServiceTests
 
     private static CreateFundPositionRequest Position(DateOnly holdingDate, decimal value, DateOnly valueDate)
     {
-        return JsonSerializer.Deserialize<CreateFundPositionRequest>(JsonSerializer.Serialize(new
-        {
-            Name = "测试基金",
-            Code = "000001",
-            ShareClass = "A",
-            Platform = "测试",
-            Shares = 100m,
-            Cost = 1000m,
-            NetValue = value,
-            NetValueDate = valueDate,
-            HoldingDate = holdingDate,
-            RequestId = Guid.NewGuid()
-        }))!;
+        return new CreateFundPositionRequest("测试基金", "000001", "A", "测试", 100m, 1000m,
+            value, valueDate, null, Guid.NewGuid(), HoldingDate: holdingDate);
     }
 
     private static async Task<TestContext> CreateAsync(decimal balance = 10000m)

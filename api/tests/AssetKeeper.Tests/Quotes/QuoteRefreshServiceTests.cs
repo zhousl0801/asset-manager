@@ -19,7 +19,7 @@ public sealed class QuoteRefreshServiceTests
         var quote = new ExternalFundQuote("000001", 1.5m, Today, "eastmoney", Now);
         var context = await CreateAsync(new StubFundProvider(quote));
 
-        var position = await context.Funds.CreatePositionAsync(PositionRequest(), CancellationToken.None);
+        var position = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest(), CancellationToken.None);
         var first = await context.Funds.RefreshQuoteAsync(position.Result!.Position.Id, CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Success, first.Status);
@@ -47,7 +47,7 @@ public sealed class QuoteRefreshServiceTests
     {
         var context = await CreateAsync(new StubFundProvider(null, new QuoteUnavailableException("净值服务不可用")));
 
-        var position = await context.Funds.CreatePositionAsync(PositionRequest(), CancellationToken.None);
+        var position = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest(), CancellationToken.None);
         var result = await context.Funds.RefreshQuoteAsync(position.Result!.Position.Id, CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Unavailable, result.Status);

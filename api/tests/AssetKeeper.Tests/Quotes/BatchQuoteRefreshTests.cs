@@ -21,7 +21,7 @@ public sealed class BatchQuoteRefreshTests
             (_, _) => throw new QuoteUnavailableException("暂时不可用"),
             (_, _) => new ExternalFundQuote("000001", 1.5m, Today, "eastmoney", Now));
         var context = await CreateAsync(provider);
-        var position = await context.Funds.CreatePositionAsync(PositionRequest("000001"), CancellationToken.None);
+        var position = await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest("000001"), CancellationToken.None);
 
         var run = await context.Quotes.RefreshAsync(
             QuoteRefreshScope.Funds,
@@ -56,7 +56,7 @@ public sealed class BatchQuoteRefreshTests
             (_, _) => throw new QuoteUnavailableException("服务持续失败"),
             (_, _) => throw new QuoteUnavailableException("服务持续失败"));
         var context = await CreateAsync(provider);
-        await context.Funds.CreatePositionAsync(PositionRequest("000001"), CancellationToken.None);
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest("000001"), CancellationToken.None);
 
         var run = await context.Quotes.RefreshAsync(
             QuoteRefreshScope.Funds,
@@ -84,9 +84,9 @@ public sealed class BatchQuoteRefreshTests
                 ? throw new QuoteUnavailableException("单只失败")
                 : new ExternalFundQuote(code, 2.5m, Today, "eastmoney", Now));
         var context = await CreateAsync(provider);
-        await context.Funds.CreatePositionAsync(PositionRequest("000001", "失败基金"), CancellationToken.None);
-        await context.Funds.CreatePositionAsync(PositionRequest("000002", "成功基金"), CancellationToken.None);
-        await context.Funds.CreatePositionAsync(PositionRequest(null, "缺代码基金"), CancellationToken.None);
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest("000001", "失败基金"), CancellationToken.None);
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest("000002", "成功基金"), CancellationToken.None);
+        await TestFundQuotes.CreatePositionAsync(context.Repository, new BusinessDateProvider(new FixedTimeProvider(Now)), PositionRequest(null, "缺代码基金"), CancellationToken.None);
 
         var run = await context.Quotes.RefreshAsync(
             QuoteRefreshScope.Funds,
