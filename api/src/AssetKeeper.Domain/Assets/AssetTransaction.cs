@@ -57,6 +57,10 @@ public sealed class AssetTransaction
 
     public bool NeedsDateConfirmation { get; private set; }
 
+    public int ConfirmationDelayDays { get; private set; } = 2;
+
+    public DateOnly? FundTradeDate { get; private set; }
+
     public bool IsReversed { get; private set; }
 
     public int Version { get; private set; }
@@ -144,7 +148,7 @@ public sealed class AssetTransaction
 
         if (fee is not null && fee != 0m)
         {
-            if (!confirmedBuy && !sellConfirm)
+            if (!pendingBuy && !confirmedBuy && !sellConfirm)
             {
                 throw new ArgumentException("只有确认记录可以记录费用。");
             }
@@ -152,11 +156,11 @@ public sealed class AssetTransaction
             EnsureFee(fee.Value, amount);
             Fee = fee.Value;
         }
-        else if ((confirmedBuy || sellConfirm) && fee is not null)
+        else if ((pendingBuy || confirmedBuy || sellConfirm) && fee is not null)
         {
             Fee = 0m;
         }
-        else if (pendingBuy || sellApply || sellArrival || goldSellPending || goldSellArrival)
+        else if (sellApply || sellArrival || goldSellPending || goldSellArrival)
         {
             Fee = 0m;
         }
@@ -271,7 +275,8 @@ public sealed class AssetTransaction
         DateOnly businessDate,
         string? note,
         Guid requestId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? quoteSource = null)
     {
         if (shares == 0 && cost != 0)
         {
@@ -283,7 +288,7 @@ public sealed class AssetTransaction
             throw new ArgumentException("持仓成本不能为负数。", nameof(cost));
         }
 
-        return Create(
+        var transaction = Create(
             ledgerId,
             requestId,
             AssetType.Fund,
@@ -297,6 +302,8 @@ public sealed class AssetTransaction
             note,
             businessDate,
             now);
+        transaction.QuoteSource = NormalizeQuoteSource(quoteSource);
+        return transaction;
     }
 
     public static AssetTransaction CreateFundBuyPending(
@@ -307,11 +314,24 @@ public sealed class AssetTransaction
         DateOnly businessDate,
         string? note,
         Guid requestId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        decimal fee = 0m,
+        int confirmationDelayDays = 2,
+        DateOnly? tradeDate = null)
     {
         EnsurePositiveAmount(amount, nameof(amount));
+        EnsureFee(fee, amount);
+        if (fee >= amount)
+        {
+            throw new ArgumentException("申购费必须小于实际扣款金额。", nameof(fee));
+        }
 
-        return Create(
+        if (confirmationDelayDays is not (1 or 2))
+        {
+            throw new ArgumentOutOfRangeException(nameof(confirmationDelayDays), "基金确认周期只能设为 T+1 或 T+2。");
+        }
+
+        var transaction = Create(
             ledgerId,
             requestId,
             AssetType.Fund,
@@ -324,7 +344,11 @@ public sealed class AssetTransaction
             subject,
             note,
             businessDate,
-            now);
+            now,
+            fee);
+        transaction.ConfirmationDelayDays = confirmationDelayDays;
+        transaction.FundTradeDate = tradeDate ?? businessDate;
+        return transaction;
     }
 
     public static AssetTransaction CreateFundBuyConfirm(

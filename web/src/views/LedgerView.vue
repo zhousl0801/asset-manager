@@ -11,7 +11,7 @@ import PageHeader from '../components/PageHeader.vue'
 import LedgerStatsChart from '../components/LedgerStatsChart.vue'
 import { ExpenseCategories, IncomeCategories } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
-import { formatBusinessDate, formatMoney, todayInBusinessTimeZone } from '../utils/format'
+import { formatBusinessDate, formatMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel, periodStart, shiftAnchor } from '../utils/period'
 import type { EntryKind, EntryPeriod, EntryPeriodSummary, EntryStats, LedgerEntry } from '../types/entry'
 
@@ -97,12 +97,8 @@ const groupedEntries = computed(() => {
   return [...groups.entries()].map(([date, entries]) => ({
     date,
     entries,
-    income: entries
-      .filter((entry) => entry.kind === 'income')
-      .reduce((sum, entry) => sum + entry.amount, 0),
-    expense: entries
-      .filter((entry) => entry.kind === 'expense')
-      .reduce((sum, entry) => sum + entry.amount, 0)
+    income: sumAmounts(entries.filter((entry) => entry.kind === 'income').map(entry => entry.amount)),
+    expense: sumAmounts(entries.filter((entry) => entry.kind === 'expense').map(entry => entry.amount))
   }))
 })
 

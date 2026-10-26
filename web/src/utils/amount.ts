@@ -1,3 +1,5 @@
+import Decimal from 'decimal.js'
+
 export const MaximumAmount = 1_000_000_000
 
 export type AmountKey =
@@ -78,11 +80,11 @@ export function evaluateAmountExpression(expression: string): number | null {
     return null
   }
 
-  const total = Math.round(terms.reduce((sum, term) => sum + Number(term), 0) * 100) / 100
+  const total = terms.reduce((sum, term) => sum.plus(term), new Decimal(0))
 
-  if (!Number.isFinite(total) || total <= 0 || total > MaximumAmount) {
+  if (!total.isFinite() || !total.isPositive() || total.greaterThan(MaximumAmount)) {
     return null
   }
 
-  return total
+  return total.toNumber()
 }

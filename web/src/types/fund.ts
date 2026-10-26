@@ -1,5 +1,6 @@
 export type FundActivityType =
   | 'opening'
+  | 'correction'
   | 'buy'
   | 'buyPending'
   | 'buyConfirmed'
@@ -29,6 +30,7 @@ export interface FundPosition {
   lastQuoteError: string | null
   groupId: string | null
   groupName: string | null
+  confirmationDelayDays?: number
 }
 
 export interface FundGroup {
@@ -54,6 +56,7 @@ export interface FundPlatformHolding {
   holdingProfit: number
   realizedProfit: number
   hasEffectiveQuote: boolean
+  confirmationDelayDays?: number
 }
 
 export interface FundShareClass {
@@ -105,8 +108,11 @@ export interface PendingFundBuy {
   positionId: string
   positionName: string
   amount: number
+  fee: number
   businessDate: string
   note: string | null
+  confirmationDate: string
+  canCancel: boolean
 }
 
 export interface PendingFundSell {
@@ -116,6 +122,7 @@ export interface PendingFundSell {
   shares: number
   businessDate: string
   note: string | null
+  canCancel: boolean
 }
 
 export interface PendingFundArrival {
@@ -142,6 +149,7 @@ export interface FundActivity {
   createdAt: string
   fee: number
   linkedTransactionId: string | null
+  isReversed?: boolean
 }
 
 export interface FundOverview {
@@ -177,25 +185,15 @@ export interface CreateFundPositionInput {
   platform: string
   shares: number
   cost: number
-  netValue: number
-  netValueDate: string
   note: string
   requestId: string
+  confirmationDelayDays: number
 }
 
 export interface BuyFundInput {
   relatedCashAdjustmentId?: string | null
   positionId: string
   amount: number
-  businessDate: string
-  note: string
-  requestId: string
-}
-
-export interface ConfirmFundBuyInput {
-  shares: number
-  netValue: number
-  netValueDate: string
   fee: number
   businessDate: string
   note: string
@@ -228,9 +226,9 @@ export interface FundSellArrivalInput {
   requestId: string
 }
 
-export interface UpdateFundQuoteInput {
+export interface CorrectFundSharesInput {
   positionId: string
-  netValue: number
-  netValueDate: string
+  shares: number
+  note: string
   requestId: string
 }

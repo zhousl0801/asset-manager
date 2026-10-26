@@ -17,6 +17,16 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
 
     public async Task<ExternalFundQuote> GetLatestAsync(string code, CancellationToken cancellationToken)
     {
+        return await GetQuoteAsync(code, null, cancellationToken);
+    }
+
+    public async Task<ExternalFundQuote> GetForDateAsync(string code, DateOnly date, CancellationToken cancellationToken)
+    {
+        return await GetQuoteAsync(code, date, cancellationToken);
+    }
+
+    private async Task<ExternalFundQuote> GetQuoteAsync(string code, DateOnly? date, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(code))
         {
             throw new QuoteUnavailableException("基金代码为空，无法获取净值。");
@@ -24,7 +34,7 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
 
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"f10/lsjz?fundCode={Uri.EscapeDataString(code.Trim())}&pageIndex=1&pageSize=1");
+            $"f10/lsjz?fundCode={Uri.EscapeDataString(code.Trim())}&pageIndex=1&pageSize={(date is null ? 1 : 100)}");
         request.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -47,7 +57,17 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
                 throw new QuoteUnavailableException("基金净值服务未返回有效记录。");
             }
 
-            var latest = list[0];
+            var latest = date is null
+                ? list[0]
+                : list.EnumerateArray().FirstOrDefault(item =>
+                    DateOnly.TryParseExact(item.GetProperty("FSRQ").GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate)
+                    && parsedDate == date.Value);
+
+            if (latest.ValueKind == JsonValueKind.Undefined)
+            {
+                throw new QuoteUnavailableException($"基金净值服务未返回 {date:yyyy-MM-dd} 的确认净值。");
+            }
+
             var dateText = latest.GetProperty("FSRQ").GetString();
             var valueText = latest.GetProperty("DWJZ").GetString();
 

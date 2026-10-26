@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AssetKeeper.Application.Funds;
 
 public sealed record CreateFundPositionRequest(
@@ -7,8 +9,11 @@ public sealed record CreateFundPositionRequest(
     string? Platform,
     decimal Shares,
     decimal Cost,
+    [property: JsonIgnore]
     decimal NetValue,
+    [property: JsonIgnore]
     DateOnly NetValueDate,
     string? Note,
     Guid RequestId,
-    DateOnly? HoldingDate = null);
+    DateOnly? HoldingDate = null,
+    int ConfirmationDelayDays = 2);

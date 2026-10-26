@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "decimal.js": "^10.6.0",
     "echarts": "^6.1.0",
     "pinia": "^4.1.0",
     "vant": "^4.10.2",

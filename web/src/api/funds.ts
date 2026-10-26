@@ -1,6 +1,5 @@
 import type {
   BuyFundInput,
-  ConfirmFundBuyInput,
   ConfirmFundSellInput,
   CreateFundPositionInput,
   FundGroup,
@@ -9,7 +8,7 @@ import type {
   FundQuoteRefreshResult,
   FundSellArrivalInput,
   SellFundInput,
-  UpdateFundQuoteInput
+  CorrectFundSharesInput
 } from '../types/fund'
 import type { FundReturn, FundReturnDay } from '../types/fundReturn'
 import type { TrendRange } from '../types/trend'
@@ -96,8 +95,15 @@ export function buyFund(input: BuyFundInput): Promise<FundMutationResult> {
   })
 }
 
-export function confirmFundBuy(transactionId: string, input: ConfirmFundBuyInput): Promise<FundMutationResult> {
-  return apiRequest<FundMutationResult>(`/api/ledger/funds/buys/${encodeURIComponent(transactionId)}/confirm`, {
+export function cancelFundPending(transactionId: string, requestId: string): Promise<FundMutationResult> {
+  return apiRequest<FundMutationResult>(`/api/ledger/funds/pending/${encodeURIComponent(transactionId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ requestId })
+  })
+}
+
+export function correctFundShares(input: CorrectFundSharesInput): Promise<FundMutationResult> {
+  return apiRequest<FundMutationResult>('/api/ledger/funds/positions/correct-shares', {
     method: 'POST',
     body: JSON.stringify(input)
   })
@@ -127,12 +133,5 @@ export function arriveFundSell(transactionId: string, input: FundSellArrivalInpu
 export function refreshFundQuote(positionId: string): Promise<FundQuoteRefreshResult> {
   return apiRequest<FundQuoteRefreshResult>(`/api/ledger/funds/${encodeURIComponent(positionId)}/quote/refresh`, {
     method: 'POST'
-  })
-}
-
-export function updateFundQuote(input: UpdateFundQuoteInput): Promise<FundMutationResult> {
-  return apiRequest<FundMutationResult>('/api/ledger/funds/quote', {
-    method: 'POST',
-    body: JSON.stringify(input)
   })
 }

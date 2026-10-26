@@ -11,7 +11,7 @@ import AssetTrendChart from '../components/AssetTrendChart.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { useLedgerStore } from '../stores/ledger'
-import { formatBusinessDate, formatMoney, formatSignedMoney, todayInBusinessTimeZone } from '../utils/format'
+import { formatBusinessDate, formatMoney, formatSignedMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
 import { buildScopedTrend } from '../utils/trend'
 import type { MonthChange } from '../types/ledger'
 import type { AutoPlan, PlanOccurrence, PlanOverview, PlanType } from '../types/plan'
@@ -123,7 +123,7 @@ const planPreview = computed<PlanPreviewRow[]>(() => {
       date,
       title: items.length > 1 ? `${items.length} 项待处理记账` : items[0]!.planName,
       detail: items.some((item) => item.status === 'failed') ? '执行失败，请及时处理' : '等待执行，请确认现金与资产余额',
-      amount: items.reduce((total, item) => total + item.amount, 0)
+      amount: sumAmounts(items.map(item => item.amount))
     })
   }
 
@@ -145,7 +145,7 @@ const planPreview = computed<PlanPreviewRow[]>(() => {
       date,
       title: plans.length > 1 ? `${plans.length} 项自动记账` : plans[0]!.name,
       detail: plans.map(describePlan).join('、'),
-      amount: plans.reduce((total, plan) => total + plan.amount, 0)
+      amount: sumAmounts(plans.map(plan => plan.amount))
     })
   }
 

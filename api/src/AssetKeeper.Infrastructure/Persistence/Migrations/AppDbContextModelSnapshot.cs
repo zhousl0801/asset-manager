@@ -65,6 +65,15 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("fund_position_id");
 
+                    b.Property<DateOnly?>("FundTradeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("fund_trade_date");
+
+                    b.Property<int>("ConfirmationDelayDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("confirmation_delay_days");
+
                     b.Property<bool>("IsReversed")
                         .HasColumnType("boolean")
                         .HasColumnName("is_reversed");
@@ -205,6 +214,11 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("cost");
+
+                    b.Property<int>("ConfirmationDelayDays")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("confirmation_delay_days");
 
                     b.Property<Guid?>("FundGroupId")
                         .HasColumnType("uuid")

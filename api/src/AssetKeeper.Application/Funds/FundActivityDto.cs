@@ -13,4 +13,5 @@ public sealed record FundActivityDto(
     string? Note,
     DateTimeOffset CreatedAt,
     decimal Fee = 0m,
-    Guid? LinkedTransactionId = null);
+    Guid? LinkedTransactionId = null,
+    bool IsReversed = false);

@@ -6,4 +6,8 @@ public sealed record PendingFundBuyDto(
     string PositionName,
     decimal Amount,
     DateOnly BusinessDate,
-    string? Note);
+    string? Note,
+    decimal Fee,
+    DateOnly TradeDate,
+    DateOnly ConfirmationDate,
+    bool CanCancel);

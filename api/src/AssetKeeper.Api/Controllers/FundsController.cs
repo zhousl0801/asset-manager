@@ -53,18 +53,22 @@ public sealed class FundsController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
-    [HttpPost("buys/{transactionId:guid}/confirm")]
-    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> ConfirmBuy(
+    [HttpPost("pending/{transactionId:guid}/cancel")]
+    public async Task<IActionResult> CancelPending(
         Guid transactionId,
-        [FromBody] ConfirmFundBuyRequest request,
+        [FromBody] CancelFundPendingRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _fundService.ConfirmBuyAsync(transactionId, request, cancellationToken);
+        var result = await _fundService.CancelPendingAsync(transactionId, request.RequestId, cancellationToken);
+        return ToActionResult(result);
+    }
 
+    [HttpPost("positions/correct-shares")]
+    public async Task<IActionResult> CorrectShares(
+        [FromBody] CorrectFundSharesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.CorrectSharesAsync(request, cancellationToken);
         return ToActionResult(result);
     }
 
@@ -127,17 +131,4 @@ public sealed class FundsController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
-    [HttpPost("quote")]
-    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> UpdateQuote(
-        [FromBody] UpdateFundQuoteRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _fundService.UpdateQuoteAsync(request, cancellationToken);
-
-        return ToActionResult(result);
-    }
 }

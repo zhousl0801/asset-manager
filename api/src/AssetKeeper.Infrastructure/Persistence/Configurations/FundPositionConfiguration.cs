@@ -65,6 +65,11 @@ internal sealed class FundPositionConfiguration : IEntityTypeConfiguration<FundP
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(position => position.ConfirmationDelayDays)
+            .HasColumnName("confirmation_delay_days")
+            .HasDefaultValue(2)
+            .IsRequired();
+
         builder.Property(position => position.LastQuoteAttemptAt)
             .HasColumnName("last_quote_attempt_at")
             .HasColumnType("timestamptz");

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { formatMoney, formatSignedMoney } from '../utils/format'
+import { formatMoney, formatSignedMoney, sumAmounts } from '../utils/format'
 import type { AssetChange, AssetKey, LedgerOverview } from '../types/ledger'
 
 interface DistributionRow {
@@ -29,9 +29,9 @@ const emit = defineEmits<{ toggleNotHeld: [key: AssetKey, notHeld: boolean] }>()
 const rows = computed<DistributionRow[]>(() => {
   const ledger = props.overview
   const changeByKey = new Map((props.changes ?? []).map((item) => [item.assetType, item]))
-  const recordedTotal = [ledger.cash, ledger.providentFund, ledger.fund, ledger.gold]
+  const recordedTotal = sumAmounts([ledger.cash, ledger.providentFund, ledger.fund, ledger.gold]
     .filter((asset) => asset.isConfigured && !asset.notHeld && asset.amount !== null)
-    .reduce((total, asset) => total + (asset.amount ?? 0), 0)
+    .map(asset => asset.amount ?? 0))
   const percentOf = (amount: number | null): number | null =>
     amount === null || recordedTotal <= 0 ? null : amount / recordedTotal * 100
 

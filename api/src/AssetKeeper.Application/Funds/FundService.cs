@@ -3,7 +3,9 @@ using AssetKeeper.Application.History;
 using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Quotes;
+using AssetKeeper.Application.Plans;
 using AssetKeeper.Domain.Assets;
+using AssetKeeper.Domain.Ledgers;
 
 namespace AssetKeeper.Application.Funds;
 
@@ -71,7 +73,11 @@ public sealed class FundService
                 positionNames.GetValueOrDefault(transaction.FundPositionId ?? Guid.Empty) ?? transaction.Subject ?? "基金",
                 transaction.Amount,
                 transaction.BusinessDate,
-                transaction.Note))
+                transaction.Note,
+                transaction.Fee,
+                GetFundTradeDate(transaction),
+                GetConfirmationDate(GetFundTradeDate(transaction), transaction.ConfirmationDelayDays),
+                CanCancel(transaction)))
             .ToList();
         var pendingAmount = pendingBuys.Sum(item => item.Amount);
         var sellConfirms = replayData.Transactions
@@ -90,7 +96,8 @@ public sealed class FundService
                 positionNames.GetValueOrDefault(transaction.FundPositionId ?? Guid.Empty) ?? transaction.Subject ?? "基金",
                 transaction.Quantity ?? 0m,
                 transaction.BusinessDate,
-                transaction.Note))
+                transaction.Note,
+                CanCancel(transaction)))
             .ToList();
         var arrivedConfirmIds = replayData.Transactions
             .Where(transaction => !transaction.IsReversed && transaction.Kind == AssetTransactionKind.FundSellArrival
@@ -206,7 +213,8 @@ public sealed class FundService
                                 position.Value,
                                 position.HoldingProfit,
                                 position.RealizedProfit,
-                                replayStates[position.Id].Value is not null)).ToList(),
+                                replayStates[position.Id].Value is not null,
+                                position.ConfirmationDelayDays)).ToList(),
                             classGroup.Key,
                             classMembers[0].Code,
                             string.IsNullOrWhiteSpace(classMembers[0].Code) ? "按规范化基金名称和类别匹配" : "按基金代码和类别匹配");
@@ -294,13 +302,9 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "请求标识无效。" });
         }
 
-        var validationErrors = AssetValidation.ValidateValueDate(
-            request.NetValueDate,
-            _businessDateProvider.Today);
-
-        if (validationErrors.Count > 0)
+        if (_quoteProvider is null || string.IsNullOrWhiteSpace(request.Code))
         {
-            return AssetOperationResult<FundMutationResultDto>.Invalid(validationErrors);
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "请填写基金代码，并确保行情服务可用；持仓净值只能从数据源获取。" });
         }
 
         if (request.HoldingDate is null)
@@ -308,7 +312,7 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "请提供起始持仓日期，行情日期不能替代持仓日期。" });
         }
 
-        validationErrors = AssetValidation.ValidateBusinessDate(request.HoldingDate.Value, ledger.StartDate, _businessDateProvider.Today);
+        var validationErrors = AssetValidation.ValidateBusinessDate(request.HoldingDate.Value, ledger.StartDate, _businessDateProvider.Today);
 
         if (validationErrors.Count > 0)
         {
@@ -318,6 +322,13 @@ public sealed class FundService
         try
         {
             var now = _businessDateProvider.UtcNow;
+            var quote = await _quoteProvider.GetLatestAsync(request.Code, cancellationToken);
+            validationErrors = AssetValidation.ValidateValueDate(quote.EffectiveDate, _businessDateProvider.Today);
+            if (validationErrors.Count > 0 || quote.NetValue <= 0)
+            {
+                return AssetOperationResult<FundMutationResultDto>.Unavailable("行情源返回的最新净值无效。");
+            }
+
             var position = FundPosition.Create(
                 ledger.Id,
                 request.Name,
@@ -326,23 +337,27 @@ public sealed class FundService
                 request.Platform,
                 request.Shares,
                 request.Cost,
-                request.NetValue,
-                request.NetValueDate,
-                now);
+                quote.NetValue,
+                quote.EffectiveDate,
+                now,
+                request.ConfirmationDelayDays);
             var transaction = AssetTransaction.CreateFundOpening(
                 ledger.Id,
                 position.Id,
                 request.Shares,
                 request.Cost,
-                request.NetValue,
+                quote.NetValue,
                 position.DisplayName,
-                request.NetValueDate,
+                quote.EffectiveDate,
                 request.Note,
                 request.RequestId,
-                now);
+                now,
+                quote.Source);
+
+            position.RecordQuoteSyncAttempt(now, quote.Source, null);
 
             await _ledgerRepository.AddFundPositionAsync(position, cancellationToken);
-            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.HoldingDate!.Value, request.NetValueDate, null, cancellationToken);
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.HoldingDate!.Value, quote.EffectiveDate, null, cancellationToken);
 
 
             return AssetOperationResult<FundMutationResultDto>.Created(
@@ -358,6 +373,18 @@ public sealed class FundService
         catch (InvalidOperationException exception)
         {
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { exception.Message });
+        }
+        catch (QuoteUnavailableException exception)
+        {
+            return AssetOperationResult<FundMutationResultDto>.Unavailable(exception.Message);
+        }
+        catch (HttpRequestException)
+        {
+            return AssetOperationResult<FundMutationResultDto>.Unavailable("基金行情数据源暂不可用，未创建持仓。");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return AssetOperationResult<FundMutationResultDto>.Unavailable("基金行情数据源请求超时，未创建持仓。");
         }
     }
 
@@ -415,10 +442,16 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.NotFound("基金持仓不存在。");
         }
 
+        if (string.IsNullOrWhiteSpace(position.Code))
+        {
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "该基金未设置基金代码，无法按数据源净值自动确认份额。" });
+        }
+
 
         try
         {
             var now = _businessDateProvider.UtcNow;
+            var tradeDate = ResolveBuyTradeDate(request.BusinessDate, now);
             var transaction = AssetTransaction.CreateFundBuyPending(
                 ledger.Id,
                 position.Id,
@@ -427,7 +460,10 @@ public sealed class FundService
                 request.BusinessDate,
                 request.Note,
                 request.RequestId,
-                now);
+                now,
+                request.Fee,
+                position.ConfirmationDelayDays,
+                tradeDate);
 
             await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, null, request.RelatedCashAdjustmentId, cancellationToken);
 
@@ -518,6 +554,11 @@ public sealed class FundService
         if (pending.Kind != AssetTransactionKind.FundBuyPending || pending.IsReversed)
         {
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "该记录不是有效的买入待确认。" });
+        }
+
+        if (request.Fee != pending.Fee)
+        {
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "确认费用必须沿用待确认交易中记录的实际申购费。" });
         }
 
         if (request.BusinessDate < pending.BusinessDate)
@@ -962,7 +1003,8 @@ public sealed class FundService
 
     public async Task<AssetOperationResult<FundQuoteRefreshDto>> RefreshQuoteAsync(
         Guid positionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool confirmDueBuys = true)
     {
         var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
 
@@ -1035,6 +1077,11 @@ public sealed class FundService
             ledger.Touch(now);
             await _ledgerRepository.SaveChangesAsync(cancellationToken);
 
+            if (confirmDueBuys)
+            {
+                await ConfirmDueBuysAsync(cancellationToken);
+            }
+
             return AssetOperationResult<FundQuoteRefreshDto>.Success(new FundQuoteRefreshDto(
                 Map(position),
                 updated,
@@ -1069,58 +1116,172 @@ public sealed class FundService
         }
     }
 
-    private static string Shorten(string message)
+    public async Task<int> ConfirmDueBuysAsync(CancellationToken cancellationToken)
     {
-        return message.Length <= 300 ? message : message[..300];
+        if (_quoteProvider is null)
+        {
+            return 0;
+        }
+
+        var ledger = await _ledgerRepository.GetAsync(cancellationToken);
+        if (ledger is null)
+        {
+            return 0;
+        }
+
+        var replayData = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
+        var confirmedIds = replayData.Transactions
+            .Where(transaction => !transaction.IsReversed
+                && transaction.Kind == AssetTransactionKind.FundBuyConfirm
+                && transaction.LinkedTransactionId is not null)
+            .Select(transaction => transaction.LinkedTransactionId!.Value)
+            .ToHashSet();
+        var positions = replayData.Positions.ToDictionary(position => position.Id);
+        var pending = replayData.Transactions
+            .Where(transaction => !transaction.IsReversed
+                && transaction.Kind == AssetTransactionKind.FundBuyPending
+                && !confirmedIds.Contains(transaction.Id))
+            .OrderBy(transaction => transaction.BusinessDate)
+            .ThenBy(transaction => transaction.BusinessSequence)
+            .ToList();
+        var confirmedCount = 0;
+
+        foreach (var transaction in pending)
+        {
+            var tradeDate = GetFundTradeDate(transaction);
+            var confirmationDate = GetConfirmationDate(tradeDate, transaction.ConfirmationDelayDays);
+            if (_businessDateProvider.Today < confirmationDate
+                || transaction.FundPositionId is not Guid positionId
+                || !positions.TryGetValue(positionId, out var position)
+                || string.IsNullOrWhiteSpace(position.Code))
+            {
+                continue;
+            }
+
+            try
+            {
+                var quote = await _quoteProvider.GetForDateAsync(position.Code, tradeDate, cancellationToken);
+                var shares = decimal.Round((transaction.Amount - transaction.Fee) / quote.NetValue, 4, MidpointRounding.ToZero);
+                if (shares <= 0m || quote.EffectiveDate != tradeDate)
+                {
+                    continue;
+                }
+
+                var result = await ConfirmBuyAsync(transaction.Id, new ConfirmFundBuyRequest(
+                    shares,
+                    quote.NetValue,
+                    quote.EffectiveDate,
+                    transaction.Fee,
+                    confirmationDate,
+                    "行情自动确认",
+                    Guid.NewGuid()), cancellationToken);
+                if (result.Status is AssetOperationStatus.Created or AssetOperationStatus.Success)
+                {
+                    confirmedCount++;
+                }
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+                && (exception is QuoteUnavailableException or HttpRequestException or TaskCanceledException))
+            {
+                // Historical NAV may be delayed by the data source; the next refresh retries it.
+            }
+        }
+
+        return confirmedCount;
     }
 
-    public Task<AssetOperationResult<FundMutationResultDto>> UpdateQuoteAsync(UpdateFundQuoteRequest request, CancellationToken cancellationToken)
+    public Task<AssetOperationResult<FundMutationResultDto>> CancelPendingAsync(
+        Guid transactionId,
+        Guid requestId,
+        CancellationToken cancellationToken)
     {
         return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
-            "fund.quote", request.RequestId, request,
-            () => UpdateQuoteCoreAsync(request, cancellationToken),
-            result => result.Status is AssetOperationStatus.Created or AssetOperationStatus.Success,
+            "fund.pending.cancel",
+            requestId,
+            new { TransactionId = transactionId },
+            () => CancelPendingCoreAsync(transactionId, cancellationToken),
+            result => result.Status is AssetOperationStatus.Success or AssetOperationStatus.Created,
             result => result with { Status = AssetOperationStatus.Success },
             AssetOperationResult<FundMutationResultDto>.Conflict,
             message => AssetOperationResult<FundMutationResultDto>.Invalid(new[] { message }),
             cancellationToken);
     }
 
-    private async Task<AssetOperationResult<FundMutationResultDto>> UpdateQuoteCoreAsync(
-        UpdateFundQuoteRequest request,
+    private async Task<AssetOperationResult<FundMutationResultDto>> CancelPendingCoreAsync(
+        Guid transactionId,
         CancellationToken cancellationToken)
     {
         var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
-
         if (ledger is null)
         {
             return AssetOperationResult<FundMutationResultDto>.NotFound("账本尚未初始化。");
         }
 
-        if (ledger.CashAccount is null)
+        var transaction = await _ledgerRepository.GetAssetTransactionForUpdateAsync(ledger.Id, transactionId, cancellationToken);
+        if (transaction is null || transaction.IsReversed
+            || transaction.Kind is not (AssetTransactionKind.FundBuyPending or AssetTransactionKind.FundSellApply))
         {
-            throw new InvalidOperationException("账本缺少现金账户。");
+            return AssetOperationResult<FundMutationResultDto>.NotFound("待处理基金交易不存在或已处理。");
         }
 
-        if (request.RequestId == Guid.Empty)
+        if (!CanCancel(transaction))
         {
-            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "请求标识无效。" });
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "基金交易仅在北京时间 15:00 前可撤销。" });
         }
 
-        var validationErrors = AssetValidation.ValidateValueDate(
-            request.NetValueDate,
-            _businessDateProvider.Today);
-
-        if (validationErrors.Count > 0)
+        var replayData = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
+        if (replayData.Transactions.Any(item => !item.IsReversed
+            && (item.Kind is AssetTransactionKind.FundBuyConfirm or AssetTransactionKind.FundSellConfirm)
+            && item.LinkedTransactionId == transaction.Id))
         {
-            return AssetOperationResult<FundMutationResultDto>.Invalid(validationErrors);
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "该申请已确认，不能撤销。" });
         }
 
-        var position = await _ledgerRepository.GetFundPositionForUpdateAsync(
-            ledger.Id,
-            request.PositionId,
+        transaction.Reverse();
+        await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).RebuildAsync(ledger.Id, transaction.Id, cancellationToken);
+        var positionName = transaction.Subject ?? "基金";
+        var position = transaction.FundPositionId is Guid positionId
+            ? await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, positionId, cancellationToken)
+            : null;
+
+        if (position is null)
+        {
+            return AssetOperationResult<FundMutationResultDto>.NotFound("基金持仓不存在。");
+        }
+
+        return AssetOperationResult<FundMutationResultDto>.Success(new FundMutationResultDto(
+            Map(position),
+            ledger.CashAccount?.Balance ?? 0m,
+            Map(transaction, position?.DisplayName ?? positionName)));
+    }
+
+    public Task<AssetOperationResult<FundMutationResultDto>> CorrectSharesAsync(
+        CorrectFundSharesRequest request,
+        CancellationToken cancellationToken)
+    {
+        return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
+            "fund.shares.correct",
+            request.RequestId,
+            request,
+            () => CorrectSharesCoreAsync(request, cancellationToken),
+            result => result.Status is AssetOperationStatus.Success or AssetOperationStatus.Created,
+            result => result with { Status = AssetOperationStatus.Success },
+            AssetOperationResult<FundMutationResultDto>.Conflict,
+            message => AssetOperationResult<FundMutationResultDto>.Invalid(new[] { message }),
             cancellationToken);
+    }
 
+    private async Task<AssetOperationResult<FundMutationResultDto>> CorrectSharesCoreAsync(
+        CorrectFundSharesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+        if (ledger is null)
+        {
+            return AssetOperationResult<FundMutationResultDto>.NotFound("账本尚未初始化。");
+        }
+
+        var position = await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, request.PositionId, cancellationToken);
         if (position is null)
         {
             return AssetOperationResult<FundMutationResultDto>.NotFound("基金持仓不存在。");
@@ -1128,27 +1289,31 @@ public sealed class FundService
 
         try
         {
-            var now = _businessDateProvider.UtcNow;
-            var transaction = AssetTransaction.CreateFundQuote(
+            var transaction = AssetTransaction.CreateSnapshot(
                 ledger.Id,
                 position.Id,
-                request.NetValue,
-                position.DisplayName,
-                request.NetValueDate,
+                AssetType.Fund,
+                AssetTransactionKind.FundCorrection,
+                request.Shares,
+                request.Shares == 0m ? 0m : position.Cost,
+                null,
+                _businessDateProvider.Today,
+                null,
+                request.Note ?? "持仓份额核对",
                 request.RequestId,
-                now,
-                "manual");
+                _businessDateProvider.UtcNow);
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(
+                ledger,
+                transaction,
+                _businessDateProvider.Today,
+                null,
+                null,
+                cancellationToken);
 
-
-            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.NetValueDate, request.NetValueDate, null, cancellationToken);
-            position.RecordQuoteSyncAttempt(now, "manual", null);
-
-
-            return AssetOperationResult<FundMutationResultDto>.Success(
-                new FundMutationResultDto(
-                    Map(position),
-                    ledger.CashAccount.Balance,
-                    Map(transaction, position.DisplayName)));
+            return AssetOperationResult<FundMutationResultDto>.Success(new FundMutationResultDto(
+                Map(position),
+                ledger.CashAccount?.Balance ?? 0m,
+                Map(transaction, position.DisplayName)));
         }
         catch (ArgumentException exception)
         {
@@ -1159,6 +1324,54 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { exception.Message });
         }
     }
+
+    private static string Shorten(string message)
+    {
+        return message.Length <= 300 ? message : message[..300];
+    }
+
+    private DateOnly ResolveBuyTradeDate(DateOnly requestedDate, DateTimeOffset now)
+    {
+        if (requestedDate != _businessDateProvider.Today)
+        {
+            return requestedDate;
+        }
+
+        var today = _businessDateProvider.Today;
+        if (!TradingCalendar.Default.GetDay(today).IsTradingDay)
+        {
+            return TradingCalendar.Default.NextTradingDay(today.AddDays(-1));
+        }
+
+        return now >= _businessDateProvider.ToBusinessInstant(today, new TimeOnly(15, 0))
+            ? TradingCalendar.Default.NextTradingDay(today)
+            : today;
+    }
+
+    private bool CanCancel(AssetTransaction transaction)
+    {
+        var now = _businessDateProvider.UtcNow;
+        var today = _businessDateProvider.Today;
+        var timezone = TimeZoneInfo.FindSystemTimeZoneById(Ledger.DefaultTimeZone);
+        var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, timezone).DateTime);
+        var transactionDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(transaction.CreatedAt, timezone).DateTime);
+        return createdDate == today
+            && transactionDate == today
+            && now < _businessDateProvider.ToBusinessInstant(today, new TimeOnly(15, 0));
+    }
+
+    private static DateOnly GetConfirmationDate(DateOnly tradeDate, int delayDays)
+    {
+        var date = tradeDate;
+        for (var index = 0; index < delayDays; index++)
+        {
+            date = TradingCalendar.Default.NextTradingDay(date);
+        }
+
+        return date;
+    }
+
+    private static DateOnly GetFundTradeDate(AssetTransaction transaction) => transaction.FundTradeDate ?? transaction.BusinessDate;
 
     private static FundPositionDto Map(FundPosition position)
     {
@@ -1177,7 +1390,8 @@ public sealed class FundService
             position.RealizedProfit,
             LastQuoteAttemptAt: position.LastQuoteAttemptAt,
             LastQuoteSource: position.LastQuoteSource,
-            LastQuoteError: position.LastQuoteError);
+            LastQuoteError: position.LastQuoteError,
+            ConfirmationDelayDays: position.ConfirmationDelayDays);
     }
 
     private static FundActivityDto Map(
@@ -1191,7 +1405,8 @@ public sealed class FundService
     {
         var type = transaction.Kind switch
         {
-            AssetTransactionKind.FundOpening or AssetTransactionKind.FundCorrection => FundActivityType.Opening,
+            AssetTransactionKind.FundOpening => FundActivityType.Opening,
+            AssetTransactionKind.FundCorrection => FundActivityType.Correction,
             AssetTransactionKind.FundBuy => FundActivityType.Buy,
             AssetTransactionKind.FundBuyPending => FundActivityType.BuyPending,
             AssetTransactionKind.FundBuyConfirm => FundActivityType.BuyConfirmed,
@@ -1216,7 +1431,8 @@ public sealed class FundService
             transaction.Note,
             transaction.CreatedAt,
             transaction.Fee,
-            transaction.LinkedTransactionId);
+            transaction.LinkedTransactionId,
+            transaction.IsReversed);
     }
 
     private static string GetPositionName(

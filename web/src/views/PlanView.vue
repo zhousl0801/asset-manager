@@ -5,6 +5,7 @@ import {
   fetchPlanOverview,
   pausePlan,
   previewPlans,
+  recordOccurrence,
   resumePlan,
   retryOccurrence,
   runPlans,
@@ -291,6 +292,22 @@ async function handleOccurrence(occurrenceId: string, action: 'retry' | 'skip'):
   }
 }
 
+async function recordCurrentOccurrence(occurrenceId: string): Promise<void> {
+  busyAction.value = occurrenceId
+
+  try {
+    const result = await recordOccurrence(occurrenceId, createRequestId())
+    notice.value = result.recorded
+      ? '本期期次已补记到账本。'
+      : result.error ?? '本期仍待处理，请检查账本余额和关联资料。'
+    await load()
+  } catch (error) {
+    notice.value = getApiErrorMessage(error, '补记本期失败，请重试。')
+  } finally {
+    busyAction.value = ''
+  }
+}
+
 async function runNow(): Promise<void> {
   busyAction.value = 'run'
 
@@ -474,6 +491,14 @@ function goBack(): void {
               <small v-if="occurrence.errorMessage" class="occurrence-error">{{ occurrence.errorMessage }}</small>
             </div>
             <div class="occurrence-actions">
+              <button
+                type="button"
+                class="small-button"
+                :disabled="busyAction === occurrence.id"
+                @click="recordCurrentOccurrence(occurrence.id)"
+              >
+                补记本期
+              </button>
               <button
                 type="button"
                 class="small-button"

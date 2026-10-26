@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Decimal from 'decimal.js'
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -6,16 +7,16 @@ import {
   arriveFundSell,
   assignFundGroup,
   buyFund,
-  confirmFundBuy,
+  cancelFundPending,
   confirmFundSell,
+  correctFundShares,
   createFundGroup,
   createFundPosition,
   deleteFundGroup,
   fetchFundOverview,
   refreshFundQuote,
   renameFundGroup,
-  sellFund,
-  updateFundQuote
+  sellFund
 } from '../api/funds'
 import { fetchPlanOverview } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
@@ -27,6 +28,7 @@ import BottomSheet from '../components/BottomSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
   formatBusinessDate,
+  addAmounts,
   formatMoney,
   formatQuantity,
   formatSignedMoney,
@@ -34,6 +36,7 @@ import {
   parseNonNegativeQuantity,
   parsePrice,
   parseQuantity,
+  sumAmounts,
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
@@ -49,7 +52,7 @@ import type {
 } from '../types/fund'
 import type { AutoPlan } from '../types/plan'
 
-type SheetKind = 'opening' | 'buy' | 'confirm' | 'sell' | 'sellConfirm' | 'sellArrival' | 'quote'
+type SheetKind = 'opening' | 'buy' | 'shares' | 'sell' | 'sellConfirm' | 'sellArrival'
 type PortfolioView = 'positions' | 'returns' | 'activities' | 'plans'
 type GroupScope = 'all' | 'ungrouped' | string
 type FundMetricKey = 'value' | 'profit' | 'rate' | 'cost' | 'weight' | 'pending'
@@ -82,7 +85,6 @@ const sheet = ref<SheetKind | null>(null)
 const requestId = ref(createRequestId())
 const isSaving = ref(false)
 const formError = ref('')
-const confirmingPendingId = ref<string | null>(null)
 const confirmingSellId = ref<string | null>(null)
 const arrivingConfirmId = ref<string | null>(null)
 const refreshingQuote = ref(false)
@@ -116,6 +118,7 @@ const form = reactive({
   netValue: '',
   netValueDate: today,
   fee: '0',
+  confirmationDelayDays: '2',
   businessDate: today,
   note: '',
   relatedCashAdjustmentId: null as string | null
@@ -123,8 +126,6 @@ const form = reactive({
 
 const selectedPosition = computed<FundPosition | null>(() =>
   overview.value?.positions.find((position) => position.id === form.positionId) ?? null)
-const selectedPending = computed<PendingFundBuy | null>(() =>
-  overview.value?.pendingBuys.find((pending) => pending.transactionId === confirmingPendingId.value) ?? null)
 const selectedSellApplication = computed<PendingFundSell | null>(() =>
   overview.value?.sellApplications.find((pending) => pending.transactionId === confirmingSellId.value) ?? null)
 const selectedPendingArrival = computed<PendingFundArrival | null>(() =>
@@ -153,12 +154,12 @@ const groupChips = computed(() => {
     key: 'all' as GroupScope,
     label: '全部',
     count: all.length,
-    value: all.reduce((sum, fund) => sum + fund.assetValue, 0)
+    value: sumAmounts(all.map(fund => fund.assetValue))
   }, ...groups.value.map((group) => ({
     key: group.id as GroupScope,
     label: group.name,
     count: all.filter((fund) => fund.groupId === group.id).length,
-    value: all.filter((fund) => fund.groupId === group.id).reduce((sum, fund) => sum + fund.assetValue, 0)
+    value: sumAmounts(all.filter((fund) => fund.groupId === group.id).map(fund => fund.assetValue))
   }))]
 
   if (ungroupedFunds.length) {
@@ -166,7 +167,7 @@ const groupChips = computed(() => {
       key: 'ungrouped' as GroupScope,
       label: '未分组',
       count: ungroupedFunds.length,
-      value: ungroupedFunds.reduce((sum, fund) => sum + fund.assetValue, 0)
+      value: sumAmounts(ungroupedFunds.map(fund => fund.assetValue))
     })
   }
 
@@ -230,20 +231,22 @@ const scopedPendingArrivals = computed(() => {
 })
 
 const scopedActivities = computed(() => {
+  const trades = (overview.value?.activities ?? []).filter((item) => item.type !== 'quote')
+
   if (!hasScopeFilter.value) {
-    return overview.value?.activities ?? []
+    return trades
   }
 
-  return (overview.value?.activities ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
+  return trades.filter((item) => scopedPositionIds.value.has(item.positionId))
 })
 
 const scope = computed(() => {
-  const confirmedValue = scopedFunds.value.reduce((sum, fund) => sum + fund.value, 0)
-  const cost = scopedFunds.value.reduce((sum, fund) => sum + fund.cost, 0)
-  const holdingProfit = scopedFunds.value.reduce((sum, fund) => sum + fund.holdingProfit, 0)
-  const realizedProfit = scopedFunds.value.reduce((sum, fund) => sum + fund.realizedProfit, 0)
-  const pendingBuyAmount = scopedPendingBuys.value.reduce((sum, item) => sum + item.amount, 0)
-  const pendingArrivalAmount = scopedPendingArrivals.value.reduce((sum, item) => sum + item.amount, 0)
+  const confirmedValue = sumAmounts(scopedFunds.value.map(fund => fund.value))
+  const cost = sumAmounts(scopedFunds.value.map(fund => fund.cost))
+  const holdingProfit = sumAmounts(scopedFunds.value.map(fund => fund.holdingProfit))
+  const realizedProfit = sumAmounts(scopedFunds.value.map(fund => fund.realizedProfit))
+  const pendingBuyAmount = sumAmounts(scopedPendingBuys.value.map(item => item.amount))
+  const pendingArrivalAmount = sumAmounts(scopedPendingArrivals.value.map(item => item.amount))
 
   return {
     confirmedValue,
@@ -252,7 +255,7 @@ const scope = computed(() => {
     realizedProfit,
     pendingBuyAmount,
     pendingArrivalAmount,
-    assetValue: confirmedValue + pendingBuyAmount + pendingArrivalAmount,
+    assetValue: addAmounts(confirmedValue, pendingBuyAmount, pendingArrivalAmount),
     rate: cost > 0 ? holdingProfit / cost * 100 : null,
     hasEffectiveQuotes: scopedFunds.value.every((fund) => fund.hasEffectiveQuotes),
     historyConfirmed: scopedFunds.value.every((fund) => fund.historyConfirmed)
@@ -267,11 +270,11 @@ const sortedFunds = computed(() => {
       case 'name':
         return left.name.localeCompare(right.name, 'zh-Hans-CN')
       case 'profit':
-        return right.holdingProfit - left.holdingProfit || left.name.localeCompare(right.name, 'zh-Hans-CN')
+        return new Decimal(right.holdingProfit).comparedTo(left.holdingProfit) || left.name.localeCompare(right.name, 'zh-Hans-CN')
       case 'rate':
         return rateOf(right) - rateOf(left) || left.name.localeCompare(right.name, 'zh-Hans-CN')
       default:
-        return right.assetValue - left.assetValue || left.name.localeCompare(right.name, 'zh-Hans-CN')
+        return new Decimal(right.assetValue).comparedTo(left.assetValue) || left.name.localeCompare(right.name, 'zh-Hans-CN')
     }
   })
 })
@@ -291,16 +294,14 @@ const sheetTitle = computed(() => {
       return '录入基金持仓'
     case 'buy':
       return '记录基金买入'
-    case 'confirm':
-      return '确认基金买入'
+    case 'shares':
+      return '调整基金份额'
     case 'sell':
       return '申请赎回基金'
     case 'sellConfirm':
       return '确认基金赎回'
     case 'sellArrival':
       return '登记赎回到账'
-    case 'quote':
-      return '更新基金净值'
     default:
       return ''
   }
@@ -311,16 +312,14 @@ const sheetSubtitle = computed(() => {
       return '用于已有持仓，不扣现金'
     case 'buy':
       return '现金减少，买入待确认增加'
-    case 'confirm':
-      return '待确认转为持仓，不再次扣款'
+    case 'shares':
+      return '生成份额核对记录，保留原有流水'
     case 'sell':
       return '份额冻结，仍在持仓中估值'
     case 'sellConfirm':
       return '份额减少，净回款转为待到账'
     case 'sellArrival':
       return '待到账转入现金，不重复计算收益'
-    case 'quote':
-      return '只更新估值，不改变现金和成本'
     default:
       return ''
   }
@@ -330,17 +329,15 @@ const sheetNote = computed(() => {
     case 'opening':
       return '录入已有持仓不会从现金扣除购买成本，也不产生生活收支。'
     case 'buy':
-      return '先按实际扣款计入买入待确认，总资产不变；确认份额和净值后再转入持仓。'
-    case 'confirm':
-      return '确认沿用原扣款金额，不再扣现金；费用从已扣款金额中列示，成交差额体现在持有收益中。'
+      return '15:00 前可撤销；截止后按基金 T 日净值和实际申购费自动计算份额。'
+    case 'shares':
+      return '只修改持仓份额，净值必须由行情数据源获取。'
     case 'sell':
       return '申请后份额仍计入持仓估值，但会冻结，不能重复申请超过可售份额。'
     case 'sellConfirm':
       return '按确认份额比例结转成本；净回款转为待到账，与成本差额计入已实现收益。'
     case 'sellArrival':
       return '到账金额必须与待到账金额一致，不再次确认收益；如有差额，请先更正赎回确认。'
-    case 'quote':
-      return '净值日期不能晚于今天；未披露时继续保留最近有效净值。'
     default:
       return ''
   }
@@ -353,17 +350,15 @@ const canSubmit = computed(() => {
   switch (sheet.value) {
     case 'opening':
       return form.name.trim() !== ''
+        && form.code.trim() !== ''
         && parseNonNegativeQuantity(form.shares) !== null
         && parseAmount(form.cost) !== null
-        && parsePrice(form.netValue) !== null
     case 'buy':
-      return form.positionId !== '' && (parseAmount(form.amount) ?? 0) > 0
-    case 'confirm':
-      return confirmingPendingId.value !== null
-        && parseQuantity(form.shares) !== null
-        && parsePrice(form.netValue) !== null
-        && parseAmount(form.fee) !== null
-        && (parseAmount(form.fee) ?? 0) >= 0
+      return form.positionId !== '' && !!selectedPosition.value?.code && (parseAmount(form.amount) ?? 0) > 0
+        && (parseAmount(form.fee) ?? -1) >= 0
+        && (parseAmount(form.fee) ?? Number.POSITIVE_INFINITY) < (parseAmount(form.amount) ?? 0)
+    case 'shares':
+      return form.positionId !== '' && parseNonNegativeQuantity(form.shares) !== null
     case 'sell':
       return form.positionId !== '' && parseQuantity(form.shares) !== null
     case 'sellConfirm':
@@ -374,8 +369,6 @@ const canSubmit = computed(() => {
         && parseAmount(form.fee) !== null
     case 'sellArrival':
       return arrivingConfirmId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
-    case 'quote':
-      return form.positionId !== '' && parsePrice(form.netValue) !== null
     default:
       return false
   }
@@ -386,12 +379,11 @@ watch(
   (positionId) => {
     const position = overview.value?.positions.find((item) => item.id === positionId)
 
-    if (!position || sheet.value !== 'quote') {
+    if (!position || sheet.value !== 'shares') {
       return
     }
 
-    form.netValue = String(position.netValue)
-    form.netValueDate = position.netValueDate
+    form.shares = String(position.shares)
   }
 )
 
@@ -532,8 +524,8 @@ function metricDisplay(fund: FundSummary): { key: FundMetricKey; label: string; 
         return {
           key,
           label: '在途',
-          value: fund.pendingBuyAmount + fund.pendingArrivalAmount > 0
-            ? `¥${formatMoney(fund.pendingBuyAmount + fund.pendingArrivalAmount)}`
+          value: addAmounts(fund.pendingBuyAmount, fund.pendingArrivalAmount) > 0
+            ? `¥${formatMoney(addAmounts(fund.pendingBuyAmount, fund.pendingArrivalAmount))}`
             : '—',
           tone: ''
         }
@@ -575,11 +567,11 @@ function buildFallbackFunds(
         key,
         code: classMembers[0]?.code ?? null,
         shareClass: classMembers[0]?.shareClass || null,
-        shares: classMembers.reduce((sum, member) => sum + member.shares, 0),
-        cost: classMembers.reduce((sum, member) => sum + member.cost, 0),
-        value: classMembers.reduce((sum, member) => sum + member.value, 0),
-        holdingProfit: classMembers.reduce((sum, member) => sum + member.holdingProfit, 0),
-        realizedProfit: classMembers.reduce((sum, member) => sum + member.realizedProfit, 0),
+        shares: sumAmounts(classMembers.map(member => member.shares)),
+        cost: sumAmounts(classMembers.map(member => member.cost)),
+        value: sumAmounts(classMembers.map(member => member.value)),
+        holdingProfit: sumAmounts(classMembers.map(member => member.holdingProfit)),
+        realizedProfit: sumAmounts(classMembers.map(member => member.realizedProfit)),
         netValue: netValues.length === 1 ? netValues[0]! : null,
         netValueDate: netValueDates.length === 1 ? netValueDates[0]! : null,
         platforms: classMembers.map((member) => ({
@@ -601,13 +593,13 @@ function buildFallbackFunds(
     }
 
     const memberIds = new Set(members.map((member) => member.id))
-    const pendingBuyAmount = pendingBuys
+    const pendingBuyAmount = sumAmounts(pendingBuys
       .filter((item) => memberIds.has(item.positionId))
-      .reduce((sum, item) => sum + item.amount, 0)
-    const pendingArrivalAmount = pendingArrivals
+      .map(item => item.amount))
+    const pendingArrivalAmount = sumAmounts(pendingArrivals
       .filter((item) => memberIds.has(item.positionId))
-      .reduce((sum, item) => sum + item.amount, 0)
-    const value = members.reduce((sum, member) => sum + member.value, 0)
+      .map(item => item.amount))
+    const value = sumAmounts(members.map(member => member.value))
     const groupId = members.find((member) => member.groupId)?.groupId ?? null
 
     return {
@@ -616,12 +608,12 @@ function buildFallbackFunds(
       groupId,
       groupName: members.find((member) => member.groupName)?.groupName ?? null,
       value,
-      cost: members.reduce((sum, member) => sum + member.cost, 0),
-      holdingProfit: members.reduce((sum, member) => sum + member.holdingProfit, 0),
-      realizedProfit: members.reduce((sum, member) => sum + member.realizedProfit, 0),
+      cost: sumAmounts(members.map(member => member.cost)),
+      holdingProfit: sumAmounts(members.map(member => member.holdingProfit)),
+      realizedProfit: sumAmounts(members.map(member => member.realizedProfit)),
       pendingBuyAmount,
       pendingArrivalAmount,
-      assetValue: value + pendingBuyAmount + pendingArrivalAmount,
+      assetValue: sumAmounts([value, pendingBuyAmount, pendingArrivalAmount]),
       platformCount: new Set(members.map((member) => member.platform).filter(Boolean)).size,
       latestNetValueDate: members.map((member) => member.netValueDate).sort().at(-1) ?? null,
       historyConfirmed: members.every((member) => member.historyConfirmed),
@@ -793,7 +785,6 @@ function planCycleLabel(plan: AutoPlan): string {
 
 function openSheet(kind: SheetKind, positionId?: string): void {
   sheet.value = kind
-  confirmingPendingId.value = null
   confirmingSellId.value = null
   arrivingConfirmId.value = null
   requestId.value = createRequestId()
@@ -810,6 +801,7 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   form.code = ''
   form.shareClass = ''
   form.platform = ''
+  form.confirmationDelayDays = '2'
 
   if (kind === 'opening') {
     form.positionId = ''
@@ -821,17 +813,9 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   form.positionId = positionId ?? overview.value?.positions[0]?.id ?? ''
 
   const position = selectedPosition.value
-  form.netValue = position ? String(position.netValue) : ''
-  form.netValueDate = position?.netValueDate ?? today
-}
-
-function openConfirmSheet(pending: PendingFundBuy): void {
-  openSheet('confirm', pending.positionId)
-  confirmingPendingId.value = pending.transactionId
-  form.netValue = ''
-  form.netValueDate = today
-  form.businessDate = today
-  form.note = pending.note ?? ''
+  if (kind === 'shares' && position) {
+    form.shares = String(position.shares)
+  }
 }
 
 function openSellConfirmSheet(application: PendingFundSell): void {
@@ -870,16 +854,14 @@ async function submit(): Promise<void> {
       await submitOpening()
     } else if (sheet.value === 'buy') {
       await submitBuy()
-    } else if (sheet.value === 'confirm') {
-      await submitConfirm()
+    } else if (sheet.value === 'shares') {
+      await submitShareCorrection()
     } else if (sheet.value === 'sell') {
       await submitSell()
     } else if (sheet.value === 'sellConfirm') {
       await submitSellConfirm()
     } else if (sheet.value === 'sellArrival') {
       await submitSellArrival()
-    } else {
-      await submitQuote()
     }
   } catch (error) {
     formError.value = getApiErrorMessage(error, '保存失败，请重试。')
@@ -891,27 +873,19 @@ async function submit(): Promise<void> {
 async function submitOpening(): Promise<void> {
   const shares = parseNonNegativeQuantity(form.shares)
   const cost = parseAmount(form.cost)
-  const netValue = parsePrice(form.netValue)
 
   if (!form.name.trim()) {
     formError.value = '请输入基金名称。'
     return
   }
 
-  if (shares === null || cost === null || netValue === null) {
-    formError.value = '请填写有效的份额、成本和净值。'
+  if (shares === null || cost === null) {
+    formError.value = '请填写有效的份额和成本。'
     return
   }
 
   if (shares === 0 && cost !== 0) {
     formError.value = '份额为 0 时，持仓成本也应为 0。'
-    return
-  }
-
-  const dateError = validateValueDate(form.netValueDate, '净值日期')
-
-  if (dateError) {
-    formError.value = dateError
     return
   }
 
@@ -926,8 +900,7 @@ async function submitOpening(): Promise<void> {
     platform: form.platform.trim(),
     shares,
     cost,
-    netValue,
-    netValueDate: form.netValueDate,
+    confirmationDelayDays: Number(form.confirmationDelayDays),
     note: form.note.trim(),
     holdingDate: form.businessDate,
     requestId: requestId.value
@@ -940,14 +913,15 @@ async function submitOpening(): Promise<void> {
 async function submitBuy(): Promise<void> {
   const position = selectedPosition.value
   const amount = parseAmount(form.amount)
+  const fee = parseAmount(form.fee)
 
   if (!position) {
     formError.value = '请选择基金持仓。'
     return
   }
 
-  if (amount === null || amount <= 0) {
-    formError.value = '请填写有效的扣款金额。'
+  if (amount === null || amount <= 0 || fee === null || fee < 0 || fee >= amount) {
+    formError.value = '请填写有效的扣款金额和小于扣款金额的申购费。'
     return
   }
 
@@ -962,6 +936,7 @@ async function submitBuy(): Promise<void> {
   const result = await buyFund({
     positionId: position.id,
     amount,
+    fee,
     businessDate: form.businessDate,
     note: form.note.trim(),
     relatedCashAdjustmentId: form.relatedCashAdjustmentId,
@@ -972,62 +947,22 @@ async function submitBuy(): Promise<void> {
   await loadOverview()
 }
 
-async function submitConfirm(): Promise<void> {
-  const pending = selectedPending.value
-  const shares = parseQuantity(form.shares)
-  const netValue = parsePrice(form.netValue)
-  const fee = parseAmount(form.fee)
-
-  if (!pending) {
-    formError.value = '买入待确认记录不存在，请刷新后重试。'
-    return
-  }
-
-  if (shares === null || netValue === null || fee === null || fee < 0) {
-    formError.value = '请填写有效的确认份额、净值和费用。'
-    return
-  }
-
-  if (fee > pending.amount) {
-    formError.value = '费用不能超过原扣款金额。'
-    return
-  }
-
-  const businessDateError = validateBusinessDate()
-
-  if (businessDateError) {
-    formError.value = businessDateError
-    return
-  }
-
-  if (form.businessDate < pending.businessDate) {
-    formError.value = '确认日期不能早于买入日期。'
-    return
-  }
-
-  const valueDateError = validateValueDate(form.netValueDate, '净值日期')
-
-  if (valueDateError) {
-    formError.value = valueDateError
-    return
-  }
-
-  if (form.netValueDate > form.businessDate) {
-    formError.value = '净值日期不能晚于确认日期。'
+async function submitShareCorrection(): Promise<void> {
+  const position = selectedPosition.value
+  const shares = parseNonNegativeQuantity(form.shares)
+  if (!position || shares === null) {
+    formError.value = '请填写有效的持仓份额。'
     return
   }
 
   isSaving.value = true
-  const result = await confirmFundBuy(pending.transactionId, {
+  await correctFundShares({
+    positionId: position.id,
     shares,
-    netValue,
-    netValueDate: form.netValueDate,
-    fee,
-    businessDate: form.businessDate,
-    note: form.note.trim(),
+    note: form.note.trim() || '持仓份额核对',
     requestId: requestId.value
   })
-  notice.value = `已确认 ${formatQuantity(result.activity.shares)} 份，当前现金 ¥${formatMoney(result.cashBalance)}。`
+  notice.value = `已更新「${position.name}」持仓份额。`
   sheet.value = null
   await loadOverview()
 }
@@ -1176,39 +1111,6 @@ async function submitSellArrival(): Promise<void> {
   await loadOverview()
 }
 
-async function submitQuote(): Promise<void> {
-  const position = selectedPosition.value
-  const netValue = parsePrice(form.netValue)
-
-  if (!position) {
-    formError.value = '请选择基金持仓。'
-    return
-  }
-
-  if (netValue === null) {
-    formError.value = '请输入大于 0 的净值，最多四位小数。'
-    return
-  }
-
-  const dateError = validateValueDate(form.netValueDate, '净值日期')
-
-  if (dateError) {
-    formError.value = dateError
-    return
-  }
-
-  isSaving.value = true
-  await updateFundQuote({
-    positionId: position.id,
-    netValue,
-    netValueDate: form.netValueDate,
-    requestId: requestId.value
-  })
-  notice.value = `「${position.name}」净值已更新。`
-  sheet.value = null
-  await loadOverview()
-}
-
 function validateBusinessDate(): string | null {
   if (!form.businessDate) {
     return '请选择业务日期。'
@@ -1241,35 +1143,34 @@ function quoteSourceLabel(source: string | null): string {
   switch (source) {
     case 'eastmoney':
       return '天天基金'
-    case 'manual':
-      return '手动录入'
     default:
-      return source ?? '手动录入'
+      return source ?? '净值数据源'
   }
 }
 
-async function refreshQuote(): Promise<void> {
-  const position = selectedPosition.value
-
-  if (!position) {
-    formError.value = '请选择基金持仓。'
-    return
-  }
-
+async function refreshQuote(positionId: string): Promise<void> {
   refreshingQuote.value = true
-  formError.value = ''
 
   try {
-    const result = await refreshFundQuote(position.id)
+    const result = await refreshFundQuote(positionId)
     notice.value = result.updated
       ? `已获取最新净值 ${formatQuantity(result.netValue)}（${formatBusinessDate(result.effectiveDate)}，${quoteSourceLabel(result.source)}）。`
       : `净值已是最新 ${formatQuantity(result.netValue)}（${formatBusinessDate(result.effectiveDate)}）。`
-    sheet.value = null
     await loadOverview()
   } catch (error) {
-    formError.value = getApiErrorMessage(error, '获取净值失败，已保留最近有效值。')
+    notice.value = getApiErrorMessage(error, '获取净值失败，已保留最近有效值。')
   } finally {
     refreshingQuote.value = false
+  }
+}
+
+async function cancelPending(transactionId: string): Promise<void> {
+  try {
+    await cancelFundPending(transactionId, createRequestId())
+    notice.value = '待处理基金交易已撤销。'
+    await loadOverview()
+  } catch (error) {
+    notice.value = getApiErrorMessage(error, '撤销失败，请刷新后重试。')
   }
 }
 
@@ -1277,6 +1178,8 @@ function activityTitle(activity: FundActivity): string {
   switch (activity.type) {
     case 'opening':
       return '录入持仓'
+    case 'correction':
+      return '份额核对'
     case 'buy':
       return '基金买入'
     case 'buyPending':
@@ -1306,6 +1209,8 @@ function activityNote(activity: FundActivity): string {
   switch (activity.type) {
     case 'opening':
       return '已有持仓，不扣现金'
+    case 'correction':
+      return '按实际持有份额核对'
     case 'buy':
       return '现金 → 基金持仓'
     case 'buyPending':
@@ -1337,6 +1242,10 @@ function activityAmountText(activity: FundActivity): string {
 
   if (activity.type === 'buyConfirmed' || activity.type === 'sellApply') {
     return `${formatQuantity(activity.shares)} 份`
+  }
+
+  if (activity.type === 'correction') {
+    return `核对后 ${formatQuantity(activity.shares)} 份`
   }
 
   if (activity.type === 'sellConfirm') {
@@ -1387,14 +1296,6 @@ function goBack(): void {
           @click="openSheet('sell')"
         >
           卖出
-        </button>
-        <button
-          type="button"
-          class="action-secondary"
-          :disabled="!overview?.positions.length"
-          @click="openSheet('quote')"
-        >
-          更新净值
         </button>
       </div>
         </details>
@@ -1506,12 +1407,14 @@ function goBack(): void {
             <div class="pending-copy">
               <strong>{{ pending.positionName }}</strong>
               <small>
-                {{ formatBusinessDate(pending.businessDate) }}<template v-if="pending.note"> · {{ pending.note }}</template>
+                下单 {{ formatBusinessDate(pending.businessDate) }} · T 日 {{ formatBusinessDate(pending.tradeDate) }}
+                · 申购费 ¥{{ formatMoney(pending.fee) }}<template v-if="pending.note"> · {{ pending.note }}</template>
               </small>
             </div>
             <div class="pending-side">
               <b>¥{{ formatMoney(pending.amount) }}</b>
-              <button type="button" class="confirm-button" @click="openConfirmSheet(pending)">确认份额</button>
+              <button v-if="pending.canCancel" type="button" class="confirm-button" @click="cancelPending(pending.transactionId)">撤销</button>
+              <small v-else>预计 {{ formatBusinessDate(pending.confirmationDate) }} 按确认净值自动结转</small>
             </div>
           </article>
         </section>
@@ -1532,7 +1435,9 @@ function goBack(): void {
               </small>
             </div>
             <div class="pending-side">
-              <button type="button" class="confirm-button" @click="openSellConfirmSheet(application)">确认赎回</button>
+              <button type="button" class="confirm-button" @click="openSellConfirmSheet(application)">登记实际结果</button>
+              <button v-if="application.canCancel" type="button" class="secondary-button" @click="cancelPending(application.transactionId)">撤销申请</button>
+              <small v-else>15:00 后不可撤销</small>
             </div>
           </article>
         </section>
@@ -1635,6 +1540,17 @@ function goBack(): void {
                   · 持有盈亏 {{ formatSignedMoney(fundClass.holdingProfit) }}
                   · 已实现盈亏 {{ formatSignedMoney(fundClass.realizedProfit) }}
                 </p>
+                <div class="holding-actions">
+                  <div v-for="holding in fundClass.platforms" :key="holding.positionId" class="holding-action-row">
+                    <span>{{ holding.platform || '未标平台' }} · {{ formatQuantity(holding.shares) }} 份</span>
+                    <div>
+                      <button type="button" @click="openSheet('buy', holding.positionId)">买入</button>
+                      <button type="button" @click="openSheet('sell', holding.positionId)">卖出</button>
+                      <button type="button" @click="openSheet('shares', holding.positionId)">调整份额</button>
+                      <button type="button" :disabled="refreshingQuote || !holding.code" @click="refreshQuote(holding.positionId)">刷新净值</button>
+                    </div>
+                  </div>
+                </div>
                 <p class="fund-class-meta">
                   {{ fundClass.code ?? fundClass.platforms[0]?.code ?? '未填代码' }} ·
                   {{ fundClass.identityBasis ?? (fundClass.platforms[0]?.code ? '按基金代码和类别匹配' : '按规范化基金名称和类别匹配') }}
@@ -1671,13 +1587,13 @@ function goBack(): void {
 
         <section v-if="scopedActivities.length" class="activity-card">
           <div v-for="activity in scopedActivities" :key="activity.id" class="activity-row">
-            <span class="activity-mark">{{ activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
+            <span class="activity-mark">{{ activity.type === 'correction' ? '核' : activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
             <span class="activity-copy">
-              <strong>{{ activityTitle(activity) }}</strong>
+              <strong>{{ activity.isReversed ? `已撤销 · ${activityTitle(activity)}` : activityTitle(activity) }}</strong>
               <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
             </span>
             <b class="activity-value" :class="{ income: activity.cashEffect > 0 }">
-              {{ activityAmountText(activity) }}
+              {{ activity.isReversed ? '已撤销' : activityAmountText(activity) }}
             </b>
           </div>
         </section>
@@ -1778,10 +1694,6 @@ function goBack(): void {
           <span>当前持仓</span>
           <b>{{ formatQuantity(selectedPosition.shares) }} 份</b>
         </div>
-        <div v-if="selectedPending" class="summary-line">
-          <span>买入待确认</span>
-          <b>¥{{ formatMoney(selectedPending.amount) }}</b>
-        </div>
         <div v-if="selectedSellApplication" class="summary-line">
           <span>申请赎回</span>
           <b>{{ formatQuantity(selectedSellApplication.shares) }} 份</b>
@@ -1804,9 +1716,9 @@ function goBack(): void {
             <input v-model="form.name" type="text" maxlength="50" placeholder="例如：纳指基金" />
           </label>
           <div class="form-row">
-            <label class="form-field">
-              <span>基金代码</span>
-              <input v-model="form.code" type="text" maxlength="20" placeholder="选填" />
+          <label class="form-field">
+            <span>基金代码</span>
+            <input v-model="form.code" type="text" maxlength="20" placeholder="获取官方净值所需" required />
             </label>
             <label class="form-field">
               <span>份额类别</span>
@@ -1827,16 +1739,14 @@ function goBack(): void {
               <input v-model="form.cost" type="text" inputmode="decimal" placeholder="0.00" />
             </label>
           </div>
-          <div class="form-row">
-            <label class="form-field">
-              <span>最新净值</span>
-              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-            <label class="form-field">
-              <span>净值日期</span>
-              <input v-model="form.netValueDate" type="date" :max="today" />
-            </label>
-          </div>
+          <label class="form-field">
+            <span>确认周期</span>
+            <select v-model="form.confirmationDelayDays">
+              <option value="2">默认 T+2</option>
+              <option value="1">该基金 T+1</option>
+            </select>
+            <small>净值由数据源自动获取；T+1/T+2 请按基金规则设置。</small>
+          </label>
         </template>
 
         <template v-else-if="sheet === 'buy'">
@@ -1853,36 +1763,21 @@ function goBack(): void {
             <input v-model="form.amount" type="text" inputmode="decimal" placeholder="0.00" />
           </label>
           <label class="form-field">
+            <span>实际申购费（元）</span>
+            <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <small v-if="!selectedPosition?.code" class="form-note">请先为该持仓设置基金代码，才能从数据源自动确认份额。</small>
+          <label class="form-field">
             <span>业务日期</span>
             <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
 
-        <template v-else-if="sheet === 'confirm'">
-          <div class="form-row">
-            <label class="form-field">
-              <span>确认份额</span>
-              <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-            <label class="form-field">
-              <span>成交净值</span>
-              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-          </div>
-          <div class="form-row">
-            <label class="form-field">
-              <span>净值日期</span>
-              <input v-model="form.netValueDate" type="date" :max="today" />
-            </label>
-            <label class="form-field">
-              <span>费用（元）</span>
-              <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
-            </label>
-          </div>
+        <template v-else-if="sheet === 'shares'">
           <label class="form-field">
-            <span>确认日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-            <small>确认日期不能早于买入日期，净值日期不能晚于确认日期。</small>
+            <span>核对后实际份额</span>
+            <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
+            <small>份额调整会生成当天的持仓核对记录，成本保持不变。</small>
           </label>
         </template>
 
@@ -1950,42 +1845,11 @@ function goBack(): void {
           </label>
         </template>
 
-        <template v-else>
-          <label class="form-field">
-            <span>基金持仓</span>
-            <select v-model="form.positionId">
-              <option v-for="position in overview?.positions ?? []" :key="position.id" :value="position.id">
-                {{ positionLabel(position) }}
-              </option>
-            </select>
-          </label>
-          <div class="form-row">
-            <label class="form-field">
-              <span>最新净值</span>
-              <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-            <label class="form-field">
-              <span>净值日期</span>
-              <input v-model="form.netValueDate" type="date" :max="today" />
-            </label>
-          </div>
-        </template>
-
-        <label v-if="sheet !== 'quote'" class="form-field">
+        <label class="form-field">
           <span>备注</span>
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <button
-          v-if="sheet === 'quote'"
-          type="button"
-          class="secondary-button"
-          :disabled="isSaving || refreshingQuote || !selectedPosition?.code"
-          @click="refreshQuote"
-        >
-          {{ refreshingQuote ? '获取中…' : '获取最新净值' }}
-        </button>
-        <small v-if="sheet === 'quote' && !selectedPosition?.code" class="form-note">该基金未填写基金代码，无法自动获取净值，可继续手动录入。</small>
         <CashAdjustmentLink v-if="sheet === 'buy'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="-(parseAmount(form.amount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
@@ -2519,6 +2383,43 @@ function goBack(): void {
   color: var(--color-text-secondary);
   font-size: 9px;
   line-height: 1.6;
+}
+
+.holding-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.holding-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.holding-action-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.holding-action-row button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: 11px;
+}
+
+.holding-action-row button:disabled {
+  opacity: 0.5;
 }
 
 .fund-platform-row {

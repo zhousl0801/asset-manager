@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { fetchCashOverview, reconcileCash } from '../api/cash'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
-import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount } from '../utils/format'
+import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, subtractAmounts } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import type { CashActivity, CashActivityType, CashOverview } from '../types/cash'
 import { createRequestId } from '../utils/request'
@@ -68,7 +68,7 @@ const previewDifference = computed(() => {
 
   const amount = parseAmount(actualBalance.value)
 
-  return amount === null ? null : amount - overview.value.balance
+  return amount === null ? null : subtractAmounts(amount, overview.value.balance)
 })
 const isBalanced = computed(() => previewDifference.value === 0)
 const canSave = computed(() =>

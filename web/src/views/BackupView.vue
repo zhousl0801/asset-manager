@@ -8,7 +8,7 @@ import {
   validateBackup
 } from '../api/backup'
 import type { BackupSummary, BackupValidation, RestoreBackupResult } from '../api/backup'
-import { formatBusinessDate, formatMoney } from '../utils/format'
+import { addAmounts, formatBusinessDate, formatMoney } from '../utils/format'
 
 const router = useRouter()
 const backup = ref<unknown>(null)
@@ -159,8 +159,8 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
     { label: '行情观测', value: `${summary.priceObservationCount} 条` },
     { label: '现金', value: `¥${formatMoney(summary.cashBalance)}` },
     { label: '公积金', value: summary.providentBalance === null ? '未录入' : `¥${formatMoney(summary.providentBalance)}` },
-    { label: '基金', value: `¥${formatMoney(summary.fundValue + summary.fundPending + summary.fundPendingArrival)}` },
-    { label: '积存金', value: summary.goldValue === null ? '未录入' : `¥${formatMoney(summary.goldValue + summary.goldPendingArrival)}` },
+    { label: '基金', value: `¥${formatMoney(addAmounts(summary.fundValue, summary.fundPending, summary.fundPendingArrival))}` },
+    { label: '积存金', value: summary.goldValue === null ? '未录入' : `¥${formatMoney(addAmounts(summary.goldValue, summary.goldPendingArrival))}` },
     { label: '总资产', value: summary.totalAssets === null ? '依据不足' : `¥${formatMoney(summary.totalAssets)}` },
     { label: '起始日期', value: formatBusinessDate(summary.startDate) }
   ]

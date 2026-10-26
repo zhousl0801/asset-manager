@@ -13,6 +13,8 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
         builder.Property(transaction => transaction.BusinessSequence).HasColumnName("business_sequence");
         builder.Property(transaction => transaction.PriceDate).HasColumnName("price_date").HasColumnType("date");
         builder.Property(transaction => transaction.NeedsDateConfirmation).HasColumnName("needs_date_confirmation");
+        builder.Property(transaction => transaction.ConfirmationDelayDays).HasColumnName("confirmation_delay_days").HasDefaultValue(2).IsRequired();
+        builder.Property(transaction => transaction.FundTradeDate).HasColumnName("fund_trade_date").HasColumnType("date");
         builder.Property(transaction => transaction.IsReversed).HasColumnName("is_reversed");
         builder.Property(transaction => transaction.RelatedCashAdjustmentId).HasColumnName("related_cash_adjustment_id");
         builder.Property(transaction => transaction.Version).HasColumnName("version").IsConcurrencyToken();

@@ -6,4 +6,5 @@ public sealed record PendingFundSellDto(
     string PositionName,
     decimal Shares,
     DateOnly BusinessDate,
-    string? Note);
+    string? Note,
+    bool CanCancel);

@@ -230,6 +230,14 @@ public sealed class HistoryService
             throw new HistoryValidationException("起始现金不能撤销，可更正金额或日期。");
         }
 
+        if (original.AssetType == AssetType.Fund
+            && original.Kind != AssetTransactionKind.FundSellConfirm
+            && request.Action == "correct"
+            && (request.Price != original.Price || request.PriceDate != original.PriceDate))
+        {
+            throw new HistoryValidationException("基金净值来自行情数据源，不能手动更正；请刷新净值或撤销错误的记录。");
+        }
+
         if (original.Source == "asset" && !original.NeedsDateConfirmation && facts.Any(fact => !fact.IsReversed && fact.NeedsDateConfirmation
             && fact.AssetType == original.AssetType && fact.PositionId == original.PositionId)
             && original.Kind is not (AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote))

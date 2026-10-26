@@ -105,12 +105,13 @@ prototype/                     静态交互原型
 | POST | `/api/ledger/funds/sells/{id}/arrival` | 赎回到账，等额转入现金 |
 | POST | `/api/ledger/funds/quote` | 手动更新基金净值 |
 | POST | `/api/ledger/funds/{id}/quote/refresh` | 从天天基金获取并保存最近已披露净值 |
-| POST | `/api/ledger/gold/quote/refresh` | 获取并保存上期所黄金连续参考报价 |
+| POST | `/api/ledger/gold/quote/refresh` | 获取并保存工商银行积存金主动积存价 |
 | GET | `/api/ledger/plans` | 读取自动计划、待处理期次和执行记录 |
 | POST | `/api/ledger/plans` | 新建或编辑自动计划 |
 | POST | `/api/ledger/plans/{id}/pause` | 暂停计划；暂停期间不追补 |
 | POST | `/api/ledger/plans/{id}/resume` | 恢复计划，从下一期继续 |
 | POST | `/api/ledger/plans/occurrences/{id}/retry` | 重新排队待处理期次 |
+| POST | `/api/ledger/plans/occurrences/{id}/record` | 按原期次日期与金额补记本期 |
 | POST | `/api/ledger/plans/occurrences/{id}/skip` | 跳过本期 |
 | POST | `/api/ledger/plans/preview` | 按日期和试算现金只读试算 |
 | POST | `/api/ledger/plans/run` | 手动触发一次到期执行 |
@@ -218,7 +219,7 @@ G0 请求约定：收支新建、修改、撤销、现金核对和资产变更�
 
 首页与资产页的口径：完整记录之前，首页只显示“已记录资产”，不出现“总资产”；用户可在资产页把没有的公积金、基金或积存金标记为“不持有”，并确认“其他资产均已覆盖”，确认后首页才升级为“总资产”。本月变化只比较月初和今天都已记录的类别（同口径），新增记录单独列出并标注“不计入变化”，分解为市值变动、净存入·转账和新增记录；现金和公积金只称余额变化，基金和积存金的市值变化才称收益。趋势只累计区间起点已记录的类别，新增记录当天用虚线标记；记录不足 7 天时首页显示紧凑进度状态而不是曲线。
 
-行情来源：基金净值取天天基金公开接口的最近已披露值；积存金自动获取的是上期所黄金连续期货参考价，不是平台积存金报价，页面会明确标注并保留手动录入入口。行情失败时保留最近有效值和有效日期，并在基金 / 积存金持仓上显示最近一次失败原因。接口地址可通过 `QuoteProviders:FundBaseUrl`、`QuoteProviders:GoldBaseUrl` 和 `QuoteProviders:TimeoutSeconds` 覆盖，不需要凭据；接口不可用时不生成推算值。
+行情来源：基金净值取天天基金公开接口的最近已披露值，只能通过数据源刷新，不支持手动覆盖；积存金自动参考价使用工商银行积存金主动积存价，实际平台报价可手动录入。行情失败时保留最近有效值和有效日期，并显示最近一次失败原因。接口地址可通过 `QuoteProviders:FundBaseUrl`、`QuoteProviders:GoldBaseUrl` 和 `QuoteProviders:TimeoutSeconds` 覆盖，不需要凭据；接口不可用时不生成推算值。
 
 基金定投现支持“交易日”周期：中国、美国、香港按同一个 `yyyy-MM-dd` 日期均开市时执行，半日市视为开市；未维护年份按各市场独立回退到周一至周五。预览、下一期、近期排期和后台执行共用本地版本化日历；已维护 2026 年三市场官方数据，页面显示来源与覆盖状态。新交易日计划从创建后的下一个合格日期开始，不补做创建当天；保存不立即扣款，到期才扣减账本现金并生成待确认买入，不向基金平台下单。计划按基金代码/名称与份额类别选择，内部保留来源持仓关联，同类别相同金额、周期和时间的有效计划重复保存返回 409。详见[设计规格](docs/design/基金交易日历与持仓聚合-设计规格-2026-10-26.md)和[开发记录](docs/development/2026-10-26-开发记录-基金交易日历与持仓聚合.md)。
 
@@ -254,7 +255,7 @@ dotnet tool restore
 dotnet ef database update --project src/AssetKeeper.Infrastructure --startup-project src/AssetKeeper.Api
 ```
 
-原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，投资分组新增第十二个迁移 `AddFundGroups`，资产覆盖新增第十三个迁移 `AddAssetCoverage`（账本表增加“不持有”和“已确认覆盖”四个布尔列）；现有开发库已应用至第 13 个迁移，使用分组接口前无需再补迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
+原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，投资分组新增第十二个迁移 `AddFundGroups`，资产覆盖新增第十三个迁移 `AddAssetCoverage`，基金确认周期新增第十四个迁移 `AddFundConfirmationDelay`；现有开发库已在备份后应用至第 14 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
 
 ## 本地开发
 

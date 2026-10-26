@@ -1,4 +1,4 @@
-import { formatMoney } from './format'
+import { addAmounts, formatMoney } from './format'
 import type { AssetTrend, AssetTrendPoint, TrendRange } from '../types/trend'
 
 export type ScopedAssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
@@ -50,9 +50,9 @@ export function assetValue(point: AssetTrendPoint, key: ScopedAssetKey): number 
     case 'providentFund':
       return point.provident
     case 'fund':
-      return point.fundValue === null ? null : point.fundValue + point.fundPending + point.fundPendingArrival
+      return point.fundValue === null ? null : addAmounts(point.fundValue, point.fundPending, point.fundPendingArrival)
     case 'gold':
-      return point.goldValue === null ? null : point.goldValue + point.goldPendingArrival
+      return point.goldValue === null ? null : addAmounts(point.goldValue, point.goldPendingArrival)
   }
 }
 

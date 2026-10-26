@@ -45,4 +45,5 @@ public sealed record FundPlatformHoldingDto(
     decimal Value,
     decimal HoldingProfit,
     decimal RealizedProfit,
-    bool HasEffectiveQuote);
+    bool HasEffectiveQuote,
+    int ConfirmationDelayDays = 2);

@@ -92,6 +92,7 @@ public sealed class BackupGoldHolding
     public DateTimeOffset? LastQuoteAttemptAt { get; set; }
     public string? LastQuoteSource { get; set; }
     public string? LastQuoteError { get; set; }
+    public int ConfirmationDelayDays { get; set; } = 2;
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; }
 }
@@ -201,6 +202,8 @@ public sealed class BackupAssetTransaction
     public DateOnly? PriceDate { get; set; }
     public long BusinessSequence { get; set; }
     public bool NeedsDateConfirmation { get; set; }
+    public int ConfirmationDelayDays { get; set; } = 2;
+    public DateOnly? FundTradeDate { get; set; }
     public bool IsReversed { get; set; }
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

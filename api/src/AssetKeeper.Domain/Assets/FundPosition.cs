@@ -50,6 +50,8 @@ public sealed class FundPosition
 
     public int Version { get; private set; }
 
+    public int ConfirmationDelayDays { get; private set; } = 2;
+
     public Ledger Ledger { get; private set; } = null!;
 
     public FundGroup? FundGroup { get; private set; }
@@ -107,7 +109,8 @@ public sealed class FundPosition
         decimal cost,
         decimal netValue,
         DateOnly netValueDate,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int confirmationDelayDays = 2)
     {
         if (ledgerId == Guid.Empty)
         {
@@ -122,6 +125,11 @@ public sealed class FundPosition
         ValidateCost(cost);
         ValidateNetValue(netValue);
         ValidateDate(netValueDate, nameof(netValueDate));
+
+        if (confirmationDelayDays is not (1 or 2))
+        {
+            throw new ArgumentOutOfRangeException(nameof(confirmationDelayDays), "基金确认周期只能设为 T+1 或 T+2。");
+        }
 
         if (shares == 0 && cost != 0)
         {
@@ -140,6 +148,7 @@ public sealed class FundPosition
             Cost = cost,
             NetValue = netValue,
             NetValueDate = netValueDate,
+            ConfirmationDelayDays = confirmationDelayDays,
             UpdatedAt = now
         };
     }

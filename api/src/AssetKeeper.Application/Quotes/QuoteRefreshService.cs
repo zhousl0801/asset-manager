@@ -136,6 +136,15 @@ public sealed class QuoteRefreshService
                 }
             }
 
+            if (scope is QuoteRefreshScope.All or QuoteRefreshScope.Funds)
+            {
+                var confirmedBuys = await _fundService.ConfirmDueBuysAsync(cancellationToken);
+                if (confirmedBuys > 0)
+                {
+                    _logger.LogInformation("行情刷新后自动确认基金买入 {Count} 笔。", confirmedBuys);
+                }
+            }
+
             var completedAt = _dates.UtcNow;
             var run = BuildRun(trigger, scope, startedAt, completedAt, items, errors);
             _monitor.Complete(run);
@@ -268,7 +277,7 @@ public sealed class QuoteRefreshService
 
             try
             {
-                result = await _fundService.RefreshQuoteAsync(position.Id, cancellationToken);
+                result = await _fundService.RefreshQuoteAsync(position.Id, cancellationToken, confirmDueBuys: false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
