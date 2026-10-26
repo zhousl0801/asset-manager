@@ -13,6 +13,7 @@ using AssetKeeper.Application.Quotes;
 using AssetKeeper.Infrastructure.Backup;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Infrastructure.Quotes;
+using AssetKeeper.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -24,6 +25,8 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
 builder.Services.AddOpenApi();
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
@@ -77,6 +80,11 @@ builder.Services.AddSingleton<BusinessDateProvider>();
 
 var app = builder.Build();
 
+if (app.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Configuration["ASSET_KEEPER_ACCESS_PASSWORD"]))
+{
+    throw new InvalidOperationException("ASSET_KEEPER_ACCESS_PASSWORD must be configured in production.");
+}
+
 if (app.Environment.IsProduction())
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -90,6 +98,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors();
+app.UseMiddleware<ApiAccessMiddleware>();
 
 app.UseAuthorization();
 

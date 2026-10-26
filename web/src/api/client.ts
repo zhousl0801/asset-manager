@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { accessAuthorization } from './access'
 
 export class ApiError extends Error {
   readonly status: number
@@ -19,6 +20,10 @@ interface ProblemDetails {
 export async function readOnlyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
   const headers = new Headers(init?.headers)
+  const authorization = accessAuthorization()
+  if (authorization && !headers.has('Authorization')) {
+    headers.set('Authorization', authorization)
+  }
 
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -30,6 +35,10 @@ export async function readOnlyRequest<T>(path: string, init?: RequestInit): Prom
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      const { clearAccess } = await import('./access')
+      clearAccess()
+    }
     const problem = await readProblem(response)
     const firstFieldError = problem?.errors
       ? Object.values(problem.errors).flat()[0]
