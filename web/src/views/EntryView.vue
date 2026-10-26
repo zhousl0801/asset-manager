@@ -105,7 +105,6 @@ async function loadEntry(): Promise<void> {
 
   try {
     applyEntry(await fetchEntry(entryId.value))
-    await router.replace({ name: 'history', query: { factId: entryId.value } })
   } catch (error) {
     loadError.value = error instanceof ApiError && error.status === 404
       ? '记录不存在。'
@@ -330,6 +329,10 @@ function handleKeydown(event: KeyboardEvent): void {
       <span class="header-spacer"></span>
     </header>
 
+    <RouterLink v-if="form.kind === 'income' && !isEditing" class="automatic-income-link" :to="{ name: 'plans', query: { new: 'salaryIncome' } }">
+      设置自动收入（工资、奖金等） ›
+    </RouterLink>
+
     <p v-if="isLoading" class="state entry-state">正在读取记录…</p>
 
     <section v-else-if="loadError" class="state entry-state">
@@ -386,7 +389,6 @@ function handleKeydown(event: KeyboardEvent): void {
         <details class="entry-options ui-disclosure" :open="!!form.relatedCashAdjustmentId">
           <summary>更多选项</summary>
         <CashAdjustmentLink v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="form.kind === 'income' ? (amount ?? 0) : -(amount ?? 0)" :disabled="isSaving || !canEdit" />
-        <RouterLink class="back-link" to="/history">历史记录更正与撤销 ›</RouterLink>
         </details>
         <button
           v-if="isEditing && canEdit"

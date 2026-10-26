@@ -40,10 +40,6 @@ onMounted(async () => {
         <span>数据导出与备份</span>
         <b>管理 ›</b>
       </RouterLink>
-      <RouterLink class="list-row" to="/history">
-        <span>历史核对与资产回看</span>
-        <b>查看 ›</b>
-      </RouterLink>
       <RouterLink class="list-row" to="/ledger">
         <span>账本明细</span>
         <b>查看 ›</b>
