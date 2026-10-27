@@ -14,6 +14,7 @@ using AssetKeeper.Infrastructure.Backup;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Infrastructure.Quotes;
 using AssetKeeper.Api.Security;
+using Fido2NetLib;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,22 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 
 builder.Services.AddSingleton<AccessCredential>();
 builder.Services.AddScoped<AccessCookieEvents>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<PasskeyChallenges>();
+builder.Services.AddScoped<PasskeyService>();
+
+builder.Services.AddSingleton(serviceProvider => PasskeyOptions.Resolve(
+    serviceProvider.GetRequiredService<IConfiguration>(),
+    serviceProvider.GetRequiredService<IWebHostEnvironment>()));
+builder.Services.AddSingleton<IFido2>(serviceProvider =>
+{
+    var passkeyOptions = serviceProvider.GetRequiredService<PasskeyOptions>();
+
+    return new Fido2(passkeyOptions.Enabled
+        ? passkeyOptions.ToFido2Configuration()
+        : new Fido2Configuration { RPID = "localhost", RPName = "资产管家" });
+});
+
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {

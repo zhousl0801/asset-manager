@@ -16,3 +16,9 @@ services:
         sync: false
       - key: ASSET_KEEPER_ACCESS_PASSWORD
         sync: false
+      # Passkey 默认使用 Render 注入的 RENDER_EXTERNAL_URL 推断依赖方地址；
+      # 绑定自定义域名后再设置下面两项（值为实际域名与完整 https 地址）。
+      # - key: Passkey__RpId
+      #   value: example.com
+      # - key: Passkey__Origins__0
+      #   value: https://example.com

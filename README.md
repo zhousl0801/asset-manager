@@ -242,7 +242,18 @@ dotnet run --project api/src/AssetKeeper.Api -- hash-password "$NEW_PASSWORD"
 export ASSET_KEEPER_ACCESS_PASSWORD_HASH='pbkdf2-sha256$210000$...'
 ```
 
-未配置散列时仍接受明文 `ASSET_KEEPER_ACCESS_PASSWORD`，启动时在进程内散列一次。开发环境两者都不配置时保持免登录，便于本地调试；配置后同样走完整登录流程。详见[会话 Cookie 认证改造](docs/development/2026-10-27-开发记录-会话Cookie认证.md)。
+未配置散列时仍接受明文 `ASSET_KEEPER_ACCESS_PASSWORD`，启动时在进程内散列一次。开发环境两者都不配置时保持免登录，便于本地调试；配置后同样走完整登录流程。
+
+### 指纹 / Face ID 登录（Passkey）
+
+登录后进入「我的 → 登录与安全 → 在此设备启用」，即可把本机指纹 / Face ID（或系统密码）注册为 Passkey。之后登录页会直接显示「使用指纹 / Face ID 登录」，不用再输入口令；口令始终保留作为兜底。
+
+- 注册与删除都要求已登录；凭据保存在 `passkey_credentials` 表，一设备一条，可在同一页面删除。
+- Passkey 存储在系统密码管理器中（iCloud 钥匙串 / Google 密码管理器），换手机通常不用重新注册；清除浏览器数据后需重新启用。
+- 服务端依赖方（RP）默认取 Render 的 `RENDER_EXTERNAL_URL`；本地开发为 `localhost`，允许 `http://localhost:5173` 与 `http://localhost:5069`。绑定自定义域名时需设置 `Passkey__RpId=example.com`、`Passkey__Origins__0=https://example.com`。
+- WebAuthn 只在 HTTPS 或 `localhost` 下可用；不支持的浏览器自动隐藏入口，仍可用口令登录。
+
+详见[会话 Cookie 与 Passkey 认证](docs/development/2026-10-27-开发记录-会话Cookie认证.md)。
 
 ## 数据库
 
@@ -276,7 +287,7 @@ dotnet tool restore
 dotnet ef database update --project src/AssetKeeper.Infrastructure --startup-project src/AssetKeeper.Api
 ```
 
-原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，投资分组新增第十二个迁移 `AddFundGroups`，资产覆盖新增第十三个迁移 `AddAssetCoverage`，基金确认周期新增第十四个迁移 `AddFundConfirmationDelay`；现有开发库已在备份后应用至第 14 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
+原五个迁移已在本机开发库应用。G0 新增第六个迁移 `CloseG0Correctness`，G1 新增第七个迁移 `AddChronologicalHistory`，G2 新增第八个迁移 `AddFundBuyPending`，行情接入新增第九个迁移 `AddQuoteSourcesAndSyncStatus`，自动记账新增第十个迁移 `AddAutoPlans`；第 6 至 10 个迁移已在备份后应用到现有开发库。分类维护新增第十一个迁移 `AddEntryCategories`，投资分组新增第十二个迁移 `AddFundGroups`，资产覆盖新增第十三个迁移 `AddAssetCoverage`，基金确认周期新增第十四个迁移 `AddFundConfirmationDelay`，Passkey 登录新增第十五个迁移 `AddPasskeyCredentials`；现有开发库已在备份后应用至第 15 个迁移。发现多个历史账本时迁移会主动拒绝，不删除数据。
 
 ## 本地开发
 
@@ -308,7 +319,7 @@ dotnet test api/AssetKeeper.slnx
 cd web && npm run type-check && npm run test && npm run build
 ```
 
-2026-10-26 交易日迭代验证：后端 258 项全部通过（含 18 项真实 PostgreSQL）；前端 90 项测试、类型检查和生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键、恢复事务回滚和数据完整性。**不设置该变量时上述 18 项会被跳过（不是失败），此时后端显示 240 通过 + 18 跳过；当前 CI 也不启用这 18 项。** 执行方法见 [趋势图记录](docs/development/2026-10-22-开发记录-完整趋势图.md)。
+2026-10-27 认证与 Passkey 验证：后端 287 项（269 通过 + 18 项真实 PostgreSQL 跳过）、前端 102 项测试、类型检查和生产构建通过；Passkey 注册 / 登录 / 删除已在 Chromium 虚拟验证器上做端到端验收。2026-10-26 交易日迭代验证：后端 258 项全部通过（含 18 项真实 PostgreSQL）；前端 90 项测试、类型检查和生产构建通过。普通 API 测试使用 InMemory；关系数据库测试显式设置 `ASSET_KEEPER_TEST_CONNECTION`，仅使用本机独立临时库验证迁移、并发、唯一键、恢复事务回滚和数据完整性。**不设置该变量时上述 18 项会被跳过（不是失败），此时后端显示 269 通过 + 18 跳过；当前 CI 也不启用这 18 项。** 执行方法见 [趋势图记录](docs/development/2026-10-22-开发记录-完整趋势图.md)。
 
 趋势验收使用 8 月起始、分批录入基金 / 积存金 / 公积金和工资的数据：资产齐全前完整总资产留空，仅显示部分资产合计；资产齐全后显示完整总资产。首页趋势范围为 7 日 / 1 月 / 3 月 / 全部，投资收益走势范围为本月 / 近 3 月 / 今年 / 全部，空白 / 虚线说明均正常。G0/G1/G2、行情、自动记账与历史核对回归继续保留；验收使用独立临时服务和数据库。真实 iPhone/PWA 设备验收尚未执行。
 

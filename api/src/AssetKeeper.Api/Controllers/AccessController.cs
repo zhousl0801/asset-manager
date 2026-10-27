@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using AssetKeeper.Api.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -10,17 +9,19 @@ namespace AssetKeeper.Api.Controllers;
 
 [ApiController]
 [Route("api/access")]
-public sealed class AccessController(AccessCredential credential) : ControllerBase
+public sealed class AccessController(AccessCredential credential, PasskeyService passkeys) : ControllerBase
 {
     [AllowAnonymous]
     [HttpGet("session")]
-    public IActionResult Session()
+    public async Task<IActionResult> Session(CancellationToken cancellationToken)
     {
         Response.Headers.CacheControl = "no-store";
         return Ok(new
         {
             required = credential.IsConfigured,
-            authenticated = User.Identity?.IsAuthenticated == true
+            authenticated = User.Identity?.IsAuthenticated == true,
+            passkeyEnabled = passkeys.Enabled,
+            passkeyAvailable = passkeys.Enabled && await passkeys.HasCredentialsAsync(cancellationToken)
         });
     }
 
@@ -39,17 +40,7 @@ public sealed class AccessController(AccessCredential credential) : ControllerBa
             return Unauthorized(new { title = "访问口令错误" });
         }
 
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.Name, "owner"),
-                new Claim(AccessClaims.CredentialFingerprint, credential.Fingerprint)
-            ],
-            CookieAuthenticationDefaults.AuthenticationScheme);
-
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties { IsPersistent = true });
+        await AccessSignIn.SignInAsync(HttpContext, credential);
 
         return Ok(new { authenticated = true });
     }

@@ -52,6 +52,12 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("cash_effect");
 
+                    b.Property<int>("ConfirmationDelayDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("confirmation_delay_days");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -68,11 +74,6 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("FundTradeDate")
                         .HasColumnType("date")
                         .HasColumnName("fund_trade_date");
-
-                    b.Property<int>("ConfirmationDelayDays")
-                        .HasColumnType("integer")
-                        .HasDefaultValue(2)
-                        .HasColumnName("confirmation_delay_days");
 
                     b.Property<bool>("IsReversed")
                         .HasColumnType("boolean")
@@ -210,15 +211,16 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("code");
 
+                    b.Property<int>("ConfirmationDelayDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2)
+                        .HasColumnName("confirmation_delay_days");
+
                     b.Property<decimal>("Cost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("cost");
-
-                    b.Property<int>("ConfirmationDelayDays")
-                        .HasColumnType("integer")
-                        .HasDefaultValue(2)
-                        .HasColumnName("confirmation_delay_days");
 
                     b.Property<Guid?>("FundGroupId")
                         .HasColumnType("uuid")
@@ -1033,6 +1035,61 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.HasIndex("LedgerId", "DueDate", "Status");
 
                     b.ToTable("plan_occurrences", (string)null);
+                });
+
+            modelBuilder.Entity("AssetKeeper.Infrastructure.Persistence.PasskeyCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AaGuid")
+                        .HasColumnType("uuid")
+                        .HasColumnName("aaguid");
+
+                    b.Property<bool>("BackupEligible")
+                        .HasColumnType("boolean")
+                        .HasColumnName("backup_eligible");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<byte[]>("CredentialId")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("credential_id");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("label");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<byte[]>("PublicKey")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("public_key");
+
+                    b.Property<long>("SignCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sign_count");
+
+                    b.Property<string>("Transports")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("transports");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialId")
+                        .IsUnique();
+
+                    b.ToTable("passkey_credentials", (string)null);
                 });
 
             modelBuilder.Entity("AssetKeeper.Domain.Assets.AssetTransaction", b =>

@@ -149,14 +149,16 @@ public sealed class AccessApiFactory : WebApplicationFactory<Program>
     private readonly string _password;
     private readonly string _passwordHash;
     private readonly string _environment;
+    private readonly bool _configurePasskeys;
 
     public AccessApiFactory() : this(Password) { }
 
-    public AccessApiFactory(string password, string environment = "Production")
+    public AccessApiFactory(string password, string environment = "Production", bool configurePasskeys = true)
     {
         _password = password;
         _passwordHash = AccessPasswordHasher.Hash(password, 10_000);
         _environment = environment;
+        _configurePasskeys = configurePasskeys;
     }
 
     public HttpClient CreateHttpsClient()
@@ -169,13 +171,21 @@ public sealed class AccessApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment(_environment);
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["PlanScheduler:Enabled"] = "false",
                 ["QuoteRefreshScheduler:Enabled"] = "false",
                 [AccessCredential.PasswordHashKey] = _passwordHash,
                 [AccessCredential.PasswordKey] = _password
-            });
+            };
+
+            if (_configurePasskeys)
+            {
+                settings["Passkey:RpId"] = "localhost";
+                settings["Passkey:Origins:0"] = "https://localhost";
+            }
+
+            configuration.AddInMemoryCollection(settings);
         });
         builder.ConfigureServices(services =>
         {

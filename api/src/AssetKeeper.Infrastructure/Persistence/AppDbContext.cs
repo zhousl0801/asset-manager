@@ -41,6 +41,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<PlanOccurrence> PlanOccurrences => Set<PlanOccurrence>();
 
+    public DbSet<PasskeyCredential> PasskeyCredentials => Set<PasskeyCredential>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

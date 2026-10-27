@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import { accessReady, hasAccess, logout, refreshAccess } from './api/access'
 import PendingMutationNotice from './components/PendingMutationNotice.vue'
 import AccessView from './views/AccessView.vue'
 
 onMounted(refreshAccess)
+
+// 锁定或会话过期后重新探测：口令页面要据此决定是否显示 Passkey 登录入口。
+watch(hasAccess, (value) => {
+  if (!value) void refreshAccess()
+})
 </script>
 
 <template>

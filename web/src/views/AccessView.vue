@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { login } from '../api/access'
+import { login, passkeyAvailable } from '../api/access'
+import { passkeySupported, signInWithPasskey } from '../api/passkeys'
 
 const password = ref('')
 const error = ref('')
@@ -19,28 +20,51 @@ async function submit(): Promise<void> {
     busy.value = false
   }
 }
+
+async function usePasskey(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await signInWithPasskey()
+  } catch (value) {
+    error.value = value instanceof Error ? value.message : '指纹 / Face ID 登录未完成'
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 
 <template>
   <main class="access-page">
-    <form class="access-card" @submit.prevent="submit">
+    <div class="access-card">
       <div class="access-mark">资</div>
       <h1>资产管家</h1>
-      <p>输入个人访问口令，继续查看账本</p>
-      <label for="access-password">访问口令</label>
-      <input
-        id="access-password"
-        v-model="password"
-        type="password"
-        autocomplete="current-password"
-        placeholder="请输入访问口令"
-        autofocus
-      >
-      <p v-if="error" class="access-error" role="alert">{{ error }}</p>
-      <button class="access-submit" type="submit" :disabled="busy || !password">
-        {{ busy ? '验证中…' : '进入账本' }}
-      </button>
-    </form>
+      <p>查看账本需要验证身份</p>
+
+      <template v-if="passkeyAvailable && passkeySupported">
+        <button class="access-passkey" type="button" :disabled="busy" @click="usePasskey">
+          {{ busy ? '等待验证…' : '使用指纹 / Face ID 登录' }}
+        </button>
+        <p class="access-divider"><span>或输入访问口令</span></p>
+      </template>
+
+      <form class="access-form" @submit.prevent="submit">
+        <label for="access-password">访问口令</label>
+        <input
+          id="access-password"
+          v-model="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="请输入访问口令"
+          :autofocus="!(passkeyAvailable && passkeySupported)"
+        >
+        <p v-if="error" class="access-error" role="alert">{{ error }}</p>
+        <button class="access-submit" type="submit" :disabled="busy || !password">
+          {{ busy ? '验证中…' : '进入账本' }}
+        </button>
+      </form>
+    </div>
   </main>
 </template>
 
@@ -75,7 +99,33 @@ async function submit(): Promise<void> {
 }
 h1 { margin: 4px 0 0; font-size: 22px; }
 .access-card > p { margin: 0; color: var(--color-text-secondary); font-size: 13px; }
-label { margin-top: 10px; font-size: 13px; font-weight: 600; }
+.access-passkey {
+  min-height: 48px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--color-brand);
+  color: white;
+  font-weight: 650;
+}
+.access-passkey:disabled { opacity: .6; }
+.access-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.access-divider::before,
+.access-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+.access-form { display: grid; gap: 12px; }
+label { margin-top: 2px; font-size: 13px; font-weight: 600; }
 input {
   box-sizing: border-box;
   width: 100%;

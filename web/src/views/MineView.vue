@@ -36,6 +36,10 @@ onMounted(async () => {
         <span>行情更新状态</span>
         <b>查看 ›</b>
       </RouterLink>
+      <RouterLink class="list-row" to="/security">
+        <span>登录与安全</span>
+        <b>管理 ›</b>
+      </RouterLink>
       <RouterLink class="list-row" to="/backup">
         <span>数据导出与备份</span>
         <b>管理 ›</b>

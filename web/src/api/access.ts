@@ -4,10 +4,14 @@ const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export const hasAccess = ref(false)
 export const accessReady = ref(false)
+export const passkeyEnabled = ref(false)
+export const passkeyAvailable = ref(false)
 
 interface AccessSession {
   required: boolean
   authenticated: boolean
+  passkeyEnabled?: boolean
+  passkeyAvailable?: boolean
 }
 
 async function readError(response: Response, fallback: string): Promise<string> {
@@ -33,6 +37,8 @@ export async function refreshAccess(): Promise<void> {
 
     const session = await response.json() as AccessSession
     hasAccess.value = !session.required || session.authenticated
+    passkeyEnabled.value = session.passkeyEnabled === true
+    passkeyAvailable.value = session.passkeyAvailable === true
   } catch {
     hasAccess.value = false
   } finally {
