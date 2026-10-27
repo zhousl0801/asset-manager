@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   skip: vi.fn()
 }))
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/plans', () => ({
   fetchPlanOverview: mocks.overview,
   savePlan: mocks.save,

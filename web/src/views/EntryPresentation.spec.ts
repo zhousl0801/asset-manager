@@ -25,7 +25,7 @@ test('Enter on more options or a history link does not submit an entered amount'
   expect(optionsEvent.defaultPrevented).toBe(false)
 
   const historyEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-  view.get('.entry-options a.back-link').element.dispatchEvent(historyEvent)
+  view.get('.entry-options .back-link').element.dispatchEvent(historyEvent)
   await flushPromises()
   expect(mocks.create).not.toHaveBeenCalled()
   expect(historyEvent.defaultPrevented).toBe(false)
