@@ -13,18 +13,17 @@ public sealed class AssetCoverageTests
     private static readonly DateTimeOffset Now = new(2026, 10, 21, 2, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task UpdateCoverage_MarksUnheldAssetsAndConfirmsTotal()
+    public async Task UpdateCoverage_MarksUnheldAssetsAndReportsCompleteCoverage()
     {
         await using var context = await CreateAsync(includeFund: true);
 
         var result = await context.Ledger.UpdateCoverageAsync(
-            new UpdateAssetCoverageRequest(false, true, true, true),
+            new UpdateAssetCoverageRequest(false, true, true),
             CancellationToken.None);
 
         Assert.Equal(AssetCoverageStatus.Updated, result.Status);
         Assert.NotNull(result.Overview);
         Assert.True(result.Overview.CoverageComplete);
-        Assert.True(result.Overview.TotalConfirmed);
         Assert.True(result.Overview.ProvidentFund.NotHeld);
         Assert.True(result.Overview.Gold.NotHeld);
         Assert.False(result.Overview.Fund.NotHeld);
@@ -38,24 +37,11 @@ public sealed class AssetCoverageTests
         await using var context = await CreateAsync(includeFund: true);
 
         var result = await context.Ledger.UpdateCoverageAsync(
-            new UpdateAssetCoverageRequest(true, false, false, false),
+            new UpdateAssetCoverageRequest(true, false, false),
             CancellationToken.None);
 
         Assert.Equal(AssetCoverageStatus.Invalid, result.Status);
         Assert.Contains(result.Errors, error => error.Contains("基金已有持仓"));
-    }
-
-    [Fact]
-    public async Task UpdateCoverage_RejectsConfirmWhenAssetsRemainUnresolved()
-    {
-        await using var context = await CreateAsync(includeFund: false);
-
-        var result = await context.Ledger.UpdateCoverageAsync(
-            new UpdateAssetCoverageRequest(false, false, false, true),
-            CancellationToken.None);
-
-        Assert.Equal(AssetCoverageStatus.Invalid, result.Status);
-        Assert.Contains(result.Errors, error => error.Contains("不能确认其他资产均已覆盖"));
     }
 
     private static async Task<TestContext> CreateAsync(bool includeFund)

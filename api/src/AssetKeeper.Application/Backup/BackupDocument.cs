@@ -54,7 +54,6 @@ public sealed class BackupLedger
     public bool FundNotHeld { get; set; }
     public bool ProvidentFundNotHeld { get; set; }
     public bool GoldNotHeld { get; set; }
-    public bool CoverageConfirmed { get; set; }
 }
 
 public sealed class BackupCashAccount

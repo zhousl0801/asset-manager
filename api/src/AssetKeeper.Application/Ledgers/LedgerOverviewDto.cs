@@ -16,6 +16,4 @@ public sealed record LedgerOverviewDto(
     bool FundNotHeld = false,
     bool ProvidentFundNotHeld = false,
     bool GoldNotHeld = false,
-    bool CoverageConfirmed = false,
-    bool CoverageComplete = false,
-    bool TotalConfirmed = false);
+    bool CoverageComplete = false);

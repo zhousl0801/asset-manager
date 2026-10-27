@@ -186,7 +186,6 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
       axisTick: { show: false },
       splitLine: { show: false }
     },
-    dataZoom: [{ type: 'inside', start: 0, end: 100 }],
     series: [
       {
         name: '同口径资产',

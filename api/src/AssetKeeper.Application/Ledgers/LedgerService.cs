@@ -127,7 +127,6 @@ public sealed class LedgerService
         var coverageComplete = (fundIsNotHeld || (fundPositions.Count > 0 && fund.Amount is not null))
             && (providentIsNotHeld || providentAccount is not null)
             && (goldIsNotHeld || (goldHolding is not null && gold.Amount is not null));
-        var totalConfirmed = ledger.CoverageConfirmed && coverageComplete;
 
         return Map(
             ledger,
@@ -141,8 +140,7 @@ public sealed class LedgerService
             fundIsNotHeld,
             providentIsNotHeld,
             goldIsNotHeld,
-            coverageComplete,
-            totalConfirmed)
+            coverageComplete)
             with
         { IsComplete = coverageComplete };
     }
@@ -178,15 +176,6 @@ public sealed class LedgerService
             errors.Add("积存金已有持仓，不能标记为不持有。");
         }
 
-        var fundResolved = request.FundNotHeld || fundPositions.Count > 0;
-        var providentResolved = request.ProvidentFundNotHeld || providentAccount is not null;
-        var goldResolved = request.GoldNotHeld || goldHolding is not null;
-
-        if (request.CoverageConfirmed && !(fundResolved && providentResolved && goldResolved))
-        {
-            errors.Add("还有资产未录入或未标记为不持有，不能确认其他资产均已覆盖。");
-        }
-
         if (errors.Count > 0)
         {
             return AssetCoverageResult.Invalid([.. errors]);
@@ -196,7 +185,6 @@ public sealed class LedgerService
         ledger.SetNotHeld(AssetType.Fund, request.FundNotHeld, now);
         ledger.SetNotHeld(AssetType.ProvidentFund, request.ProvidentFundNotHeld, now);
         ledger.SetNotHeld(AssetType.Gold, request.GoldNotHeld, now);
-        ledger.SetCoverageConfirmed(request.CoverageConfirmed, now);
 
         try
         {
@@ -259,7 +247,6 @@ public sealed class LedgerService
             false,
             false,
             false,
-            false,
             false));
     }
 
@@ -309,8 +296,7 @@ public sealed class LedgerService
         bool fundNotHeld,
         bool providentFundNotHeld,
         bool goldNotHeld,
-        bool coverageComplete,
-        bool totalConfirmed)
+        bool coverageComplete)
     {
         var cash = new AssetOverviewDto(true, cashAccount.Balance, "统一余额");
         var totalAssets = cashAccount.Balance
@@ -330,11 +316,9 @@ public sealed class LedgerService
             providentFund,
             gold,
             new MonthSummaryDto(income, expense, income - expense, hasRecords),
-            TotalConfirmed: totalConfirmed,
             FundNotHeld: fundNotHeld,
             ProvidentFundNotHeld: providentFundNotHeld,
             GoldNotHeld: goldNotHeld,
-            CoverageConfirmed: ledger.CoverageConfirmed,
             CoverageComplete: coverageComplete);
     }
 }

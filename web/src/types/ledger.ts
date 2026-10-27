@@ -28,9 +28,7 @@ export interface LedgerOverview {
   fundNotHeld: boolean
   providentFundNotHeld: boolean
   goldNotHeld: boolean
-  coverageConfirmed: boolean
   coverageComplete: boolean
-  totalConfirmed: boolean
 }
 
 export type AssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
@@ -64,7 +62,6 @@ export interface UpdateAssetCoverageInput {
   fundNotHeld: boolean
   providentFundNotHeld: boolean
   goldNotHeld: boolean
-  coverageConfirmed: boolean
 }
 
 export interface InitializeLedgerInput {

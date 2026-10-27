@@ -292,7 +292,7 @@ onMounted(loadLedger)
     <template v-else-if="overview">
       <section class="hero">
         <p class="hero-label">
-          {{ overview.totalConfirmed ? '总资产' : '已记录资产' }}
+          {{ overview.coverageComplete ? '总资产' : '已记录资产' }}
           <span class="tag">{{ overview.currency }}</span>
         </p>
         <h1 class="hero-value"><span class="currency">¥</span>{{ formatMoney(overview.totalAssets) }}</h1>
@@ -332,14 +332,12 @@ onMounted(loadLedger)
 
         <p class="hero-meta">
           已记录 {{ recordedCount }} 类 · 更新于 {{ formatBusinessDate(updateDate) }}
-          <RouterLink v-if="!overview.coverageComplete" class="text-btn" to="/assets">补全 ›</RouterLink>
-          <RouterLink v-else-if="!overview.coverageConfirmed" class="text-btn" to="/assets">确认完整 ›</RouterLink>
         </p>
       </section>
 
       <section class="trend-panel">
         <div class="section-head">
-          <h2>已记录资产趋势</h2>
+          <h2>资产趋势</h2>
           <div class="range" role="tablist" aria-label="趋势范围">
             <button
               v-for="option in rangeOptions"
@@ -366,18 +364,6 @@ onMounted(loadLedger)
           <p v-else-if="trendError" class="hint">{{ trendError }}</p>
           <AssetTrendChart v-else-if="trend && scopedTrend" :trend="trend" @select="selectPoint" />
           <p v-else class="hint">还没有可展示的趋势数据。</p>
-          <div class="chart-note">
-            <span>按住图表拖动查看每日金额</span>
-            <details class="chart-help">
-              <summary>统计口径 ⓘ</summary>
-              <div class="chart-help-content">
-                <p>只累计本月/本区间开始时已记录的类别；新增记录当天用虚线标记，不改变已有曲线口径。</p>
-                <p>账本起始 {{ formatBusinessDate(overview.startDate) }}；{{ trend ? `${trend.from} 至 ${trend.to}` : '按日重算' }}。</p>
-                <p v-for="note in trend?.notes ?? []" :key="note">{{ note }}</p>
-                <p>空白表示该日依据不足。</p>
-              </div>
-            </details>
-          </div>
         </template>
 
         <div v-else class="trend-wait">
@@ -707,17 +693,6 @@ onMounted(loadLedger)
   font-weight: 500;
 }
 
-.chart-note {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 7px;
-  padding-top: 9px;
-  border-top: 1px solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  font-size: 10px;
-}
-
 .trend-wait {
   padding: 14px 4px 16px;
   color: var(--color-text-secondary);
@@ -750,41 +725,6 @@ onMounted(loadLedger)
   border-radius: 99px;
   background: var(--color-brand);
   transition: width 0.2s ease;
-}
-
-.chart-help {
-  position: static;
-  color: var(--color-brand);
-}
-
-.chart-help summary {
-  min-height: 28px;
-  list-style: none;
-  cursor: pointer;
-}
-
-.chart-help summary::-webkit-details-marker {
-  display: none;
-}
-
-.chart-help-content {
-  position: absolute;
-  z-index: 10;
-  top: calc(100% - 6px);
-  right: 0;
-  left: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  box-shadow: 0 8px 24px var(--color-shadow);
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.chart-help-content p {
-  margin: 4px 0;
 }
 
 .text-btn {

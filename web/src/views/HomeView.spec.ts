@@ -52,9 +52,7 @@ function overview(startDate: string, overrides: Record<string, unknown> = {}) {
     fundNotHeld: false,
     providentFundNotHeld: false,
     goldNotHeld: false,
-    coverageConfirmed: false,
     coverageComplete: false,
-    totalConfirmed: false,
     ...overrides
   }
 }
@@ -135,6 +133,7 @@ test('shows recorded assets, no comparable month change and the seven-day trend 
   expect(view.find('.hero-change').text()).toContain('暂无可比数据')
   expect(view.find('.added-note').text()).toContain('111,166.75')
   expect(view.find('.hero-meta').text()).toContain('已记录 3 类')
+  expect(view.find('.trend-panel h2').text()).toBe('资产趋势')
   expect(view.find('.trend-wait').text()).toContain('记录满 7 天后显示趋势')
   expect(view.find('.trend-wait').text()).toContain('已记录 1/7 天')
   expect(view.find('.distribution').text()).toContain('暂未录入')
@@ -152,6 +151,7 @@ test('draws the scoped trend once seven days are recorded', async () => {
 
   expect(view.find('.chart-stub').exists()).toBe(true)
   expect(view.find('.chart-readout').text()).toContain('244,685.00')
+  expect(view.find('.chart-note').exists()).toBe(false)
   expect(view.find('.trend-wait').exists()).toBe(false)
   view.unmount()
 })

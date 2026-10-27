@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import BackButton from '../components/BackButton.vue'
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { depositProvident, fetchProvidentOverview, withdrawProvident, setProvidentOpening } from '../api/provident'
+import { fetchPlanOverview, pausePlan, resumePlan, savePlan } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import { createRequestId } from '../utils/request'
+import type { PlanOverview } from '../types/plan'
 import type { ProvidentActivity, ProvidentOverview } from '../types/provident'
 
 type SheetKind = 'opening' | 'record'
@@ -17,6 +19,7 @@ type SheetKind = 'opening' | 'record'
 const router = useRouter()
 const today = todayInBusinessTimeZone()
 const overview = ref<ProvidentOverview | null>(null)
+const planOverview = ref<PlanOverview | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
 const notice = ref('')
@@ -31,19 +34,59 @@ const form = reactive({
   depositAmount: '',
   withdrawalAmount: '',
   note: '',
-  relatedCashAdjustmentId: null as string | null
+  relatedCashAdjustmentId: null as string | null,
+  monthlyEnabled: false,
+  monthlyAmount: '',
+  monthlyDay: '15',
+  monthlyTime: '09:00'
 })
+
+const depositPlan = computed(() =>
+  planOverview.value?.plans.find((plan) => plan.type === 'providentDeposit') ?? null)
 
 const monthLabel = computed(() =>
   overview.value ? formatPeriodLabel(overview.value.periodFrom, 'month') : '')
 const sheetTitle = computed(() =>
-  sheet.value === 'opening' ? '录入起始公积金' : '记录缴存 / 提取')
+  sheet.value === 'opening' ? '录入公积金余额' : '缴存/提取')
 const sheetNote = computed(() =>
   sheet.value === 'opening'
     ? '记录已有的公积金余额，不计入缴存、工资或生活收入。'
-    : '缴存只增加余额；提取会等额转入现金。两项都不计入生活收入，可只填其中一项。')
+    : '缴存与提取可只填其中一项。')
 const depositAmount = computed(() => parseAmount(form.depositAmount))
 const withdrawalAmount = computed(() => parseAmount(form.withdrawalAmount))
+const monthlyAmount = computed(() => parseAmount(form.monthlyAmount))
+const monthlyDay = computed(() => Number(form.monthlyDay))
+const monthlyValuesChanged = computed(() => {
+  const plan = depositPlan.value
+
+  if (!form.monthlyEnabled) {
+    return false
+  }
+
+  if (!plan) {
+    return true
+  }
+
+  return monthlyAmount.value !== plan.amount
+    || monthlyDay.value !== plan.dayOfMonth
+    || form.monthlyTime.slice(0, 5) !== plan.time.slice(0, 5)
+})
+const monthlyPlanChanged = computed(() => {
+  const plan = depositPlan.value
+
+  if (!form.monthlyEnabled) {
+    return plan?.isActive ?? false
+  }
+
+  return !plan || !plan.isActive || monthlyValuesChanged.value
+})
+const monthlyValid = computed(() => !form.monthlyEnabled || (
+  (monthlyAmount.value ?? 0) > 0
+  && Number.isInteger(monthlyDay.value)
+  && monthlyDay.value >= 1
+  && monthlyDay.value <= 31
+  && form.monthlyTime !== ''
+))
 const canSubmit = computed(() => {
   if (isSaving.value) {
     return false
@@ -58,6 +101,10 @@ const canSubmit = computed(() => {
     return false
   }
 
+  if (!monthlyValid.value) {
+    return false
+  }
+
   const deposit = depositAmount.value
   const withdrawal = withdrawalAmount.value
 
@@ -65,10 +112,23 @@ const canSubmit = computed(() => {
     return false
   }
 
-  return (deposit ?? 0) > 0 || (withdrawal ?? 0) > 0
+  return (deposit ?? 0) > 0 || (withdrawal ?? 0) > 0 || monthlyPlanChanged.value
 })
 
-onMounted(loadOverview)
+onMounted(loadPage)
+
+watch(
+  () => form.monthlyEnabled,
+  (enabled) => {
+    if (enabled && !form.monthlyAmount.trim() && (depositAmount.value ?? 0) > 0) {
+      form.monthlyAmount = form.depositAmount
+    }
+  }
+)
+
+async function loadPage(): Promise<void> {
+  await Promise.all([loadOverview(), loadPlan()])
+}
 
 async function loadOverview(): Promise<void> {
   isLoading.value = true
@@ -90,6 +150,14 @@ async function loadOverview(): Promise<void> {
   }
 }
 
+async function loadPlan(): Promise<void> {
+  try {
+    planOverview.value = await fetchPlanOverview()
+  } catch {
+    planOverview.value = null
+  }
+}
+
 function openSheet(kind: SheetKind): void {
   sheet.value = kind
   requestId.value = createRequestId()
@@ -101,6 +169,12 @@ function openSheet(kind: SheetKind): void {
   form.note = ''
   form.relatedCashAdjustmentId = null
   formError.value = ''
+
+  const plan = depositPlan.value
+  form.monthlyEnabled = plan?.isActive ?? false
+  form.monthlyAmount = plan ? String(plan.amount) : ''
+  form.monthlyDay = plan?.dayOfMonth ? String(plan.dayOfMonth) : '15'
+  form.monthlyTime = plan?.time.slice(0, 5) || '09:00'
 }
 
 function closeSheet(): void {
@@ -148,7 +222,7 @@ async function submit(): Promise<void> {
   const deposit = depositAmount.value ?? 0
   const withdrawal = withdrawalAmount.value ?? 0
 
-  if (deposit <= 0 && withdrawal <= 0) {
+  if (deposit <= 0 && withdrawal <= 0 && !monthlyPlanChanged.value) {
     formError.value = '请至少填写缴存或提取其中一项。'
     return
   }
@@ -163,11 +237,60 @@ async function submit(): Promise<void> {
     return
   }
 
+  if (form.monthlyEnabled && (monthlyAmount.value ?? 0) <= 0) {
+    formError.value = '请填写有效的每月缴存金额。'
+    return
+  }
+
+  if (form.monthlyEnabled && (!Number.isInteger(monthlyDay.value) || monthlyDay.value < 1 || monthlyDay.value > 31)) {
+    formError.value = '每月缴存日期须为 1 至 31。'
+    return
+  }
+
+  if (form.monthlyEnabled && form.monthlyTime === '') {
+    formError.value = '请选择每月缴存的执行时间。'
+    return
+  }
+
   isSaving.value = true
   let deposited = false
+  const messages: string[] = []
 
   try {
-    const messages: string[] = []
+    const plan = depositPlan.value
+
+    if (form.monthlyEnabled) {
+      const amount = monthlyAmount.value ?? 0
+      const time = form.monthlyTime.length === 5 ? `${form.monthlyTime}:00` : form.monthlyTime
+
+      if (monthlyValuesChanged.value) {
+        await savePlan({
+          id: plan?.id ?? null,
+          type: 'providentDeposit',
+          name: plan?.name ?? '',
+          amount,
+          cycle: 'monthly',
+          dayOfMonth: monthlyDay.value,
+          dayOfWeek: null,
+          time,
+          startDate: plan?.startDate ?? today,
+          fundPositionId: null,
+          requestId: createRequestId(),
+          expectedVersion: plan?.version ?? null
+        })
+        messages.push(plan
+          ? '每月缴存已更新'
+          : `已设置每月 ${monthlyDay.value} 日缴存 ¥${formatMoney(amount)}`)
+      }
+
+      if (plan && !plan.isActive) {
+        await resumePlan(plan.id, createRequestId())
+        messages.push('已恢复每月缴存')
+      }
+    } else if (plan?.isActive) {
+      await pausePlan(plan.id, createRequestId())
+      messages.push('每月缴存已暂停')
+    }
 
     if (deposit > 0) {
       const result = await depositProvident({
@@ -193,12 +316,16 @@ async function submit(): Promise<void> {
     }
 
     sheet.value = null
-    await loadOverview()
-    notice.value = `${messages.join('，')}；当前余额 ¥${formatMoney(overview.value?.balance ?? 0)}。`
+    await Promise.all([loadOverview(), loadPlan()])
+    const balanceNote = deposit > 0 || withdrawal > 0
+      ? `；当前余额 ¥${formatMoney(overview.value?.balance ?? 0)}`
+      : ''
+    notice.value = `${messages.join('，')}${balanceNote}。`
   } catch (error) {
+    const prefix = messages.length ? `${messages.join('，')}；` : ''
     formError.value = deposited
-      ? `缴存已登记，但提取保存失败：${getApiErrorMessage(error, '请稍后单独补记提取。')}`
-      : getApiErrorMessage(error, '保存失败，请重试。')
+      ? `${prefix}缴存已登记，但提取保存失败：${getApiErrorMessage(error, '请稍后单独补记提取。')}`
+      : `${prefix}${getApiErrorMessage(error, '保存失败，请重试。')}`
   } finally {
     isSaving.value = false
   }
@@ -257,17 +384,14 @@ function goBack(): void {
       </section>
 
       <div class="provident-actions">
-        <button type="button" class="action-secondary" @click="openSheet('opening')">录入起始余额</button>
-        <button type="button" class="action-primary" @click="openSheet('record')">记录缴存 / 提取</button>
+        <button type="button" class="action-secondary" @click="openSheet('opening')">录入余额</button>
+        <button type="button" class="action-primary" @click="openSheet('record')">缴存/提取</button>
       </div>
-      <RouterLink class="monthly-deposit-link" :to="{ name: 'plans', query: { new: 'providentDeposit' } }">设置每月缴存 ›</RouterLink>
-      <p class="form-note">按计划自动记入账本，不会向单位或公积金账户发起真实缴款。</p>
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
       <p v-if="!overview.isConfigured" class="hint">
-        尚未记录公积金，先录入起始余额或记录缴存。
+        尚未记录公积金，先录入余额或记录缴存。
       </p>
-      <p v-else class="hint">缴存计入资产增加；提取转入现金，不计入生活收入。</p>
 
       <div class="section-head">
         <h2>余额变动</h2>
@@ -343,6 +467,42 @@ function goBack(): void {
             />
             <small>提取后等额转入现金，可留空。</small>
           </label>
+
+          <section class="monthly-setting">
+            <label class="monthly-toggle">
+              <input v-model="form.monthlyEnabled" type="checkbox" />
+              <span>
+                <b>每月自动缴存</b>
+                <small v-if="depositPlan">
+                  当前每月 {{ depositPlan.dayOfMonth }} 日 ¥{{ formatMoney(depositPlan.amount) }}{{ depositPlan.isActive ? '' : '（已暂停）' }}
+                </small>
+              </span>
+            </label>
+            <div v-if="form.monthlyEnabled" class="monthly-fields">
+              <div class="form-row">
+                <label class="form-field">
+                  <span>每月金额（元）</span>
+                  <input
+                    v-model="form.monthlyAmount"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0.00"
+                    @input="formError = ''"
+                  />
+                </label>
+                <label class="form-field">
+                  <span>每月日期</span>
+                  <input v-model="form.monthlyDay" type="number" min="1" max="31" @input="formError = ''" />
+                </label>
+              </div>
+              <label class="form-field">
+                <span>执行时间</span>
+                <input v-model="form.monthlyTime" type="time" @input="formError = ''" />
+              </label>
+              <small class="form-hint">当月没有该日期时按当月最后一天执行。</small>
+            </div>
+          </section>
         </template>
 
         <label class="form-field">
@@ -466,19 +626,6 @@ function goBack(): void {
   border-radius: 9px;
   font-size: 13px;
   font-weight: 550;
-}
-
-.monthly-deposit-link {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 12px;
-  color: var(--color-brand);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.monthly-deposit-link:hover {
-  text-decoration: underline;
 }
 
 .action-primary {
@@ -621,5 +768,53 @@ function goBack(): void {
 
 .summary-note {
   text-align: center;
+}
+
+.monthly-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-bg-subtle);
+}
+
+.monthly-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.monthly-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--color-brand);
+}
+
+.monthly-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.monthly-toggle b {
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.monthly-toggle small {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.monthly-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import {
-  DataZoomComponent,
   GridComponent,
   MarkLineComponent,
   MarkPointComponent,
@@ -18,7 +17,6 @@ echarts.use([
   LineChart,
   GridComponent,
   TooltipComponent,
-  DataZoomComponent,
   MarkPointComponent,
   MarkLineComponent,
   CanvasRenderer
@@ -73,7 +71,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" class="trend-chart" role="img" aria-label="已记录资产趋势图" />
+  <div ref="container" class="trend-chart" role="img" aria-label="资产趋势图" />
 </template>
 
 <style scoped>

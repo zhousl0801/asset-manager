@@ -19,9 +19,7 @@ const overview: LedgerOverview = {
   fundNotHeld: false,
   providentFundNotHeld: false,
   goldNotHeld: false,
-  coverageConfirmed: false,
-  coverageComplete: false,
-  totalConfirmed: false
+  coverageComplete: false
 }
 
 const changes = [

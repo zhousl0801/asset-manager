@@ -36,8 +36,6 @@ public sealed class Ledger
 
     public bool GoldNotHeld { get; private set; }
 
-    public bool CoverageConfirmed { get; private set; }
-
     public bool IsNotHeld(AssetType assetType)
     {
         return assetType switch
@@ -73,20 +71,8 @@ public sealed class Ledger
                 throw new ArgumentOutOfRangeException(nameof(assetType), assetType, "不支持的资产类型。");
         }
 
-        CoverageConfirmed = false;
         Touch(now);
         return true;
-    }
-
-    public void SetCoverageConfirmed(bool confirmed, DateTimeOffset now)
-    {
-        if (CoverageConfirmed == confirmed)
-        {
-            return;
-        }
-
-        CoverageConfirmed = confirmed;
-        Touch(now);
     }
 
     public long AllocateFactSequence() => ++NextFactSequence;

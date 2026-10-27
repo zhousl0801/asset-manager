@@ -5,15 +5,17 @@ import LedgerView from './LedgerView.vue'
 import CashView from './CashView.vue'
 import { ApiError } from '../api/client'
 
-const mocks = vi.hoisted(() => ({ provident: vi.fn(), deposit: vi.fn(), withdraw: vi.fn(), entries: vi.fn(), cash: vi.fn(), reconcile: vi.fn() }))
+const mocks = vi.hoisted(() => ({ provident: vi.fn(), deposit: vi.fn(), withdraw: vi.fn(), opening: vi.fn(), plans: vi.fn(), savePlan: vi.fn(), pausePlan: vi.fn(), resumePlan: vi.fn(), entries: vi.fn(), cash: vi.fn(), reconcile: vi.fn() }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
-vi.mock('../api/provident', () => ({ fetchProvidentOverview: mocks.provident, depositProvident: mocks.deposit, withdrawProvident: mocks.withdraw }))
+vi.mock('../api/provident', () => ({ fetchProvidentOverview: mocks.provident, depositProvident: mocks.deposit, withdrawProvident: mocks.withdraw, setProvidentOpening: mocks.opening }))
+vi.mock('../api/plans', () => ({ fetchPlanOverview: mocks.plans, savePlan: mocks.savePlan, pausePlan: mocks.pausePlan, resumePlan: mocks.resumePlan }))
 vi.mock('../api/cash', () => ({ fetchCashOverview: mocks.cash, reconcileCash: mocks.reconcile }))
 vi.mock('../api/entries', () => ({ fetchEntryPeriod: mocks.entries }))
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.provident.mockResolvedValue({ isConfigured: true, balance: 100, asOfDate: '2026-09-15', periodFrom: '2026-10-01', periodTo: '2026-10-31', monthDeposit: 0, monthWithdrawal: 0, netChange: 0, activities: [] })
+  mocks.plans.mockResolvedValue({ plans: [], pendingOccurrences: [] })
 })
 
 test('provident list labels the query month separately from the balance date', async () => {
@@ -50,6 +52,35 @@ test('provident form does not ask for a business date', async () => {
   await flushPromises()
   await view.find('.action-primary').trigger('click')
   expect(document.querySelector('.sheet input[type="date"]')).toBeNull()
+  view.unmount()
+})
+
+test('provident form sets the monthly deposit inside the deposit and withdrawal sheet', async () => {
+  mocks.savePlan.mockResolvedValue({})
+  const view = mount(ProvidentView, { attachTo: document.body })
+  await flushPromises()
+  expect(view.text()).not.toContain('设置每月缴存')
+
+  await view.find('.action-primary').trigger('click')
+  const toggle = document.querySelector('.monthly-toggle input') as HTMLInputElement | null
+  expect(toggle).not.toBeNull()
+  toggle!.click()
+  await flushPromises()
+
+  const monthlyInput = document.querySelectorAll('input[inputmode="decimal"]')[2] as HTMLInputElement
+  monthlyInput.value = '800'
+  monthlyInput.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+  document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.savePlan).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'providentDeposit',
+    amount: 800,
+    dayOfMonth: 15,
+    cycle: 'monthly'
+  }))
+  expect(view.find('.notice').text()).toContain('已设置每月 15 日缴存 ¥800.00')
   view.unmount()
 })
 
