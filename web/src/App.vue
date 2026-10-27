@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
-import { accessReady, hasAccess, logout, refreshAccess } from './api/access'
+import { accessReady, hasAccess, refreshAccess } from './api/access'
 import PendingMutationNotice from './components/PendingMutationNotice.vue'
 import AccessView from './views/AccessView.vue'
 
 onMounted(refreshAccess)
 
-// 锁定或会话过期后重新探测：口令页面要据此决定是否显示 Passkey 登录入口。
+// 会话失效或退出登录后重新探测：口令页面要据此决定是否显示 Passkey 登录入口。
 watch(hasAccess, (value) => {
   if (!value) void refreshAccess()
 })
@@ -17,7 +17,6 @@ watch(hasAccess, (value) => {
   <AccessView v-else-if="!hasAccess" />
   <template v-else>
     <PendingMutationNotice />
-    <button class="access-logout" type="button" @click="logout">锁定</button>
     <RouterView />
   </template>
 </template>
@@ -30,17 +29,5 @@ watch(hasAccess, (value) => {
   place-items: center;
   color: var(--color-text-secondary);
   font-size: 13px;
-}
-.access-logout {
-  position: fixed;
-  z-index: 20;
-  top: max(8px, env(safe-area-inset-top));
-  right: max(8px, calc((100vw - 430px) / 2 + 8px));
-  padding: 6px 10px;
-  border: 1px solid var(--color-border-control);
-  border-radius: 8px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  font-size: 12px;
 }
 </style>

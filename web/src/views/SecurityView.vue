@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { passkeyEnabled } from '../api/access'
+import { logout, passkeyEnabled } from '../api/access'
 import { deletePasskey, fetchPasskeys, passkeySupported, registerPasskey, type PasskeySummary } from '../api/passkeys'
 import PageHeader from '../components/PageHeader.vue'
 
@@ -84,6 +84,12 @@ async function remove(credential: PasskeySummary): Promise<void> {
   }
 }
 
+async function signOut(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  await logout()
+}
+
 onMounted(load)
 </script>
 
@@ -124,6 +130,14 @@ onMounted(load)
           <button class="text-button danger" type="button" :disabled="busy" @click="remove(credential)">删除</button>
         </li>
       </ul>
+    </section>
+
+    <section class="security-card">
+      <h2>退出登录</h2>
+      <p>退出后需要重新验证访问口令或指纹 / Face ID，已保存的 Passkey 不会删除。</p>
+      <button class="secondary-button security-action" type="button" :disabled="busy" @click="signOut">
+        退出登录
+      </button>
     </section>
 
     <p class="timeline-note">

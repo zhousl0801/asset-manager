@@ -229,7 +229,7 @@ G0 请求约定：收支新建、修改、撤销、现金核对和资产变更�
 
 - `POST /api/access/login`：校验口令，成功下发 `HttpOnly`、`SameSite=Lax` 会话 Cookie，7 天滑动有效期。
 - `GET /api/access/session`：返回 `{ required, authenticated }`，前端据此决定是否显示口令页。
-- `POST /api/access/logout`：清除 Cookie；页面右上角「锁定」按钮即调用此接口。
+- `POST /api/access/logout`：清除 Cookie；入口在「我的 → 登录与安全 → 退出登录」。
 - 生产环境默认要求登录；`/api/health`、口令端点、静态资源与 `index.html` 匿名可访问。
 - 登录限流 10 次 / 5 分钟，超出返回 429。
 - 口令以 PBKDF2-SHA256（210,000 次）散列保存；轮换口令后旧会话因指纹不匹配立即失效。
