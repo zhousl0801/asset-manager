@@ -2035,6 +2035,7 @@ function goBack(): void {
   border-bottom: 1px solid var(--color-border-subtle);
 }
 .pending-overview {
+  container-type: inline-size;
   margin: 0 0 18px;
   padding: 0 12px;
   border-radius: 10px;
@@ -2614,8 +2615,8 @@ function goBack(): void {
 }
 
 .pending-card {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 48%);
   align-items: center;
   gap: 12px;
   padding: 13px 14px;
@@ -2634,6 +2635,7 @@ function goBack(): void {
 .pending-copy strong {
   font-size: 13px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .pending-copy small {
@@ -2647,15 +2649,38 @@ function goBack(): void {
 
 .pending-side {
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
 }
 
 .pending-side b {
+  flex: 0 0 auto;
   font-size: 14px;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
+}
+
+.pending-side small {
+  flex: 1 1 120px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: right;
+  white-space: normal;
+}
+
+@container (max-width: 560px) {
+  .pending-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .pending-side {
+    justify-content: space-between;
+  }
 }
 
 .confirm-button {
