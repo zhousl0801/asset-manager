@@ -173,7 +173,6 @@ function changeLabel(row: DistributionRow): string {
           </span>
           <span class="asset-side">
             <b class="asset-amount muted-text">{{ amountLabel(row) }}</b>
-            <small v-if="!row.notHeld" />
           </span>
           <span v-if="editable" class="row-actions">
             <RouterLink v-if="!row.notHeld" :to="row.to" class="row-action">添加</RouterLink>
@@ -284,6 +283,12 @@ function changeLabel(row: DistributionRow): string {
 
 .asset-link.static {
   grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 12px;
+}
+
+.asset-link.static .asset-amount {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .asset-main {
@@ -345,28 +350,48 @@ function changeLabel(row: DistributionRow): string {
 
 .row-actions {
   display: inline-flex;
-  gap: 5px;
+  align-items: center;
+  gap: 4px;
 }
 
 .row-action {
-  min-height: 28px;
-  padding: 4px 8px;
-  border: 1px solid var(--color-border-control);
-  border-radius: 6px;
-  background: var(--color-bg-surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
-}
-
-.row-action.subtle {
-  border-color: var(--color-border-subtle);
-  color: var(--color-text-secondary);
+  transition: background .15s ease, color .15s ease;
 }
 
 .row-action:hover {
-  background: var(--color-bg-hover);
+  background: var(--color-brand-soft-hover);
+}
+
+.row-action.subtle {
+  padding: 0 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.row-action.subtle:hover {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+
+.row-action:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 @media (max-width: 360px) {
