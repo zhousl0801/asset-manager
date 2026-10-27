@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { fetchCashOverview, reconcileCash } from '../api/cash'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import BackButton from '../components/BackButton.vue'
 import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, subtractAmounts } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import type { CashActivity, CashActivityType, CashOverview } from '../types/cash'
@@ -263,8 +264,7 @@ function handleKeydown(event: KeyboardEvent): void {
 <template>
   <main class="page cash-page with-nav">
     <header class="cash-header">
-      <button type="button" class="back-link" @click="router.push({ name: 'home' })">‹ 总览</button>
-      <h1>现金</h1>
+      <BackButton @back="router.push({ name: 'home' })" />
       <button type="button" class="reconcile-link" @click="openReconcile">核对余额</button>
     </header>
 
@@ -367,12 +367,6 @@ function handleKeydown(event: KeyboardEvent): void {
           记一笔支出
         </button>
       </div>
-
-      <p class="summary-note">
-        月初余额 {{ formatMoney(overview.openingBalance) }} · 现金流入 − 现金流出 + 余额调整 =
-        净变动
-      </p>
-      <p class="summary-note">余额调整单独留痕，不自动补成收入或支出。</p>
     </template>
 
     <Teleport to="body">
@@ -463,30 +457,19 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .cash-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
 }
 
-.cash-header h1 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-}
-
-.back-link,
 .reconcile-link {
   min-height: 36px;
+  margin-left: auto;
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
   font-size: 12px;
-}
-
-.reconcile-link {
   font-weight: 550;
 }
 

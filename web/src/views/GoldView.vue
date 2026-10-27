@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { arriveGoldSell, buyGold, fetchGoldOverview, refreshGoldQuote, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
   formatBusinessDate,
@@ -258,13 +259,6 @@ async function submitBuy(): Promise<void> {
   }
 
 
-  const dateError = validateBusinessDate()
-
-  if (dateError) {
-    formError.value = dateError
-    return
-  }
-
   const quoteDateError = validateValueDate(form.quoteDate, '报价日期')
 
   if (quoteDateError) {
@@ -297,13 +291,6 @@ async function submitSell(): Promise<void> {
     return
   }
 
-
-  const dateError = validateBusinessDate()
-
-  if (dateError) {
-    formError.value = dateError
-    return
-  }
 
   isSaving.value = true
   const result = await sellGold({
@@ -338,13 +325,6 @@ async function submitSellArrival(): Promise<void> {
 
   if (amount !== pending.amount) {
     formError.value = '到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。'
-    return
-  }
-
-  const dateError = validateBusinessDate()
-
-  if (dateError) {
-    formError.value = dateError
     return
   }
 
@@ -413,8 +393,6 @@ async function submitHolding(): Promise<void> {
     return
   }
 
-  const holdingDateError = validateBusinessDate()
-  if (holdingDateError) { formError.value = holdingDateError; return }
 
   isSaving.value = true
   await saveGoldHolding({
@@ -430,18 +408,6 @@ async function submitHolding(): Promise<void> {
   notice.value = '积存金持仓已保存。'
   sheet.value = null
   await loadOverview()
-}
-
-function validateBusinessDate(): string | null {
-  if (!form.businessDate) {
-    return '请选择业务日期。'
-  }
-
-  if (form.businessDate > today) {
-    return '业务日期不能晚于今天。'
-  }
-
-  return null
 }
 
 function validateValueDate(value: string, label: string): string | null {
@@ -565,8 +531,7 @@ function goBack(): void {
 <template>
   <main class="page gold-page with-nav">
     <header class="gold-header">
-      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
-      <h1>平台积存金</h1>
+      <BackButton @back="goBack" />
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取积存金…</p>
@@ -687,10 +652,6 @@ function goBack(): void {
         <p>还没有积存金记录</p>
         <button type="button" class="primary-button" @click="openSheet('holding')">录入已有持仓</button>
       </div>
-
-      <p class="summary-note">
-        买入按实际扣款增加克数与成本；卖出按加权平均成本结转，待到账收款后转入现金。报价更新只影响估值。
-      </p>
     </template>
 
     <BottomSheet
@@ -716,11 +677,6 @@ function goBack(): void {
       </div>
 
       <form class="form-stack" @submit.prevent="submit">
-        <label v-if="sheet === 'holding'" class="form-field">
-          <span>持仓核对日期</span>
-          <input v-model="form.businessDate" type="date" :max="today" required />
-          <small>所填份额和成本在这一天成立，独立于行情日期。</small>
-        </label>
         <template v-if="sheet === 'buy'">
           <label class="form-field">
             <span>买入克数</span>
@@ -754,10 +710,6 @@ function goBack(): void {
               <input v-model="form.quoteDate" type="date" :max="today" />
             </label>
           </div>
-          <label class="form-field">
-            <span>业务日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-          </label>
         </template>
 
         <template v-else-if="sheet === 'sell'">
@@ -791,10 +743,6 @@ function goBack(): void {
             </select>
             <small>待到账只减少克数并增加待到账资产，现金不变；到账时再转入现金。</small>
           </label>
-          <label class="form-field">
-            <span>业务日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-          </label>
         </template>
 
         <template v-else-if="sheet === 'sellArrival'">
@@ -809,10 +757,6 @@ function goBack(): void {
               @input="formError = ''"
             />
             <small>必须与待到账金额一致；如有差额，请先更正卖出记录。</small>
-          </label>
-          <label class="form-field">
-            <span>到账日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
 
@@ -908,30 +852,8 @@ function goBack(): void {
 
 .gold-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 10px;
   margin-bottom: 16px;
-}
-
-.gold-header h1 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-}
-
-.back-link {
-  min-height: 36px;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--color-brand);
-  font-size: 12px;
-}
-
-.header-spacer {
-  width: 46px;
 }
 
 .gold-hero {

@@ -23,7 +23,7 @@ import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import AppIcon from '../components/AppIcon.vue'
 import EmptyState from '../components/EmptyState.vue'
-import PageHeader from '../components/PageHeader.vue'
+import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
@@ -889,9 +889,6 @@ async function submitOpening(): Promise<void> {
     return
   }
 
-  const holdingDateError = validateBusinessDate()
-  if (holdingDateError) { formError.value = holdingDateError; return }
-
   isSaving.value = true
   await createFundPosition({
     name: form.name.trim(),
@@ -922,13 +919,6 @@ async function submitBuy(): Promise<void> {
 
   if (amount === null || amount <= 0 || fee === null || fee < 0 || fee >= amount) {
     formError.value = '请填写有效的扣款金额和小于扣款金额的申购费。'
-    return
-  }
-
-  const businessDateError = validateBusinessDate()
-
-  if (businessDateError) {
-    formError.value = businessDateError
     return
   }
 
@@ -981,13 +971,6 @@ async function submitSell(): Promise<void> {
     return
   }
 
-  const dateError = validateBusinessDate()
-
-  if (dateError) {
-    formError.value = dateError
-    return
-  }
-
   isSaving.value = true
   const result = await sellFund({
     positionId: position.id,
@@ -1025,13 +1008,6 @@ async function submitSellConfirm(): Promise<void> {
 
   if (fee > netAmount) {
     formError.value = '费用不能超过净回款金额。'
-    return
-  }
-
-  const businessDateError = validateBusinessDate()
-
-  if (businessDateError) {
-    formError.value = businessDateError
     return
   }
 
@@ -1087,13 +1063,6 @@ async function submitSellArrival(): Promise<void> {
     return
   }
 
-  const businessDateError = validateBusinessDate()
-
-  if (businessDateError) {
-    formError.value = businessDateError
-    return
-  }
-
   if (form.businessDate < arrival.businessDate) {
     formError.value = '到账日期不能早于确认日期。'
     return
@@ -1109,18 +1078,6 @@ async function submitSellArrival(): Promise<void> {
   notice.value = `赎回到账 ¥${formatMoney(result.activity.amount)}，当前现金 ¥${formatMoney(result.cashBalance)}。`
   sheet.value = null
   await loadOverview()
-}
-
-function validateBusinessDate(): string | null {
-  if (!form.businessDate) {
-    return '请选择业务日期。'
-  }
-
-  if (form.businessDate > today) {
-    return '业务日期不能晚于今天。'
-  }
-
-  return null
 }
 
 function validateValueDate(value: string, label: string): string | null {
@@ -1275,9 +1232,9 @@ function goBack(): void {
 
 <template>
   <main class="page funds-page with-nav">
-    <PageHeader title="投资" back-label="总览" @back="goBack">
-      <template #actions>
-        <details class="investment-actions">
+    <header class="funds-header">
+      <BackButton @back="goBack" />
+      <details class="investment-actions">
           <summary class="icon-button" aria-label="记录投资"><AppIcon name="plus" /></summary>
           <div class="funds-actions" @click="($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">
         <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
@@ -1298,9 +1255,8 @@ function goBack(): void {
           卖出
         </button>
       </div>
-        </details>
-      </template>
-    </PageHeader>
+      </details>
+    </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取基金…</p>
 
@@ -1704,11 +1660,6 @@ function goBack(): void {
       </div>
 
       <form class="form-stack" @submit.prevent="submit">
-        <label v-if="sheet === 'opening'" class="form-field">
-          <span>起始持仓日期</span>
-          <input v-model="form.businessDate" type="date" :max="today" required />
-          <small>所填份额和成本在这一天成立，独立于行情日期。</small>
-        </label>
         <template v-if="sheet === 'opening'">
           <label class="form-field">
             <span>基金名称</span>
@@ -1766,10 +1717,6 @@ function goBack(): void {
             <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
           </label>
           <small v-if="!selectedPosition?.code" class="form-note">请先为该持仓设置基金代码，才能从数据源自动确认份额。</small>
-          <label class="form-field">
-            <span>业务日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-          </label>
         </template>
 
         <template v-else-if="sheet === 'shares'">
@@ -1793,10 +1740,6 @@ function goBack(): void {
             <span>申请赎回份额</span>
             <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
             <small>申请后份额冻结，仍计入持仓估值；确认时才减少份额并转为待到账。</small>
-          </label>
-          <label class="form-field">
-            <span>申请日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
 
@@ -1825,11 +1768,7 @@ function goBack(): void {
             <span>净到账金额（元）</span>
             <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
           </label>
-          <label class="form-field">
-            <span>确认日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-            <small>确认份额不能超过申请份额；确认日期不能早于申请日期。</small>
-          </label>
+          <p class="form-note">确认份额不能超过申请份额；按今天的净值日期结转。</p>
         </template>
 
         <template v-else-if="sheet === 'sellArrival'">
@@ -1837,10 +1776,6 @@ function goBack(): void {
             <span>到账金额（元）</span>
             <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
             <small>必须与待到账金额一致；如有差额，请先更正赎回确认。</small>
-          </label>
-          <label class="form-field">
-            <span>到账日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
           </label>
         </template>
 
@@ -1991,6 +1926,17 @@ function goBack(): void {
   color: var(--color-text-secondary);
   font-size: 11px;
 }
+.funds-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.funds-header .investment-actions {
+  margin-left: auto;
+}
+
 .investment-actions {
   position: relative;
 }

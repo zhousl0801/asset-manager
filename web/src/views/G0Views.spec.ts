@@ -24,18 +24,32 @@ test('provident list labels the query month separately from the balance date', a
   view.unmount()
 })
 
-test('saving a provident record announces the server confirmed amount', async () => {
-  mocks.deposit.mockResolvedValue({ balance: 100, activity: { amount: 100 } })
+test('one provident form records the monthly deposit and withdrawal together', async () => {
+  mocks.deposit.mockResolvedValue({ balance: 100, activity: { amount: 200 } })
+  mocks.withdraw.mockResolvedValue({ balance: 50, activity: { amount: 50 } })
   const view = mount(ProvidentView, { attachTo: document.body })
   await flushPromises()
   await view.find('.action-primary').trigger('click')
-  const amount = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement
-  amount.value = '200'
-  amount.dispatchEvent(new Event('input', { bubbles: true }))
+  const [depositInput, withdrawalInput] = document.querySelectorAll('input[inputmode="decimal"]')
+  ;(depositInput as HTMLInputElement).value = '200'
+  depositInput!.dispatchEvent(new Event('input', { bubbles: true }))
+  ;(withdrawalInput as HTMLInputElement).value = '50'
+  withdrawalInput!.dispatchEvent(new Event('input', { bubbles: true }))
   await flushPromises()
   document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   await flushPromises()
-  expect(view.find('.notice').text()).toContain('已补记缴存 ¥100.00')
+  expect(mocks.deposit).toHaveBeenCalledTimes(1)
+  expect(mocks.withdraw).toHaveBeenCalledTimes(1)
+  expect(view.find('.notice').text()).toContain('已缴存 ¥200.00')
+  expect(view.find('.notice').text()).toContain('已提取 ¥50.00 至现金')
+  view.unmount()
+})
+
+test('provident form does not ask for a business date', async () => {
+  const view = mount(ProvidentView, { attachTo: document.body })
+  await flushPromises()
+  await view.find('.action-primary').trigger('click')
+  expect(document.querySelector('.sheet input[type="date"]')).toBeNull()
   view.unmount()
 })
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BackButton from '../components/BackButton.vue'
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -11,7 +12,7 @@ import { formatPeriodLabel } from '../utils/period'
 import { createRequestId } from '../utils/request'
 import type { ProvidentActivity, ProvidentOverview } from '../types/provident'
 
-type SheetKind = 'opening' | 'deposit' | 'withdrawal'
+type SheetKind = 'opening' | 'record'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -21,11 +22,14 @@ const errorMessage = ref('')
 const notice = ref('')
 const sheet = ref<SheetKind | null>(null)
 const requestId = ref(createRequestId())
+const depositRequestId = ref(createRequestId())
+const withdrawalRequestId = ref(createRequestId())
 const isSaving = ref(false)
 const formError = ref('')
 const form = reactive({
   amount: '',
-  businessDate: today,
+  depositAmount: '',
+  withdrawalAmount: '',
   note: '',
   relatedCashAdjustmentId: null as string | null
 })
@@ -33,15 +37,35 @@ const form = reactive({
 const monthLabel = computed(() =>
   overview.value ? formatPeriodLabel(overview.value.periodFrom, 'month') : '')
 const sheetTitle = computed(() =>
-  sheet.value === 'opening' ? '录入起始公积金' : sheet.value === 'deposit' ? '补记公积金缴存' : '记录公积金提取')
+  sheet.value === 'opening' ? '录入起始公积金' : '记录缴存 / 提取')
 const sheetNote = computed(() =>
-  sheet.value === 'opening' ? '记录指定日期的已有余额，不计入缴存、工资或生活收入。' : sheet.value === 'deposit'
-    ? '只增加公积金余额，不改变现金，也不计入工资或生活收入。'
-    : '公积金余额减少，现金等额增加；不计入生活收入，总资产不变。')
+  sheet.value === 'opening'
+    ? '记录已有的公积金余额，不计入缴存、工资或生活收入。'
+    : '缴存只增加余额；提取会等额转入现金。两项都不计入生活收入，可只填其中一项。')
+const depositAmount = computed(() => parseAmount(form.depositAmount))
+const withdrawalAmount = computed(() => parseAmount(form.withdrawalAmount))
 const canSubmit = computed(() => {
-  const amount = parseAmount(form.amount)
+  if (isSaving.value) {
+    return false
+  }
 
-  return !isSaving.value && amount !== null && (sheet.value === 'opening' ? amount >= 0 : amount > 0)
+  if (sheet.value === 'opening') {
+    const amount = parseAmount(form.amount)
+    return amount !== null && amount >= 0
+  }
+
+  if (sheet.value !== 'record') {
+    return false
+  }
+
+  const deposit = depositAmount.value
+  const withdrawal = withdrawalAmount.value
+
+  if ((deposit ?? 0) < 0 || (withdrawal ?? 0) < 0) {
+    return false
+  }
+
+  return (deposit ?? 0) > 0 || (withdrawal ?? 0) > 0
 })
 
 onMounted(loadOverview)
@@ -69,8 +93,11 @@ async function loadOverview(): Promise<void> {
 function openSheet(kind: SheetKind): void {
   sheet.value = kind
   requestId.value = createRequestId()
+  depositRequestId.value = createRequestId()
+  withdrawalRequestId.value = createRequestId()
   form.amount = ''
-  form.businessDate = today
+  form.depositAmount = ''
+  form.withdrawalAmount = ''
   form.note = ''
   form.relatedCashAdjustmentId = null
   formError.value = ''
@@ -83,50 +110,95 @@ function closeSheet(): void {
 }
 
 async function submit(): Promise<void> {
-  if (!sheet.value) {
+  if (!sheet.value || !canSubmit.value) {
     return
   }
 
-  const amount = parseAmount(form.amount)
-
-  if (amount === null || (sheet.value === 'opening' ? amount < 0 : amount <= 0)) {
-    formError.value = '请输入大于 0 的金额，最多两位小数。'
-    return
-  }
-
-  if (!form.businessDate) {
-    formError.value = '请选择业务日期。'
-    return
-  }
-
-  if (form.businessDate > today) {
-    formError.value = '业务日期不能晚于今天。'
-    return
-  }
-
-
-  isSaving.value = true
   formError.value = ''
 
-  try {
-    const input = {
-      amount,
-      businessDate: form.businessDate,
-      note: form.note.trim(),
-      relatedCashAdjustmentId: form.relatedCashAdjustmentId,
-      requestId: requestId.value
-    }
-    const result = sheet.value === 'opening' ? await setProvidentOpening({ balance: amount, businessDate: form.businessDate, note: form.note.trim(), requestId: requestId.value }) : sheet.value === 'deposit'
-      ? await depositProvident(input)
-      : await withdrawProvident(input)
+  if (sheet.value === 'opening') {
+    const balance = parseAmount(form.amount)
 
-    notice.value = sheet.value === 'opening' ? `已录入起始公积金 ¥${formatMoney(result.balance)}。` : sheet.value === 'deposit'
-      ? `已补记缴存 ¥${formatMoney(result.activity.amount)}，当前余额 ¥${formatMoney(result.balance)}。`
-      : `已提取 ¥${formatMoney(result.activity.amount)} 至现金，公积金余额 ¥${formatMoney(result.balance)}。`
+    if (balance === null) {
+      formError.value = '请输入有效的余额，最多两位小数。'
+      return
+    }
+
+    isSaving.value = true
+
+    try {
+      const result = await setProvidentOpening({
+        balance,
+        businessDate: today,
+        note: form.note.trim(),
+        requestId: requestId.value
+      })
+      notice.value = `已录入起始公积金 ¥${formatMoney(result.balance)}。`
+      sheet.value = null
+      await loadOverview()
+    } catch (error) {
+      formError.value = getApiErrorMessage(error, '保存失败，请重试。')
+    } finally {
+      isSaving.value = false
+    }
+
+    return
+  }
+
+  const deposit = depositAmount.value ?? 0
+  const withdrawal = withdrawalAmount.value ?? 0
+
+  if (deposit <= 0 && withdrawal <= 0) {
+    formError.value = '请至少填写缴存或提取其中一项。'
+    return
+  }
+
+  if (form.depositAmount.trim() && depositAmount.value === null) {
+    formError.value = '缴存金额格式不正确，最多两位小数。'
+    return
+  }
+
+  if (form.withdrawalAmount.trim() && withdrawalAmount.value === null) {
+    formError.value = '提取金额格式不正确，最多两位小数。'
+    return
+  }
+
+  isSaving.value = true
+  let deposited = false
+
+  try {
+    const messages: string[] = []
+
+    if (deposit > 0) {
+      const result = await depositProvident({
+        amount: deposit,
+        businessDate: today,
+        note: form.note.trim(),
+        relatedCashAdjustmentId: null,
+        requestId: depositRequestId.value
+      })
+      deposited = true
+      messages.push(`已缴存 ¥${formatMoney(result.activity.amount)}`)
+    }
+
+    if (withdrawal > 0) {
+      const result = await withdrawProvident({
+        amount: withdrawal,
+        businessDate: today,
+        note: form.note.trim(),
+        relatedCashAdjustmentId: form.relatedCashAdjustmentId,
+        requestId: withdrawalRequestId.value
+      })
+      messages.push(`已提取 ¥${formatMoney(result.activity.amount)} 至现金`)
+    }
+
     sheet.value = null
     await loadOverview()
+    notice.value = `${messages.join('，')}；当前余额 ¥${formatMoney(overview.value?.balance ?? 0)}。`
   } catch (error) {
-    formError.value = getApiErrorMessage(error, '保存失败，请重试。')
+    formError.value = deposited
+      ? `缴存已登记，但提取保存失败：${getApiErrorMessage(error, '请稍后单独补记提取。')}`
+      : getApiErrorMessage(error, '保存失败，请重试。')
   } finally {
     isSaving.value = false
   }
@@ -148,8 +220,7 @@ function goBack(): void {
 <template>
   <main class="page provident-page with-nav">
     <header class="provident-header">
-      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
-      <h1>公积金</h1>
+      <BackButton @back="goBack" />
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取公积金…</p>
@@ -187,15 +258,14 @@ function goBack(): void {
 
       <div class="provident-actions">
         <button type="button" class="action-secondary" @click="openSheet('opening')">录入起始余额</button>
-        <button type="button" class="action-primary" @click="openSheet('deposit')">补记缴存</button>
-        <button type="button" class="action-secondary" @click="openSheet('withdrawal')">记录提取</button>
+        <button type="button" class="action-primary" @click="openSheet('record')">记录缴存 / 提取</button>
       </div>
       <RouterLink class="monthly-deposit-link" :to="{ name: 'plans', query: { new: 'providentDeposit' } }">设置每月缴存 ›</RouterLink>
       <p class="form-note">按计划自动记入账本，不会向单位或公积金账户发起真实缴款。</p>
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
       <p v-if="!overview.isConfigured" class="hint">
-        尚未记录公积金，先补记缴存或录入起始余额。
+        尚未记录公积金，先录入起始余额或记录缴存。
       </p>
       <p v-else class="hint">缴存计入资产增加；提取转入现金，不计入生活收入。</p>
 
@@ -217,19 +287,13 @@ function goBack(): void {
 
       <div v-else class="empty-state">
         <p>本月还没有缴存或提取记录</p>
-        <button type="button" class="primary-button" @click="openSheet('deposit')">补记缴存</button>
       </div>
-
-      <p class="summary-note">
-        {{ formatBusinessDate(overview.asOfDate) }} 余额 {{ formatMoney(overview.balance) }} ·
-        缴存与提取单独留痕，不混入日常收支。
-      </p>
     </template>
 
     <BottomSheet
       :open="sheet !== null"
       :title="sheetTitle"
-      :subtitle="sheet === 'opening' ? '已有余额，独立记录起始日期' : sheet === 'deposit' ? '个人与单位合计记为一笔' : '提取后等额转入现金'"
+      :subtitle="sheet === 'opening' ? '记录已有余额，按今天入账' : '缴存与提取可一起登记'"
       :close-disabled="isSaving"
       @close="closeSheet"
     >
@@ -239,29 +303,54 @@ function goBack(): void {
       </div>
 
       <form class="form-stack" @submit.prevent="submit">
-        <label class="form-field">
-          <span>{{ sheet === 'opening' ? '起始余额（元）' : sheet === 'deposit' ? '缴存金额（元）' : '提取金额（元）' }}</span>
-          <input
-            v-model="form.amount"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            placeholder="0.00"
-            @input="formError = ''"
-          />
-        </label>
+        <template v-if="sheet === 'opening'">
+          <label class="form-field">
+            <span>起始余额（元）</span>
+            <input
+              v-model="form.amount"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.00"
+              @input="formError = ''"
+            />
+          </label>
+        </template>
 
-        <label class="form-field">
-          <span>业务日期</span>
-          <input v-model="form.businessDate" type="date" :max="today" />
-        </label>
+        <template v-else>
+          <label class="form-field">
+            <span>缴存金额（元）</span>
+            <input
+              v-model="form.depositAmount"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.00"
+              @input="formError = ''"
+            />
+            <small>个人＋单位合计，可留空。</small>
+          </label>
+
+          <label class="form-field">
+            <span>提取金额（元）</span>
+            <input
+              v-model="form.withdrawalAmount"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.00"
+              @input="formError = ''"
+            />
+            <small>提取后等额转入现金，可留空。</small>
+          </label>
+        </template>
 
         <label class="form-field">
           <span>备注</span>
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <CashAdjustmentLink v-if="sheet === 'withdrawal'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="parseAmount(form.amount) ?? 0" :disabled="isSaving" />
+        <CashAdjustmentLink v-if="sheet === 'record' && (withdrawalAmount ?? 0) > 0" v-model="form.relatedCashAdjustmentId" :business-date="today" :cash-effect="withdrawalAmount ?? 0" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
@@ -286,31 +375,10 @@ function goBack(): void {
 
 .provident-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 10px;
   margin-bottom: 16px;
 }
 
-.provident-header h1 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-}
-
-.back-link {
-  min-height: 36px;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--color-brand);
-  font-size: 12px;
-}
-
-.header-spacer {
-  width: 46px;
-}
 
 .provident-hero {
   padding: 19px 17px 17px;
@@ -398,6 +466,19 @@ function goBack(): void {
   border-radius: 9px;
   font-size: 13px;
   font-weight: 550;
+}
+
+.monthly-deposit-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 12px;
+  color: var(--color-brand);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.monthly-deposit-link:hover {
+  text-decoration: underline;
 }
 
 .action-primary {
@@ -536,10 +617,6 @@ function goBack(): void {
   margin: 0 0 14px;
   color: var(--color-text-secondary);
   font-size: 12px;
-}
-
-.empty-state .primary-button {
-  width: 100%;
 }
 
 .summary-note {
