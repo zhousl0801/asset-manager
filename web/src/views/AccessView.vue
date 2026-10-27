@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { verifyAccessPassword } from '../api/access'
+import { login } from '../api/access'
 
 const password = ref('')
 const error = ref('')
@@ -11,7 +11,7 @@ async function submit(): Promise<void> {
   busy.value = true
   error.value = ''
   try {
-    await verifyAccessPassword(password.value)
+    await login(password.value)
     password.value = ''
   } catch (value) {
     error.value = value instanceof Error ? value.message : '验证失败，请重试'

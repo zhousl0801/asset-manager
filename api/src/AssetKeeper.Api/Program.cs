@@ -14,8 +14,17 @@ using AssetKeeper.Infrastructure.Backup;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Infrastructure.Quotes;
 using AssetKeeper.Api.Security;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Threading.RateLimiting;
+
+if (args is ["hash-password", var password])
+{
+    Console.WriteLine(AccessPasswordHasher.Hash(password));
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +36,50 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+
+builder.Services.AddSingleton<AccessCredential>();
+builder.Services.AddScoped<AccessCookieEvents>();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "asset-keeper-access";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.IsEssential = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = builder.Environment.IsProduction()
+            ? CookieSecurePolicy.Always
+            : CookieSecurePolicy.SameAsRequest;
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+        options.EventsType = typeof(AccessCookieEvents);
+    });
+builder.Services.AddAuthorization(options =>
+{
+    // 生产环境始终要求登录；开发环境仅在配置了口令后才启用，便于本地验证完整流程。
+    var requiresAccess = builder.Environment.IsProduction()
+        || !string.IsNullOrWhiteSpace(builder.Configuration[AccessCredential.PasswordKey])
+        || !string.IsNullOrWhiteSpace(builder.Configuration[AccessCredential.PasswordHashKey]);
+
+    if (requiresAccess)
+    {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    }
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AccessRateLimiting.LoginPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueLimit = 0
+            }));
+});
 
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
@@ -80,16 +133,21 @@ builder.Services.AddSingleton<BusinessDateProvider>();
 
 var app = builder.Build();
 
-if (app.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Configuration["ASSET_KEEPER_ACCESS_PASSWORD"]))
+if (app.Environment.IsProduction() && !app.Services.GetRequiredService<AccessCredential>().IsConfigured)
 {
-    throw new InvalidOperationException("ASSET_KEEPER_ACCESS_PASSWORD must be configured in production.");
+    throw new InvalidOperationException("ASSET_KEEPER_ACCESS_PASSWORD_HASH or ASSET_KEEPER_ACCESS_PASSWORD must be configured in production.");
 }
 
 if (app.Environment.IsProduction())
 {
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+
+    // 生产使用 PostgreSQL；内存数据库（集成测试）没有迁移。
+    if (db.Database.IsRelational())
+    {
+        await db.Database.MigrateAsync();
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -99,14 +157,15 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors();
-app.UseMiddleware<ApiAccessMiddleware>();
+app.UseRateLimiter();
+app.UseAuthentication();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 app.Run();
 

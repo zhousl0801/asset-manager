@@ -11,5 +11,8 @@ services:
         value: Production
       - key: ConnectionStrings__Default
         sync: false
+      # 二选一：优先配置 PBKDF2 散列，未配置时回退到明文口令。
+      - key: ASSET_KEEPER_ACCESS_PASSWORD_HASH
+        sync: false
       - key: ASSET_KEEPER_ACCESS_PASSWORD
         sync: false
