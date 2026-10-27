@@ -251,9 +251,7 @@ function goBack(): void {
 
 <template>
   <main class="page ledger-page with-nav">
-    <PageHeader title="我的账本" back-label="总览" @back="goBack">
-      <template #actions><button type="button" class="icon-button" aria-label="记一笔" @click="openEntry()"><AppIcon name="plus" /></button></template>
-    </PageHeader>
+    <PageHeader title="我的账本" back @back="goBack" />
 
 
 
@@ -465,33 +463,13 @@ function goBack(): void {
   padding-bottom: calc(97px + env(safe-area-inset-bottom));
 }
 
-.ledger-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.ledger-header h1 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-}
-
-.back-link,
-.add-button {
+.back-link {
   min-height: 36px;
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
   font-size: 12px;
-}
-
-.add-button {
-  font-weight: 550;
 }
 
 .view-tabs {

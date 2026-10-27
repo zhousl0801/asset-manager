@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { createCategory, fetchCategories, reorderCategories, updateCategory } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import type { EntryKind } from '../types/entry'
 import type { EntryCategory } from '../types/category'
@@ -159,7 +160,7 @@ onMounted(loadCategories)
 <template>
   <main class="page categories-page with-nav">
     <header class="categories-header">
-      <button type="button" class="back-link" @click="goBack">‹ 我的</button>
+      <BackButton @back="goBack" />
       <h1>收支分类</h1>
       <button type="button" class="add-button" @click="openCreate">＋ 新增</button>
     </header>
@@ -279,7 +280,6 @@ onMounted(loadCategories)
   letter-spacing: -0.3px;
 }
 
-.back-link,
 .add-button {
   min-height: 36px;
   padding: 0 4px;
@@ -287,11 +287,8 @@ onMounted(loadCategories)
   background: transparent;
   color: var(--color-brand);
   font-size: 12px;
-  text-decoration: none;
-}
-
-.add-button {
   font-weight: 550;
+  text-decoration: none;
 }
 
 .page-note {

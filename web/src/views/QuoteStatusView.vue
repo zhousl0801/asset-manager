@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { fetchQuoteStatus, refreshQuotes } from '../api/quotes'
 import type { QuoteRefreshScope, QuoteStatus, QuoteStatusItem } from '../api/quotes'
 import { getApiErrorMessage } from '../api/client'
+import BackButton from '../components/BackButton.vue'
 import { formatBusinessDate, formatMoney, formatQuantity } from '../utils/format'
 
 const router = useRouter()
@@ -135,9 +136,9 @@ function priceText(item: QuoteStatusItem): string {
 <template>
   <main class="page quote-status-page">
     <header class="quote-header">
-      <button type="button" class="back-link" @click="goBack">‹ 我的</button>
+      <BackButton @back="goBack" />
       <h1>行情更新状态</h1>
-      <span />
+      <span class="header-spacer" />
     </header>
 
     <section class="quote-card scheduler-card">
@@ -172,7 +173,7 @@ function priceText(item: QuoteStatusItem): string {
           :disabled="refreshingScope !== null"
           @click="refresh('gold')"
         >
-          {{ refreshingScope === 'gold' ? '刷新中…' : '刷新工行积存金' }}
+          {{ refreshingScope === 'gold' ? '刷新中…' : '刷新积存金报价' }}
         </button>
       </div>
     </section>
@@ -230,7 +231,7 @@ function priceText(item: QuoteStatusItem): string {
                 <strong>{{ item.name }}</strong>
                 <span class="quote-tag" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
               </div>
-              <small>{{ itemMeta(item) || (item.assetType === 'gold' ? '工行积存金报价' : '未填写代码或平台') }}</small>
+              <small>{{ itemMeta(item) || (item.assetType === 'gold' ? '积存金报价' : '未填写代码或平台') }}</small>
             </div>
             <div class="quote-item-value">
               <b>{{ priceText(item) }}</b>
@@ -238,7 +239,7 @@ function priceText(item: QuoteStatusItem): string {
             </div>
             <div class="quote-item-meta">
               <span>上次尝试 {{ timestamp(item.lastAttemptAt) }}</span>
-              <span v-if="item.lastSource">来源 {{ item.lastSource }}</span>
+              <span v-if="item.lastSource">{{ item.assetType === 'gold' ? '自动行情' : `来源 ${item.lastSource}` }}</span>
               <span v-if="item.lastError" class="quote-error">{{ item.lastError }}</span>
             </div>
           </article>
@@ -260,6 +261,11 @@ function priceText(item: QuoteStatusItem): string {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.header-spacer {
+  width: 36px;
+  flex-shrink: 0;
 }
 
 .quote-header h1 {

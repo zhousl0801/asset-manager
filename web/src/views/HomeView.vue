@@ -4,7 +4,6 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { fetchAssetTrend, fetchMonthChange } from '../api/ledger'
 import { fetchPlanOverview } from '../api/plans'
-import AppIcon from '../components/AppIcon.vue'
 import AppNav from '../components/AppNav.vue'
 import AssetDistribution from '../components/AssetDistribution.vue'
 import AssetTrendChart from '../components/AssetTrendChart.vue'
@@ -52,7 +51,6 @@ const monthChange = ref<MonthChange | null>(null)
 const monthChangeError = ref('')
 const planOverview = ref<PlanOverview | null>(null)
 const planError = ref('')
-const addSheetOpen = ref(false)
 const changeSheetOpen = ref(false)
 
 const recordedCount = computed(() => {
@@ -207,15 +205,6 @@ function selectPoint(point: AssetTrendPoint): void {
   trendSelection.value = point
 }
 
-function openAddSheet(): void {
-  addSheetOpen.value = true
-}
-
-function goTo(path: string): void {
-  addSheetOpen.value = false
-  router.push(path)
-}
-
 async function loadLedger(): Promise<void> {
   const status = await ledgerStore.load()
 
@@ -275,11 +264,6 @@ onMounted(loadLedger)
   <main class="page with-nav">
     <header class="home-header">
       <p class="brand">资产管家</p>
-      <div class="header-actions">
-        <button type="button" class="icon-btn" aria-label="添加记录或资产" @click="openAddSheet">
-          <AppIcon name="plus" />
-        </button>
-      </div>
     </header>
 
     <p v-if="isLoading" class="state">正在读取账本…</p>
@@ -379,6 +363,7 @@ onMounted(loadLedger)
         :overview="overview"
         :changes="monthChange?.assetChanges"
         :comparable="monthChange?.hasComparableData ?? false"
+        manage-to="/assets"
       />
 
       <div class="section-head">
@@ -430,19 +415,6 @@ onMounted(loadLedger)
 
     <AppNav />
 
-    <BottomSheet :open="addSheetOpen" title="添加" subtitle="记录一笔收支，或维护资产余额" @close="addSheetOpen = false">
-      <div class="action-list">
-        <button type="button" class="action-row" @click="goTo('/entry')">
-          <span><b>记一笔</b><small>记录收入、支出或转账</small></span>
-          <AppIcon name="chevron" />
-        </button>
-        <button type="button" class="action-row" @click="goTo('/assets')">
-          <span><b>资产与余额</b><small>更新现金、公积金、基金和积存金</small></span>
-          <AppIcon name="chevron" />
-        </button>
-      </div>
-    </BottomSheet>
-
     <BottomSheet :open="changeSheetOpen" title="本月变化构成" @close="changeSheetOpen = false">
       <div v-if="monthChange" class="breakdown">
         <template v-if="monthChange.hasComparableData">
@@ -491,27 +463,6 @@ onMounted(loadLedger)
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.3px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.icon-btn {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 9px;
-  background: var(--color-bg-surface);
-  color: var(--color-brand);
-}
-
-.icon-btn:hover {
-  background: var(--color-bg-hover);
 }
 
 .hero {
@@ -882,45 +833,6 @@ onMounted(loadLedger)
 .tiny {
   color: var(--color-text-secondary);
   font-size: 11px;
-}
-
-.action-list {
-  display: grid;
-  gap: 10px;
-}
-
-.action-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  min-height: 54px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 11px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  text-align: left;
-}
-
-.action-row span {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.action-row b {
-  font-size: 13px;
-  font-weight: 550;
-}
-
-.action-row small {
-  color: var(--color-text-secondary);
-  font-size: 10px;
-}
-
-.action-row:hover {
-  background: var(--color-bg-hover);
 }
 
 .breakdown {

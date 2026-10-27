@@ -192,7 +192,6 @@ export interface CreateFundPositionInput {
 }
 
 export interface BuyFundInput {
-  relatedCashAdjustmentId?: string | null
   positionId: string
   amount: number
   fee: number

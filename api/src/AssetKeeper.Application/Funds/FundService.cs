@@ -465,7 +465,7 @@ public sealed class FundService
                 position.ConfirmationDelayDays,
                 tradeDate);
 
-            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, null, request.RelatedCashAdjustmentId, cancellationToken);
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, null, null, cancellationToken);
 
 
             return AssetOperationResult<FundMutationResultDto>.Created(

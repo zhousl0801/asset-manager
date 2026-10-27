@@ -6,7 +6,7 @@ import { ApiError } from '../api/client'
 
 const mocks = vi.hoisted(() => ({ history: vi.fn(), preview: vi.fn(), confirm: vi.fn() }))
 vi.mock('../api/history', () => ({ fetchHistory: mocks.history, previewHistory: mocks.preview, confirmHistory: mocks.confirm }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 const snapshot = { asOfDate: '2026-10-21', cashBalance: 1000, providentBalance: null, funds: [], gold: null, adjustments: [], issues: ['公积金尚无依据'], knownTotalAssets: 1000, totalAssets: null }
 const cash = { id: 'cash-id', source: 'cashOpening', date: '2026-10-01', amount: 1000, sequence: 0, version: 1, quantity: null, price: null, priceDate: null, isReversed: false, needsDateConfirmation: false }
 const history = { ledgerVersion: 1, cashOpening: cash, facts: [], prices: [], audit: [], snapshot }

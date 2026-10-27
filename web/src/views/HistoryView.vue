@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchHistory, previewHistory, confirmHistory } from '../api/history'
 import { getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
+import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import type { BusinessFact, HistoryChange, HistoryOverview, HistoryPreview, ReplayResult } from '../types/history'
@@ -11,6 +12,7 @@ import { formatMoney, formatQuantity, todayInBusinessTimeZone } from '../utils/f
 import { createRequestId } from '../utils/request'
 
 const route = useRoute()
+const router = useRouter()
 const today = todayInBusinessTimeZone()
 const date = ref(today)
 const history = ref<HistoryOverview | null>(null)
@@ -141,7 +143,7 @@ function auditSummary(json: string | null): string {
 
 <template>
   <main class="page history-page with-nav">
-    <header class="history-header"><RouterLink to="/" class="back-link">‹ 总览</RouterLink><h1>历史核对</h1></header>
+    <header class="history-header"><BackButton @back="router.push({ name: 'home' })" /><h1>历史核对</h1></header>
     <p class="form-note">按业务日期与同日顺序重算。持仓起点与行情有效日期分别记录，依据不足时保留待确认状态。</p>
     <form class="history-date" @submit.prevent="load"><label class="form-field"><span>查看资产日期</span><input v-model="date" type="date" :max="today" required /></label><button class="secondary-button" :disabled="busy">查看</button></form>
     <p v-if="error" class="form-error" role="alert">{{ error }}</p>
@@ -207,7 +209,7 @@ function auditSummary(json: string | null): string {
 </template>
 
 <style scoped>
-.history-header { display:flex;align-items:center;gap:24px;margin-bottom:18px; }
+.history-header { display:flex;align-items:center;gap:12px;margin-bottom:18px; }
 .history-header h1 { font-size:21px;margin:0; }
 .history-date { display:flex;gap:12px;align-items:end;margin:20px 0; }
 .history-date label { flex:1; }

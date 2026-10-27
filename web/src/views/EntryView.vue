@@ -7,6 +7,7 @@ import { fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AmountKeypad from '../components/AmountKeypad.vue'
 import AppIcon from '../components/AppIcon.vue'
+import BackButton from '../components/BackButton.vue'
 import { categoriesFor } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
 import { applyAmountKey, evaluateAmountExpression, type AmountKey } from '../utils/amount'
@@ -246,6 +247,13 @@ async function confirmReverse(): Promise<void> {
 }
 
 function goBack(): void {
+  const previous = (router.options.history.state as { back?: string | null }).back
+
+  if (previous) {
+    router.back()
+    return
+  }
+
   void router.push(returnRoute.value)
 }
 
@@ -303,7 +311,7 @@ function handleKeydown(event: KeyboardEvent): void {
 <template>
   <main class="entry-screen">
     <header class="entry-header">
-      <button type="button" class="back-button" @click="goBack">取消</button>
+      <BackButton @back="goBack" />
       <div class="kind-tabs" role="tablist" aria-label="收支方向">
         <button
           type="button"
@@ -466,15 +474,6 @@ function handleKeydown(event: KeyboardEvent): void {
   padding: max(12px, env(safe-area-inset-top)) 16px 12px;
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.back-button {
-  min-height: 36px;
-  padding: 0 6px;
-  border: 0;
-  background: transparent;
-  color: var(--color-brand);
-  font-size: 13px;
 }
 
 .kind-tabs {

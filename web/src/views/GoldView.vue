@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
+import Decimal from 'decimal.js'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { arriveGoldSell, buyGold, fetchGoldOverview, refreshGoldQuote, saveGoldHolding, sellGold, updateGoldQuote } from '../api/gold'
+import { arriveGoldSell, buyGold, fetchGoldOverview, refreshGoldQuote, saveGoldHolding, sellGold } from '../api/gold'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BackButton from '../components/BackButton.vue'
@@ -19,9 +19,9 @@ import {
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
-import type { GoldActivity, GoldOverview, GoldSellSettlement, PendingGoldArrival } from '../types/gold'
+import type { GoldActivity, GoldOverview, PendingGoldArrival } from '../types/gold'
 
-type SheetKind = 'buy' | 'sell' | 'sellArrival' | 'quote' | 'holding'
+type SheetKind = 'buy' | 'sell' | 'sellArrival' | 'holding'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
@@ -36,18 +36,14 @@ const isSaving = ref(false)
 const expectedVersion = ref(0)
 const formError = ref('')
 const arrivingPendingId = ref<string | null>(null)
-const refreshingQuote = ref(false)
 const form = reactive({
   grams: '',
   amount: '',
   netAmount: '',
   cost: '',
   quote: '',
-  quoteDate: today,
   businessDate: today,
-  note: '',
-  relatedCashAdjustmentId: null as string | null,
-  settlement: 'received' as GoldSellSettlement
+  note: ''
 })
 
 const selectedPendingArrival = computed<PendingGoldArrival | null>(() =>
@@ -61,8 +57,6 @@ const sheetTitle = computed(() => {
       return '记录积存金卖出'
     case 'sellArrival':
       return '登记积存金卖到账'
-    case 'quote':
-      return '更新积存金报价'
     case 'holding':
       return '录入 / 核对持仓'
     default:
@@ -74,11 +68,9 @@ const sheetSubtitle = computed(() => {
     case 'buy':
       return '从统一现金扣款，增加克数与成本'
     case 'sell':
-      return '减少克数，按收款状态转入现金或待到账'
+      return '按克数和估值报价计算到账，直接转入现金'
     case 'sellArrival':
       return '待到账转入现金，不重复计算盈亏'
-    case 'quote':
-      return '只影响估值，不改变现金和成本'
     case 'holding':
       return '用于已有持仓或更正，不扣现金'
     default:
@@ -88,15 +80,13 @@ const sheetSubtitle = computed(() => {
 const sheetNote = computed(() => {
   switch (sheet.value) {
     case 'buy':
-      return '买入金额包含费用；实际扣款与持仓估值不同时，差额体现在持有盈亏中。'
+      return '报价自动使用当前行情；行情暂不可用时按实际扣款和克数估算。'
     case 'sell':
-      return '按加权平均成本结转；卖出净回款与结转成本差额计入已实现盈亏。待到账不增加现金。'
+      return '按克数 × 金估值报价计算到账金额，卖出默认直接到账，不再单独确认。'
     case 'sellArrival':
       return '到账金额必须与待到账金额一致，不再次确认盈亏；如有差额，请先更正卖出记录。'
-    case 'quote':
-      return '报价日期不能晚于今天；行情失败时保留最近有效报价。'
     case 'holding':
-      return '持有克数为 0 时，持仓成本也应为 0。此操作不改变现金。'
+      return '报价自动使用当前行情；持有克数为 0 时，持仓成本也应为 0。此操作不改变现金。'
     default:
       return ''
   }
@@ -108,22 +98,26 @@ const canSubmit = computed(() => {
 
   switch (sheet.value) {
     case 'buy':
-      return parseQuantity(form.grams) !== null
-        && (parseAmount(form.amount) ?? 0) > 0
-        && parsePrice(form.quote) !== null
+      return parseQuantity(form.grams) !== null && (parseAmount(form.amount) ?? 0) > 0
     case 'sell':
-      return parseQuantity(form.grams) !== null && (parseAmount(form.netAmount) ?? 0) > 0
+      return parseQuantity(form.grams) !== null && parsePrice(form.quote) !== null
     case 'sellArrival':
       return arrivingPendingId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
-    case 'quote':
-      return parsePrice(form.quote) !== null
     case 'holding':
-      return parseNonNegativeQuantity(form.grams) !== null
-        && parseAmount(form.cost) !== null
-        && parsePrice(form.quote) !== null
+      return parseNonNegativeQuantity(form.grams) !== null && parseAmount(form.cost) !== null
     default:
       return false
   }
+})
+const sellProceeds = computed<number | null>(() => {
+  const grams = parseQuantity(form.grams)
+  const quote = parsePrice(form.quote)
+
+  if (grams === null || quote === null) {
+    return null
+  }
+
+  return new Decimal(grams).times(quote).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
 })
 
 onMounted(async () => {
@@ -134,14 +128,14 @@ onMounted(async () => {
 async function refreshQuoteWhenStale(): Promise<void> {
   const current = overview.value
 
-  if (!current || !current.isConfigured || !current.hasEffectiveQuote || !isQuoteStale(current)) {
+  if (!current || !isQuoteStale(current)) {
     return
   }
 
   try {
     await refreshGoldQuote()
   } catch {
-    return
+    // 失败原因由服务端记录在持仓状态中，下面重新读取以显示陈旧提示。
   }
 
   await loadOverview()
@@ -188,15 +182,12 @@ function openSheet(kind: SheetKind): void {
   requestId.value = createRequestId()
   formError.value = ''
   form.note = ''
-  form.relatedCashAdjustmentId = null
   form.businessDate = today
-  form.quoteDate = overview.value?.quoteDate ?? today
-  form.quote = overview.value?.quote ? String(overview.value.quote) : ''
+  form.quote = overview.value?.hasEffectiveQuote ? String(overview.value.quote) : ''
   form.grams = ''
   form.amount = ''
   form.netAmount = ''
   form.cost = ''
-  form.settlement = 'received'
 
   if (kind === 'holding' && overview.value?.isConfigured) {
     form.grams = String(overview.value.grams)
@@ -231,8 +222,6 @@ async function submit(): Promise<void> {
       await submitSell()
     } else if (sheet.value === 'sellArrival') {
       await submitSellArrival()
-    } else if (sheet.value === 'quote') {
-      await submitQuote()
     } else {
       await submitHolding()
     }
@@ -251,30 +240,27 @@ async function submit(): Promise<void> {
 async function submitBuy(): Promise<void> {
   const grams = parseQuantity(form.grams)
   const amount = parseAmount(form.amount)
-  const quote = parsePrice(form.quote)
 
-  if (grams === null || amount === null || amount <= 0 || quote === null) {
-    formError.value = '请填写大于 0 的克数、扣款金额和报价。'
+  if (grams === null || amount === null || amount <= 0) {
+    formError.value = '请填写大于 0 的克数和实际扣款金额。'
     return
   }
 
-
-  const quoteDateError = validateValueDate(form.quoteDate, '报价日期')
-
-  if (quoteDateError) {
-    formError.value = quoteDateError
-    return
-  }
+  const quote = overview.value?.hasEffectiveQuote && overview.value.quote > 0
+    ? overview.value.quote
+    : new Decimal(amount).div(grams).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber()
+  const quoteDate = overview.value?.hasEffectiveQuote && overview.value.quoteDate
+    ? overview.value.quoteDate
+    : form.businessDate
 
   isSaving.value = true
   const result = await buyGold({
     grams,
     amount,
     quote,
-    quoteDate: form.quoteDate,
+    quoteDate,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
     requestId: requestId.value
   })
   notice.value = `已买入 ${formatQuantity(result.activity.grams)} 克，当前现金 ¥${formatMoney(result.cashBalance)}。`
@@ -284,13 +270,13 @@ async function submitBuy(): Promise<void> {
 
 async function submitSell(): Promise<void> {
   const grams = parseQuantity(form.grams)
-  const netAmount = parseAmount(form.netAmount)
+  const quote = parsePrice(form.quote)
+  const netAmount = sellProceeds.value
 
-  if (grams === null || netAmount === null || netAmount <= 0) {
-    formError.value = '请填写大于 0 的卖出克数和净回款金额。'
+  if (grams === null || quote === null || netAmount === null || netAmount <= 0) {
+    formError.value = '请填写大于 0 的卖出克数和金估值报价。'
     return
   }
-
 
   isSaving.value = true
   const result = await sellGold({
@@ -298,13 +284,9 @@ async function submitSell(): Promise<void> {
     netAmount,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.settlement === 'received' ? form.relatedCashAdjustmentId : null,
-    requestId: requestId.value,
-    settlement: form.settlement
+    requestId: requestId.value
   })
-  notice.value = form.settlement === 'received'
-    ? `已卖出 ${formatQuantity(result.activity.grams)} 克，当前现金 ¥${formatMoney(result.cashBalance)}。`
-    : `已记录 ${formatQuantity(result.activity.grams)} 克卖出待到账 ¥${formatMoney(result.activity.amount)}，到账后转入现金。`
+  notice.value = `已卖出 ${formatQuantity(result.activity.grams)} 克，当前现金 ¥${formatMoney(result.cashBalance)}。`
   sheet.value = null
   await loadOverview()
 }
@@ -345,39 +327,12 @@ async function submitSellArrival(): Promise<void> {
   await loadOverview()
 }
 
-async function submitQuote(): Promise<void> {
-  const quote = parsePrice(form.quote)
-
-  if (quote === null) {
-    formError.value = '请输入大于 0 的报价，最多四位小数。'
-    return
-  }
-
-  const dateError = validateValueDate(form.quoteDate, '报价日期')
-
-  if (dateError) {
-    formError.value = dateError
-    return
-  }
-
-  isSaving.value = true
-  await updateGoldQuote({
-    quote,
-    quoteDate: form.quoteDate,
-    requestId: requestId.value
-  })
-  notice.value = `报价已更新为 ¥${formatMoney(quote)} / 克。`
-  sheet.value = null
-  await loadOverview()
-}
-
 async function submitHolding(): Promise<void> {
   const grams = parseNonNegativeQuantity(form.grams)
   const cost = parseAmount(form.cost)
-  const quote = parsePrice(form.quote)
 
-  if (grams === null || cost === null || quote === null) {
-    formError.value = '请填写有效的克数、成本和报价。'
+  if (grams === null || cost === null) {
+    formError.value = '请填写有效的克数和成本。'
     return
   }
 
@@ -386,21 +341,18 @@ async function submitHolding(): Promise<void> {
     return
   }
 
-  const dateError = validateValueDate(form.quoteDate, '报价日期')
-
-  if (dateError) {
-    formError.value = dateError
+  if (!overview.value?.hasEffectiveQuote || overview.value.quote <= 0 || !overview.value.quoteDate) {
+    formError.value = '行情暂不可用，请稍后自动获取报价后再保存。'
     return
   }
-
 
   isSaving.value = true
   await saveGoldHolding({
     expectedVersion: expectedVersion.value,
     grams,
     cost,
-    quote,
-    quoteDate: form.quoteDate,
+    quote: overview.value.quote,
+    quoteDate: overview.value.quoteDate,
     note: form.note.trim(),
     holdingDate: form.businessDate,
     requestId: requestId.value
@@ -408,18 +360,6 @@ async function submitHolding(): Promise<void> {
   notice.value = '积存金持仓已保存。'
   sheet.value = null
   await loadOverview()
-}
-
-function validateValueDate(value: string, label: string): string | null {
-  if (!value) {
-    return `请选择${label}。`
-  }
-
-  if (value > today) {
-    return `${label}不能晚于今天。`
-  }
-
-  return null
 }
 
 function activityTitle(activity: GoldActivity): string {
@@ -494,35 +434,6 @@ function activityMeta(activity: GoldActivity): string {
   return `${formatQuantity(activity.grams)} 克 · ${formatBusinessDate(activity.businessDate)}`
 }
 
-function quoteSourceLabel(source: string | null): string {
-  switch (source) {
-    case 'icbc':
-      return '工商银行积存金'
-    case 'manual':
-      return '手动录入'
-    default:
-      return source ?? '手动录入'
-  }
-}
-
-async function refreshQuote(): Promise<void> {
-  refreshingQuote.value = true
-  formError.value = ''
-
-  try {
-    const result = await refreshGoldQuote()
-    notice.value = result.updated
-      ? `已获取工行积存金报价 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
-      : `工行积存金报价已是最新 ${formatMoney(result.quote)} 元/克（${formatBusinessDate(result.quoteDate)}）。`
-    sheet.value = null
-    await loadOverview()
-  } catch (error) {
-    formError.value = getApiErrorMessage(error, '获取工行积存金报价失败，已保留最近有效值。')
-  } finally {
-    refreshingQuote.value = false
-  }
-}
-
 function goBack(): void {
   void router.push({ name: 'home' })
 }
@@ -581,7 +492,6 @@ function goBack(): void {
         >
           卖出
         </button>
-        <button type="button" class="action-secondary" @click="openSheet('quote')">更新报价</button>
         <button type="button" class="action-secondary" @click="openSheet('holding')">录入 / 核对持仓</button>
       </div>
 
@@ -613,17 +523,15 @@ function goBack(): void {
         <div>
           <span>估值报价</span>
           <b>{{ overview.hasEffectiveQuote ? `¥${formatMoney(overview.quote)} / 克` : '行情待补' }}</b>
-          <small v-if="overview.hasEffectiveQuote && overview.quoteDate">{{ formatBusinessDate(overview.quoteDate) }} · {{ quoteSourceLabel(overview.lastQuoteSource) }}</small>
-          <small v-else>尚未设置报价</small>
+          <small v-if="overview.hasEffectiveQuote && overview.quoteDate">{{ formatBusinessDate(overview.quoteDate) }} · 自动获取</small>
+          <small v-else>正在自动获取报价</small>
           <small v-if="overview.lastQuoteError" class="quote-error">最近获取失败：{{ overview.lastQuoteError }}</small>
         </div>
         <div>
           <span>平均持仓成本</span>
           <b>{{ overview.averageCost === null ? '—' : `¥${formatMoney(overview.averageCost)} / 克` }}</b>
-          <small>已实现盈亏 {{ formatSignedMoney(overview.realizedProfit) }}</small>
         </div>
       </div>
-      <p class="summary-note">自动获取的是工商银行积存金价格（主动积存价）；如在其他平台积存，可继续手动录入平台报价。</p>
 
       <p v-if="!overview.isConfigured" class="hint">
         尚未记录积存金持仓。可先录入已有持仓，或直接记录买入。
@@ -700,16 +608,6 @@ function goBack(): void {
               @input="formError = ''"
             />
           </label>
-          <div class="form-row">
-            <label class="form-field">
-              <span>当前报价（元/克）</span>
-              <input v-model="form.quote" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-            <label class="form-field">
-              <span>报价日期</span>
-              <input v-model="form.quoteDate" type="date" :max="today" />
-            </label>
-          </div>
         </template>
 
         <template v-else-if="sheet === 'sell'">
@@ -725,24 +623,20 @@ function goBack(): void {
             />
           </label>
           <label class="form-field">
-            <span>净回款金额（元，已扣费用）</span>
+            <span>金估值报价（元/克）</span>
             <input
-              v-model="form.netAmount"
+              v-model="form.quote"
               type="text"
               inputmode="decimal"
               autocomplete="off"
-              placeholder="0.00"
+              placeholder="0.0000"
               @input="formError = ''"
             />
           </label>
-          <label class="form-field">
-            <span>收款状态</span>
-            <select v-model="form.settlement">
-              <option value="received">已到账</option>
-              <option value="pendingArrival">待到账</option>
-            </select>
-            <small>待到账只减少克数并增加待到账资产，现金不变；到账时再转入现金。</small>
-          </label>
+          <p class="form-note sell-preview">
+            预计到账 <b>{{ sellProceeds === null ? '—' : `¥${formatMoney(sellProceeds)}` }}</b>
+            <span>按克数 × 报价计算，默认直接到账</span>
+          </p>
         </template>
 
         <template v-else-if="sheet === 'sellArrival'">
@@ -757,24 +651,6 @@ function goBack(): void {
               @input="formError = ''"
             />
             <small>必须与待到账金额一致；如有差额，请先更正卖出记录。</small>
-          </label>
-        </template>
-
-        <template v-else-if="sheet === 'quote'">
-          <label class="form-field">
-            <span>估值报价（元/克）</span>
-            <input
-              v-model="form.quote"
-              type="text"
-              inputmode="decimal"
-              autocomplete="off"
-              placeholder="0.0000"
-              @input="formError = ''"
-            />
-          </label>
-          <label class="form-field">
-            <span>报价日期</span>
-            <input v-model="form.quoteDate" type="date" :max="today" />
           </label>
         </template>
 
@@ -801,16 +677,6 @@ function goBack(): void {
               @input="formError = ''"
             />
           </label>
-          <div class="form-row">
-            <label class="form-field">
-              <span>估值报价（元/克）</span>
-              <input v-model="form.quote" type="text" inputmode="decimal" placeholder="0.0000" />
-            </label>
-            <label class="form-field">
-              <span>报价日期</span>
-              <input v-model="form.quoteDate" type="date" :max="today" />
-            </label>
-          </div>
         </template>
 
         <label class="form-field">
@@ -818,16 +684,6 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <button
-          v-if="sheet === 'quote'"
-          type="button"
-          class="secondary-button"
-          :disabled="isSaving || refreshingQuote"
-          @click="refreshQuote"
-        >
-          {{ refreshingQuote ? '获取中…' : '获取工行报价' }}
-        </button>
-        <CashAdjustmentLink v-if="sheet === 'buy' || (sheet === 'sell' && form.settlement === 'received')" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="sheet === 'buy' ? -(parseAmount(form.amount) ?? 0) : (parseAmount(form.netAmount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
@@ -1208,6 +1064,27 @@ function goBack(): void {
 
 .empty-state .primary-button {
   width: 100%;
+}
+
+.sell-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.sell-preview b {
+  color: var(--color-brand);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sell-preview span {
+  color: var(--color-text-secondary);
+  font-size: 9px;
 }
 
 .sheet-summary {

@@ -68,6 +68,12 @@ public sealed class TradingCalendar
         return days;
     }
 
+    public IReadOnlyList<TradingDayDto> GetMonth(int year, int month)
+    {
+        var first = new DateOnly(year, month, 1);
+        return GetDays(first, first.AddMonths(1).AddDays(-1));
+    }
+
     private static TradingCalendar Load()
     {
         var assembly = typeof(TradingCalendar).Assembly;

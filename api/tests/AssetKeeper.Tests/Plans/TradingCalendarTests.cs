@@ -52,6 +52,22 @@ public sealed class TradingCalendarTests
         Assert.Equal(new DateOnly(2026, 10, 27), TradingCalendar.Default.NextTradingDay(new DateOnly(2026, 10, 26)));
     }
 
+    [Fact]
+    public void Month_ReturnsEveryDateAndMarksForeignMarketClosures()
+    {
+        var days = TradingCalendar.Default.GetMonth(2026, 10);
+
+        Assert.Equal(31, days.Count);
+        Assert.Equal(new DateOnly(2026, 10, 1), days[0].Date);
+        Assert.Equal(new DateOnly(2026, 10, 31), days[^1].Date);
+
+        var hongKongClosed = days.Single(day => day.Date == new DateOnly(2026, 10, 19));
+        Assert.False(hongKongClosed.IsTradingDay);
+        Assert.True(hongKongClosed.Markets.Single(market => market.Market == "CN").IsOpen);
+        Assert.False(hongKongClosed.Markets.Single(market => market.Market == "HK").IsOpen);
+        Assert.True(hongKongClosed.Markets.Single(market => market.Market == "US").IsOpen);
+    }
+
     private static MarketCalendarYear Version(string market, DateOnly date, DateOnly effectiveFrom, IReadOnlyList<DateOnly> closed)
     {
         return new(market, market, date.Year, "v1", "https://example.test/calendar", effectiveFrom,

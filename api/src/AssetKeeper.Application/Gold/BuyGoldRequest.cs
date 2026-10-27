@@ -7,5 +7,4 @@ public sealed record BuyGoldRequest(
     DateOnly QuoteDate,
     DateOnly BusinessDate,
     string? Note,
-    Guid RequestId,
-    Guid? RelatedCashAdjustmentId = null);
+    Guid RequestId);

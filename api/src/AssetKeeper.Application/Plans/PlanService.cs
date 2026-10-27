@@ -51,8 +51,12 @@ public sealed class PlanService
             mappedPlans.Count(plan => plan.IsActive),
             nextDue,
             ledger.CashAccount?.Balance ?? 0m,
-            provident?.Balance ?? 0m,
-            TradingCalendar.Default.GetDays(today, today.AddDays(45)));
+            provident?.Balance ?? 0m);
+    }
+
+    public PlanCalendarDto GetCalendar(int year, int month)
+    {
+        return new PlanCalendarDto(year, month, TradingCalendar.Default.GetMonth(year, month));
     }
 
     public Task<AssetOperationResult<PlanDto>> SaveAsync(SavePlanRequest request, CancellationToken cancellationToken)
@@ -340,109 +344,6 @@ public sealed class PlanService
         {
             return AssetOperationResult<PlanOccurrenceDto>.Invalid(new[] { exception.Message });
         }
-    }
-
-    public async Task<AssetOperationResult<PlanPreviewDto>> PreviewAsync(
-        PlanPreviewRequest request,
-        CancellationToken cancellationToken)
-    {
-        var ledger = await _ledgerRepository.GetAsync(cancellationToken);
-
-        if (ledger is null)
-        {
-            return AssetOperationResult<PlanPreviewDto>.NotFound("账本尚未初始化。");
-        }
-
-        if (request.Date < _dates.Today)
-        {
-            return AssetOperationResult<PlanPreviewDto>.Invalid(new[] { "预览日期不能早于今天。" });
-        }
-
-        var plans = await _planRepository.GetPlansAsync(ledger.Id, cancellationToken);
-        var provident = await _ledgerRepository.GetProvidentFundAccountAsync(ledger.Id, cancellationToken);
-        var cash = request.TrialCash ?? ledger.CashAccount?.Balance ?? 0m;
-        var providentBalance = provident?.Balance ?? 0m;
-        var startCash = cash;
-        var startProvident = providentBalance;
-        var rows = new List<PlanPreviewRow>();
-
-        foreach (var plan in plans.Where(plan => PlanSchedule.IsDueOn(plan, request.Date)
-            || plan.Cycle == AutoPlanCycle.TradingDay && plan.GenerateFrom <= request.Date)
-            .OrderBy(plan => plan.Time)
-            .ThenBy(plan => PlanSchedule.TypeOrder(plan.Type))
-            .ThenBy(plan => plan.Id))
-        {
-            var periodKey = PlanSchedule.PeriodKeyFor(plan, request.Date);
-            var occurrence = await _planRepository.FindOccurrenceAsync(plan.Id, periodKey, cancellationToken);
-
-            if (occurrence is null && !PlanSchedule.IsDueOn(plan, request.Date))
-            {
-                continue;
-            }
-
-            if (!plan.IsActive && occurrence is null)
-            {
-                continue;
-            }
-
-            var status = occurrence?.Status;
-            var note = occurrence?.ErrorMessage;
-
-            if (status is PlanOccurrenceStatus.Completed or PlanOccurrenceStatus.Skipped
-                or PlanOccurrenceStatus.Waiting or PlanOccurrenceStatus.Failed)
-            {
-                rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount,
-                    StatusText(status.Value), cash, providentBalance, note));
-                continue;
-            }
-
-            switch (plan.Type)
-            {
-                case AutoPlanType.SalaryIncome:
-                    cash += plan.Amount;
-                    rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "预计记账", cash, providentBalance, null));
-                    break;
-                case AutoPlanType.ProvidentDeposit:
-                    providentBalance += plan.Amount;
-                    rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "预计记账", cash, providentBalance, null));
-                    break;
-                case AutoPlanType.ProvidentWithdrawal:
-                    if (providentBalance < plan.Amount)
-                    {
-                        rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "公积金不足", cash, providentBalance, "整笔待处理，不部分提取"));
-                    }
-                    else
-                    {
-                        providentBalance -= plan.Amount;
-                        cash += plan.Amount;
-                        rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "预计记账", cash, providentBalance, null));
-                    }
-
-                    break;
-                default:
-                    if (cash < plan.Amount)
-                    {
-                        rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "现金不足", cash, providentBalance, "整笔待处理，不部分扣款"));
-                    }
-                    else
-                    {
-                        cash -= plan.Amount;
-                        rows.Add(new PlanPreviewRow(plan.Id, plan.Name, plan.Type, plan.Amount, "预计记账", cash, providentBalance, null));
-                    }
-
-                    break;
-            }
-        }
-
-        return AssetOperationResult<PlanPreviewDto>.Success(new PlanPreviewDto(
-            request.Date,
-            startCash,
-            cash,
-            startProvident,
-            providentBalance,
-            rows,
-            new[] { "仅试算所选日，不含中间日期的其他收支、行情或资金变动。", "基金定投生成待确认买入并扣减账本现金，不向基金平台下单。" },
-            TradingCalendar.Default.GetDay(request.Date)));
     }
 
     private static bool IsSameSip(AutoPlan plan, SavePlanRequest request, IReadOnlyList<FundPosition> positions)

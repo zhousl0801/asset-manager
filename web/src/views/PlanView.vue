@@ -2,9 +2,9 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  fetchPlanCalendar,
   fetchPlanOverview,
   pausePlan,
-  previewPlans,
   recordOccurrence,
   resumePlan,
   retryOccurrence,
@@ -14,13 +14,17 @@ import {
 } from '../api/plans'
 import { fetchFundOverview } from '../api/funds'
 import { ApiError, getApiErrorMessage } from '../api/client'
+import AppIcon from '../components/AppIcon.vue'
 import AppNav from '../components/AppNav.vue'
+import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
+import PlanCalendar from '../components/PlanCalendar.vue'
 import { createRequestId } from '../utils/request'
 import {
   formatBusinessDate,
   formatMoney,
   parseAmount,
+  sumAmounts,
   todayInBusinessTimeZone
 } from '../utils/format'
 import type { FundPosition } from '../types/fund'
@@ -29,9 +33,9 @@ import type {
   OccurrenceStatus,
   PlanCycle,
   PlanOverview,
-  PlanPreview,
   PlanType,
-  SavePlanInput
+  SavePlanInput,
+  TradingDay
 } from '../types/plan'
 
 const router = useRouter()
@@ -49,11 +53,13 @@ const editingPlan = ref<AutoPlan | null>(null)
 const isSaving = ref(false)
 const formError = ref('')
 const busyAction = ref('')
-const previewDate = ref(today)
-const trialCash = ref('')
-const preview = ref<PlanPreview | null>(null)
-const previewError = ref('')
-const isPreviewing = ref(false)
+const calendarYear = ref(Number(today.slice(0, 4)))
+const calendarMonth = ref(Number(today.slice(5, 7)))
+const calendarDays = ref<TradingDay[]>([])
+const calendarLoading = ref(false)
+const calendarError = ref('')
+const calendarCache = new Map<string, TradingDay[]>()
+let calendarSequence = 0
 
 const form = reactive({
   type: 'salaryIncome' as PlanType,
@@ -81,17 +87,6 @@ const fundChoices = computed(() => {
 
   return [...choices.values()]
 })
-const calendarCoverage = computed(() => {
-  const markets = new Map<string, NonNullable<PlanOverview['calendarDays']>[number]['markets'][number]>()
-
-  for (const day of overview.value?.calendarDays ?? []) {
-    for (const market of day.markets) markets.set(`${market.market}-${market.year}`, market)
-  }
-
-  return [...markets.values()]
-})
-const nextTradingDates = computed(() => (overview.value?.calendarDays ?? [])
-  .filter(day => day.date > today && day.isTradingDay).slice(0, 10))
 
 const typeOptions: { value: PlanType; label: string }[] = [
   { value: 'salaryIncome', label: '工资到账' },
@@ -99,6 +94,109 @@ const typeOptions: { value: PlanType; label: string }[] = [
   { value: 'providentWithdrawal', label: '公积金提取' },
   { value: 'fundSip', label: '基金定投' }
 ]
+
+interface PlanGroup {
+  key: 'fund' | 'provident' | 'income'
+  title: string
+  icon: string
+  newType: PlanType
+  plans: AutoPlan[]
+  summary: string
+}
+
+interface FundPlanGroup {
+  key: string
+  name: string
+  plans: AutoPlan[]
+  single: AutoPlan | null
+  shareClasses: string[]
+  activeCount: number
+  activeAmount: number
+  nextDueDate: string | null
+}
+
+const planGroups = computed<PlanGroup[]>(() => {
+  const plans = overview.value?.plans ?? []
+  const fundPlans = plans.filter(plan => plan.type === 'fundSip')
+  const providentPlans = plans.filter(plan => plan.type === 'providentDeposit' || plan.type === 'providentWithdrawal')
+  const incomePlans = plans.filter(plan => plan.type === 'salaryIncome')
+
+  return [
+    {
+      key: 'fund',
+      title: '基金定投',
+      icon: 'chart',
+      newType: 'fundSip',
+      plans: fundPlans,
+      summary: groupSummary(fundPlans, '每期合计')
+    },
+    {
+      key: 'provident',
+      title: providentPlans.some(plan => plan.type === 'providentWithdrawal') ? '公积金' : '公积金缴存',
+      icon: 'home',
+      newType: 'providentDeposit',
+      plans: providentPlans,
+      summary: providentSummary(providentPlans)
+    },
+    {
+      key: 'income',
+      title: '定期收入',
+      icon: 'wallet',
+      newType: 'salaryIncome',
+      plans: incomePlans,
+      summary: groupSummary(incomePlans, '每期收入')
+    }
+  ]
+})
+
+const fundPlanGroups = computed<FundPlanGroup[]>(() => {
+  const groups = new Map<string, FundPlanGroup>()
+  const fundPlans = planGroups.value.find(group => group.key === 'fund')?.plans ?? []
+
+  for (const plan of fundPlans) {
+    const key = fundGroupKey(plan)
+    const existing = groups.get(key)
+
+    if (existing) {
+      existing.plans.push(plan)
+    } else {
+      groups.set(key, {
+        key,
+        name: fundDisplayName(plan),
+        plans: [plan],
+        single: null,
+        shareClasses: [],
+        activeCount: 0,
+        activeAmount: 0,
+        nextDueDate: null
+      })
+    }
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const activePlans = group.plans.filter(plan => plan.isActive)
+      const sortedPlans = [...group.plans]
+        .sort((first, second) => shareClassLabel(first).localeCompare(shareClassLabel(second)))
+      const nextDates = activePlans
+        .map(plan => plan.nextDueDate)
+        .filter((date): date is string => date !== null)
+        .sort()
+
+      return {
+        ...group,
+        plans: sortedPlans,
+        single: sortedPlans.length === 1 ? sortedPlans[0]! : null,
+        shareClasses: [...new Set(sortedPlans.map(shareClassLabel))],
+        activeCount: activePlans.length,
+        activeAmount: sumAmounts(activePlans.map(plan => plan.amount)),
+        nextDueDate: nextDates[0] ?? null
+      }
+    })
+    .sort((first, second) =>
+      (first.nextDueDate ?? '9999-12-31').localeCompare(second.nextDueDate ?? '9999-12-31')
+      || first.name.localeCompare(second.name))
+})
 
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -130,6 +228,7 @@ onMounted(() => {
     openNew(route.query.new)
   }
   void load()
+  void loadCalendar()
 })
 
 async function load(): Promise<void> {
@@ -328,25 +427,129 @@ async function runNow(): Promise<void> {
   }
 }
 
-async function runPreview(): Promise<void> {
-  isPreviewing.value = true
-  previewError.value = ''
+async function loadCalendar(year = calendarYear.value, month = calendarMonth.value): Promise<void> {
+  const key = `${year}-${month}`
+  const cached = calendarCache.get(key)
+
+  calendarYear.value = year
+  calendarMonth.value = month
+  calendarError.value = ''
+
+  if (cached) {
+    calendarSequence++
+    calendarDays.value = cached
+    calendarLoading.value = false
+    return
+  }
+
+  const sequence = ++calendarSequence
+  calendarDays.value = []
+  calendarLoading.value = true
 
   try {
-    const cash = trialCash.value.trim() === '' ? null : parseAmount(trialCash.value)
+    const result = await fetchPlanCalendar(year, month)
 
-    if (cash === null && trialCash.value.trim() !== '') {
-      previewError.value = '试算现金格式无效。'
+    if (sequence !== calendarSequence) {
       return
     }
 
-    preview.value = await previewPlans(previewDate.value, cash)
+    calendarCache.set(key, result.days)
+    calendarDays.value = result.days
   } catch (error) {
-    preview.value = null
-    previewError.value = getApiErrorMessage(error, '试算失败，请重试。')
+    if (sequence !== calendarSequence) {
+      return
+    }
+
+    calendarDays.value = []
+    calendarError.value = getApiErrorMessage(error, '交易日历加载失败，请重试。')
   } finally {
-    isPreviewing.value = false
+    if (sequence === calendarSequence) {
+      calendarLoading.value = false
+    }
   }
+}
+
+function shiftCalendar(offset: number): void {
+  const next = new Date(Date.UTC(calendarYear.value, calendarMonth.value - 1 + offset, 1))
+  void loadCalendar(next.getUTCFullYear(), next.getUTCMonth() + 1)
+}
+
+function groupSummary(plans: AutoPlan[], amountLabel: string): string {
+  if (!plans.length) {
+    return '暂无计划'
+  }
+
+  const activePlans = plans.filter(plan => plan.isActive)
+
+  if (!activePlans.length) {
+    return `已全部暂停 · ${plans.length} 个计划`
+  }
+
+  const paused = plans.length - activePlans.length
+  const amount = sumAmounts(activePlans.map(plan => plan.amount))
+
+  return `${activePlans.length} 个启用 · ${amountLabel} ¥${formatMoney(amount)}${paused ? ` · ${paused} 个暂停` : ''}`
+}
+
+function providentSummary(plans: AutoPlan[]): string {
+  if (!plans.length) {
+    return '缴存与提取'
+  }
+
+  const activePlans = plans.filter(plan => plan.isActive)
+  const deposits = sumAmounts(activePlans.filter(plan => plan.type === 'providentDeposit').map(plan => plan.amount))
+  const withdrawals = sumAmounts(activePlans.filter(plan => plan.type === 'providentWithdrawal').map(plan => plan.amount))
+  const parts: string[] = []
+
+  if (deposits > 0) {
+    parts.push(`缴存 ¥${formatMoney(deposits)}`)
+  }
+
+  if (withdrawals > 0) {
+    parts.push(`提取 ¥${formatMoney(withdrawals)}`)
+  }
+
+  const paused = plans.length - activePlans.length
+
+  if (!parts.length) {
+    return paused ? `已全部暂停 · ${paused} 个计划` : '缴存与提取'
+  }
+
+  return `${parts.join(' · ')}${paused ? ` · ${paused} 个暂停` : ''}`
+}
+
+function fundGroupKey(plan: AutoPlan): string {
+  return fundDisplayName(plan).normalize('NFKC').replace(/\s/g, '').toUpperCase()
+}
+
+function fundDisplayName(plan: AutoPlan): string {
+  const name = plan.fundTarget?.name ?? plan.fundPositionName ?? plan.name
+  return name.replace(/\s*[·•]\s*(交易日定投|定投)$/, '').trim()
+}
+
+function shareClassLabel(plan: AutoPlan): string {
+  const shareClass = plan.fundTarget?.shareClass?.trim()
+
+  if (shareClass) {
+    return /^[A-Za-z]$/.test(shareClass) ? `${shareClass.toUpperCase()} 类` : shareClass
+  }
+
+  const match = (plan.fundPositionName ?? plan.name).match(/\s([A-Za-z])(?:\s*类)?(?:\s*[·]|$)/)
+  return match ? `${match[1]!.toUpperCase()} 类` : '未标类别'
+}
+
+function nextDueText(plan: AutoPlan): string {
+  if (!plan.isActive) {
+    return '已暂停'
+  }
+
+  return plan.nextDueDate ? `下一期 ${shortDate(plan.nextDueDate)}` : '下一期待生成'
+}
+
+function shortDate(value: string): string {
+  return value.startsWith(`${today.slice(0, 4)}-`)
+    ? `${Number(value.slice(5, 7))}月${Number(value.slice(8, 10))}日`
+    : formatBusinessDate(value)
 }
 
 function typeLabel(type: PlanType): string {
@@ -357,7 +560,7 @@ function scheduleText(plan: AutoPlan): string {
   const time = plan.time.slice(0, 5)
 
   if (plan.cycle === 'tradingDay') {
-    return `三地交易日 ${time}（中国时间）`
+    return `交易日 ${time}`
   }
 
   if (plan.cycle === 'weekly') {
@@ -394,8 +597,9 @@ function goBack(): void {
 <template>
   <main class="page plan-page with-nav">
     <header class="plan-header">
-      <button type="button" class="back-link" @click="goBack">‹ 总览</button>
+      <BackButton @back="goBack" />
       <h1>自动记账</h1>
+      <span class="header-spacer" />
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取自动计划…</p>
@@ -415,21 +619,6 @@ function goBack(): void {
         </p>
       </section>
 
-      <section v-if="calendarCoverage.length" class="preview-card calendar-card" aria-label="三地交易日历">
-        <strong>三地交易日历</strong>
-        <p class="plan-meta">中国、美国、香港在同一日期均开市才执行，半日市照常。以下为创建新计划可选的近期交易日。</p>
-        <div class="calendar-dates">
-          <span v-for="day in nextTradingDates" :key="day.date">{{ formatBusinessDate(day.date) }}</span>
-        </div>
-        <div v-for="market in calendarCoverage" :key="`${market.market}-${market.year}`" class="calendar-source">
-          <span>{{ market.name }} {{ market.year }} · {{ market.usesWeekdayFallback ? '工作日回退' : '官方日历' }}</span>
-          <a v-if="market.sourceUrl" :href="market.sourceUrl" target="_blank" rel="noopener noreferrer">查看来源</a>
-          <small v-if="market.publishedOn">发布 {{ market.publishedOn }}</small>
-          <small v-else-if="market.verifiedOn">核验 {{ market.verifiedOn }}（来源未标发布日期）</small>
-        </div>
-        <p class="plan-meta">未维护年份按各市场周一至周五回退；日历补齐仅影响未来日期。基金临时暂停申购需自行核对。</p>
-      </section>
-
       <div class="plan-actions">
         <button type="button" class="action-primary" @click="openNew('salaryIncome')">新建计划</button>
         <button type="button" class="action-secondary" :disabled="busyAction === 'run'" @click="runNow">
@@ -439,46 +628,154 @@ function goBack(): void {
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
+      <PlanCalendar
+        :year="calendarYear"
+        :month="calendarMonth"
+        :days="calendarDays"
+        :loading="calendarLoading"
+        :error="calendarError"
+        @prev="shiftCalendar(-1)"
+        @next="shiftCalendar(1)"
+        @retry="loadCalendar()"
+      />
+
       <div class="section-head">
         <h2>计划</h2>
-        <span class="meta">{{ overview.plans.length }} 个</span>
+        <span class="meta">{{ overview.plans.length }} 个 · {{ overview.activeCount }} 个启用</span>
       </div>
 
-      <section v-if="overview.plans.length" class="plan-list">
-        <article v-for="plan in overview.plans" :key="plan.id" class="plan-card">
-          <header>
-            <div>
-              <strong>{{ plan.name }}</strong>
-              <small>{{ typeLabel(plan.type) }} · {{ scheduleText(plan) }}</small>
-            </div>
-            <span class="plan-amount">¥{{ formatMoney(plan.amount) }}</span>
-          </header>
-          <p class="plan-meta">
-            开始 {{ formatBusinessDate(plan.startDate) }} ·
-            {{ plan.isActive ? `下一期 ${plan.nextDueDate ? formatBusinessDate(plan.nextDueDate) : '待生成'}` : '已暂停' }}
-            <template v-if="plan.fundPositionName"> · {{ plan.fundPositionName }}</template>
-          </p>
-          <p v-if="plan.cycle === 'tradingDay' && plan.upcomingDates?.length" class="plan-meta">
-            近期排期：{{ plan.upcomingDates.map(date => date.slice(5)).join(' · ') }}
-          </p>
-          <footer>
-            <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
-            <button
-              type="button"
-              class="small-button"
-              :disabled="busyAction === plan.id"
-              @click="togglePlan(plan)"
+      <section
+        v-for="group in planGroups"
+        :key="group.key"
+        class="plan-group"
+        :class="`group-${group.key}`"
+      >
+        <header class="plan-group-head">
+          <span class="group-icon"><AppIcon :name="group.icon" /></span>
+          <div class="group-heading">
+            <h3>{{ group.title }}</h3>
+            <p>{{ group.summary }}</p>
+          </div>
+          <button
+            v-if="group.key === 'fund'"
+            type="button"
+            class="group-add"
+            aria-label="新增基金定投"
+            @click="openNew('fundSip')"
+          >＋ 新增</button>
+        </header>
+
+        <template v-if="group.key === 'fund'">
+          <div v-if="fundPlanGroups.length" class="fund-plan-list">
+            <article
+              v-for="fund in fundPlanGroups"
+              :key="fund.key"
+              class="plan-card fund-plan-card"
+              :class="{ 'is-paused': fund.activeCount === 0 }"
             >
-              {{ plan.isActive ? '暂停' : '恢复' }}
-            </button>
-          </footer>
-        </article>
-      </section>
+              <details v-if="fund.plans.length > 1" class="fund-details">
+                <summary>
+                  <span class="fund-summary-copy">
+                    <strong>{{ fund.name }}</strong>
+                    <small>
+                      {{ fund.shareClasses.join(' / ') }} · {{ fund.plans.length }} 个计划
+                      <template v-if="fund.plans.length - fund.activeCount"> · {{ fund.plans.length - fund.activeCount }} 个暂停</template>
+                    </small>
+                  </span>
+                  <span class="fund-summary-amount">
+                    <template v-if="fund.activeCount">
+                      <b>¥{{ formatMoney(fund.activeAmount) }}</b>
+                      <small>每期</small>
+                    </template>
+                    <small v-else class="paused-label">已暂停</small>
+                  </span>
+                </summary>
+                <div class="fund-plan-rows">
+                  <div
+                    v-for="plan in fund.plans"
+                    :key="plan.id"
+                    class="fund-plan-row"
+                    :class="{ paused: !plan.isActive }"
+                  >
+                    <span class="share-badge">{{ shareClassLabel(plan) }}</span>
+                    <span class="fund-row-copy">
+                      <b>¥{{ formatMoney(plan.amount) }}</b>
+                      <small>{{ scheduleText(plan) }} · {{ nextDueText(plan) }}</small>
+                      <small v-if="plan.fundTarget?.code" class="fund-code">{{ plan.fundTarget.code }}</small>
+                    </span>
+                    <span v-if="!plan.isActive" class="paused-tag">已暂停</span>
+                    <span class="fund-row-actions">
+                      <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
+                      <button
+                        type="button"
+                        class="small-button"
+                        :disabled="busyAction === plan.id"
+                        @click="togglePlan(plan)"
+                      >{{ plan.isActive ? '暂停' : '恢复' }}</button>
+                    </span>
+                  </div>
+                </div>
+              </details>
 
-      <div v-else class="empty-state">
-        <p>还没有自动记账计划</p>
-        <button type="button" class="primary-button" @click="openNew('salaryIncome')">新建计划</button>
-      </div>
+              <template v-else-if="fund.single">
+                <header>
+                  <div>
+                    <strong>{{ fund.name }}</strong>
+                    <small>{{ shareClassLabel(fund.single) }} · {{ scheduleText(fund.single) }}</small>
+                  </div>
+                  <span class="plan-amount">¥{{ formatMoney(fund.single.amount) }}</span>
+                </header>
+                <p class="plan-meta">
+                  开始 {{ formatBusinessDate(fund.single.startDate) }} · {{ nextDueText(fund.single) }}
+                  <template v-if="fund.single.fundTarget?.code"> · {{ fund.single.fundTarget.code }}</template>
+                </p>
+                <footer>
+                  <button type="button" class="small-button" @click="openEdit(fund.single)">编辑</button>
+                  <button
+                    type="button"
+                    class="small-button"
+                    :disabled="busyAction === fund.single.id"
+                    @click="togglePlan(fund.single)"
+                  >{{ fund.single.isActive ? '暂停' : '恢复' }}</button>
+                </footer>
+              </template>
+            </article>
+          </div>
+          <p v-else class="group-empty">
+            还没有基金定投计划。
+            <button type="button" class="text-button" @click="openNew('fundSip')">新建一个</button>
+          </p>
+        </template>
+
+        <template v-else>
+          <article v-for="plan in group.plans" :key="plan.id" class="plan-card">
+            <header>
+              <div>
+                <strong>{{ plan.name }}</strong>
+                <small>{{ typeLabel(plan.type) }} · {{ scheduleText(plan) }}</small>
+              </div>
+              <span class="plan-amount">¥{{ formatMoney(plan.amount) }}</span>
+            </header>
+            <p class="plan-meta">
+              开始 {{ formatBusinessDate(plan.startDate) }} · {{ nextDueText(plan) }}
+            </p>
+            <p v-if="plan.type === 'providentWithdrawal'" class="plan-meta">提取后等额转入现金，不计入生活收入。</p>
+            <footer>
+              <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
+              <button
+                type="button"
+                class="small-button"
+                :disabled="busyAction === plan.id"
+                @click="togglePlan(plan)"
+              >{{ plan.isActive ? '暂停' : '恢复' }}</button>
+            </footer>
+          </article>
+          <p v-if="!group.plans.length" class="group-empty">
+            还没有{{ group.title }}计划。
+            <button type="button" class="text-button" @click="openNew(group.newType)">新建一个</button>
+          </p>
+        </template>
+      </section>
 
       <template v-if="actionable.length">
         <div class="section-head">
@@ -524,46 +821,6 @@ function goBack(): void {
           </article>
         </section>
       </template>
-
-      <div class="section-head">
-        <h2>执行预览</h2>
-        <span class="meta">只试算所选日</span>
-      </div>
-      <section class="preview-card">
-        <div class="form-row">
-          <label class="form-field">
-            <span>试算日期</span>
-            <input v-model="previewDate" type="date" :min="today" />
-          </label>
-          <label class="form-field">
-            <span>试算现金（选填）</span>
-            <input v-model="trialCash" type="text" inputmode="decimal" placeholder="默认当前现金" />
-          </label>
-        </div>
-        <button type="button" class="secondary-button" :disabled="isPreviewing" @click="runPreview">
-          {{ isPreviewing ? '试算中…' : '试算本期' }}
-        </button>
-        <p v-if="previewError" class="form-error" role="alert">{{ previewError }}</p>
-        <template v-if="preview">
-          <p v-if="preview.calendarDay" class="plan-meta">
-            {{ preview.calendarDay.isTradingDay ? '三地均开市' : '交易日定投跳过此日' }} ·
-            {{ preview.calendarDay.markets.map(market => `${market.name}${market.usesWeekdayFallback ? '（工作日回退）' : ''}：${market.isOpen ? (market.isHalfDay ? '半日市' : '开市') : '休市'}`).join(' · ') }}
-          </p>
-          <p class="plan-meta">
-            现金 {{ formatMoney(preview.trialCashStart) }} → {{ formatMoney(preview.trialCashEnd) }} ·
-            公积金 {{ formatMoney(preview.providentStart) }} → {{ formatMoney(preview.providentEnd) }}
-          </p>
-          <div v-if="preview.rows.length" class="preview-rows">
-            <div v-for="(row, index) in preview.rows" :key="`${row.planId ?? index}`" class="preview-row">
-              <span>{{ row.planName }}</span>
-              <span>{{ row.status }}</span>
-              <span>现金 ¥{{ formatMoney(row.cashAfter) }}</span>
-            </div>
-          </div>
-          <p v-else class="plan-meta">该日没有到期计划。</p>
-          <p v-for="note in preview.notes" :key="note" class="preview-note">{{ note }}</p>
-        </template>
-      </section>
 
       <div class="section-head">
         <h2>执行记录</h2>
@@ -695,13 +952,9 @@ function goBack(): void {
   font-weight: 600;
 }
 
-.back-link {
-  min-height: 36px;
-  padding: 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--color-brand);
-  font-size: 12px;
+.header-spacer {
+  width: 36px;
+  flex-shrink: 0;
 }
 
 .plan-hero {
@@ -728,13 +981,6 @@ function goBack(): void {
   font-size: 10px;
   line-height: 1.6;
 }
-
-.calendar-card { margin-top: 14px; }
-.calendar-dates { display: flex; flex-wrap: wrap; gap: 6px; }
-.calendar-dates span { padding: 5px 8px; border-radius: 6px; background: var(--color-brand-soft); font-size: 11px; }
-.calendar-source { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; color: var(--color-text-secondary); }
-.calendar-source a { color: var(--color-brand); }
-.calendar-source small { flex-basis: 100%; }
 
 .plan-actions {
   display: grid;
@@ -791,20 +1037,121 @@ function goBack(): void {
   font-size: 10px;
 }
 
-.plan-list,
-.occurrence-list {
+.plan-group {
+  --group-accent: var(--color-brand);
+}
+
+.group-fund {
+  --group-accent: var(--color-chart-investment);
+}
+
+.group-provident {
+  --group-accent: var(--color-chart-property);
+}
+
+.group-income {
+  --group-accent: var(--color-finance-income);
+}
+
+.plan-group + .plan-group {
+  margin-top: 18px;
+}
+
+.plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.group-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--group-accent) 12%, var(--color-bg-surface));
+  color: var(--group-accent);
+}
+
+.group-icon .app-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.group-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-heading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+}
+
+.group-heading p {
+  margin: 3px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.group-add {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--group-accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.group-add:hover {
+  background: color-mix(in srgb, var(--group-accent) 10%, var(--color-bg-surface));
+}
+
+.fund-plan-list {
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
 
+.group-empty {
+  margin: 0;
+  padding: 15px 12px;
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  text-align: center;
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 10px;
+}
+
 .plan-card,
-.occurrence-card,
-.preview-card {
+.occurrence-card {
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
   background: var(--color-bg-surface);
+}
+
+.plan-group .plan-card {
+  border-left: 3px solid var(--group-accent);
+}
+
+.plan-card.is-paused {
+  border-left-color: var(--color-text-disabled);
 }
 
 .plan-card header {
@@ -855,6 +1202,160 @@ function goBack(): void {
   font-size: 10px;
 }
 
+.fund-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.fund-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fund-details > summary::after {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  content: '⌄';
+  transition: transform .15s ease;
+}
+
+.fund-details[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.fund-summary-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fund-summary-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fund-summary-copy small {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.fund-summary-amount {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.fund-summary-amount b {
+  font-size: 16px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-summary-amount small {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.paused-label {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.fund-plan-rows {
+  margin-top: 11px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.fund-plan-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.fund-plan-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.fund-plan-row.paused {
+  opacity: .58;
+}
+
+.share-badge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 34px;
+  min-height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.group-fund .share-badge {
+  background: color-mix(in srgb, var(--color-chart-investment) 12%, var(--color-bg-surface));
+  color: var(--color-chart-investment);
+}
+
+.fund-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fund-row-copy b {
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-row-copy small {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.fund-row-copy .fund-code {
+  color: var(--color-text-disabled);
+}
+
+.fund-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.fund-row-actions .small-button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+.occurrence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
 .occurrence-card {
   display: flex;
   justify-content: space-between;
@@ -899,56 +1400,11 @@ function goBack(): void {
   color: var(--color-text-secondary);
 }
 
-.preview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.preview-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.preview-row {
-  display: grid;
-  grid-template-columns: 1.4fr 0.8fr 1fr;
-  gap: 8px;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.preview-note {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 9px;
-}
-
 .summary-note {
   margin: 14px 0 0;
   color: var(--color-text-secondary);
   font-size: 10px;
   line-height: 1.7;
   text-align: center;
-}
-
-.empty-state {
-  padding: 30px 16px;
-  border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.empty-state p {
-  margin: 0 0 12px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.empty-state .primary-button {
-  width: 100%;
 }
 </style>

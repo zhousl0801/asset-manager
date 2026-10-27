@@ -117,7 +117,7 @@ public sealed class QuoteRefreshService
                 var item = new QuoteRefreshItemDto(
                     "gold",
                     null,
-                    "工行积存金报价",
+                    "积存金报价",
                     null,
                     null,
                     success,
@@ -132,7 +132,7 @@ public sealed class QuoteRefreshService
 
                 if (!success)
                 {
-                    errors.Add($"工行积存金报价：{error}");
+                    errors.Add($"积存金报价：{error}");
                 }
             }
 
@@ -221,7 +221,7 @@ public sealed class QuoteRefreshService
                 ? new QuoteStatusItemDto(
                     "gold",
                     null,
-                    "工行积存金报价",
+                    "积存金报价",
                     null,
                     null,
                     null,
@@ -233,7 +233,7 @@ public sealed class QuoteRefreshService
                 : new QuoteStatusItemDto(
                     "gold",
                     null,
-                    "工行积存金报价",
+                    "积存金报价",
                     null,
                     null,
                     gold.Quote,
@@ -352,7 +352,7 @@ public sealed class QuoteRefreshService
                 && attempts < maxAttempts)
             {
                 _logger.LogWarning(
-                    "工行积存金报价第 {Attempt}/{MaxAttempts} 次刷新失败，将重试：{Error}",
+                    "积存金报价第 {Attempt}/{MaxAttempts} 次刷新失败，将重试：{Error}",
                     attempts,
                     maxAttempts,
                     error);
@@ -366,7 +366,7 @@ public sealed class QuoteRefreshService
             }
 
             _logger.LogWarning(
-                "工行积存金报价刷新失败，已尝试 {Attempt} 次：{Error}",
+                "积存金报价刷新失败，已尝试 {Attempt} 次：{Error}",
                 attempts,
                 error);
 

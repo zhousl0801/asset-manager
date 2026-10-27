@@ -64,7 +64,6 @@ export interface GoldMutationResult {
 }
 
 export interface BuyGoldInput {
-  relatedCashAdjustmentId?: string | null
   grams: number
   amount: number
   quote: number
@@ -74,28 +73,18 @@ export interface BuyGoldInput {
   requestId: string
 }
 
-export type GoldSellSettlement = 'received' | 'pendingArrival'
-
 export interface SellGoldInput {
-  relatedCashAdjustmentId?: string | null
   grams: number
   netAmount: number
   businessDate: string
   note: string
   requestId: string
-  settlement: GoldSellSettlement
 }
 
 export interface GoldSellArrivalInput {
   amount: number
   businessDate: string
   note: string
-  requestId: string
-}
-
-export interface UpdateGoldQuoteInput {
-  quote: number
-  quoteDate: string
   requestId: string
 }
 

@@ -5,6 +5,7 @@ import { fetchAssetTrend, fetchMonthChange, updateAssetCoverage } from '../api/l
 import { getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import AssetDistribution from '../components/AssetDistribution.vue'
+import BackButton from '../components/BackButton.vue'
 import { useLedgerStore } from '../stores/ledger'
 import { formatBusinessDate, formatMoney, todayInBusinessTimeZone } from '../utils/format'
 import type { AssetKey, LedgerOverview, MonthChange } from '../types/ledger'
@@ -87,13 +88,22 @@ async function toggleNotHeld(key: AssetKey, notHeld: boolean): Promise<void> {
     errorMessage.value = getApiErrorMessage(error, '保存失败，请重试。')
   }
 }
+
+function goHome(): void {
+  void router.push({ name: 'home' })
+}
 </script>
 
 <template>
   <main class="page with-nav">
     <header class="page-head">
-      <h1>资产</h1>
-      <p>维护每类资产的余额与覆盖范围</p>
+      <div class="page-head-row">
+        <BackButton @back="goHome" />
+        <div class="page-head-title">
+          <h1>资产</h1>
+          <p>维护每类资产的余额与覆盖范围</p>
+        </div>
+      </div>
     </header>
 
     <p v-if="isLoading" class="state">正在读取资产…</p>
@@ -143,6 +153,16 @@ async function toggleNotHeld(key: AssetKey, notHeld: boolean): Promise<void> {
   padding: max(14px, env(safe-area-inset-top)) 19px 13px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
+}
+
+.page-head-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.page-head-title {
+  min-width: 0;
 }
 
 .page-head h1 {

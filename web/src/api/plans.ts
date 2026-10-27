@@ -1,14 +1,18 @@
 import type {
+  PlanCalendar,
   PlanOccurrence,
   PlanOverview,
-  PlanPreview,
   PlanRunResult,
   SavePlanInput
 } from '../types/plan'
-import { apiRequest, readOnlyRequest } from './client'
+import { apiRequest } from './client'
 
 export function fetchPlanOverview(): Promise<PlanOverview> {
   return apiRequest<PlanOverview>('/api/ledger/plans')
+}
+
+export function fetchPlanCalendar(year: number, month: number): Promise<PlanCalendar> {
+  return apiRequest<PlanCalendar>(`/api/ledger/plans/calendar?year=${year}&month=${month}`)
 }
 
 export function savePlan(input: SavePlanInput): Promise<unknown> {
@@ -56,13 +60,6 @@ export function recordOccurrence(occurrenceId: string, requestId: string): Promi
   return apiRequest<RecordOccurrenceResult>(`/api/ledger/plans/occurrences/${encodeURIComponent(occurrenceId)}/record`, {
     method: 'POST',
     body: JSON.stringify({ requestId })
-  })
-}
-
-export function previewPlans(date: string, trialCash: number | null): Promise<PlanPreview> {
-  return readOnlyRequest('/api/ledger/plans/preview', {
-    method: 'POST',
-    body: JSON.stringify({ date, trialCash })
   })
 }
 

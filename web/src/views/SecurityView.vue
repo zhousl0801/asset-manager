@@ -95,7 +95,7 @@ onMounted(load)
 
 <template>
   <main class="page security-page">
-    <PageHeader title="登录与安全" back-label="我的" @back="goBack" />
+    <PageHeader title="登录与安全" back @back="goBack" />
 
     <section class="security-card">
       <h2>指纹 / Face ID 登录</h2>

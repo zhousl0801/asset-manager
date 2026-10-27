@@ -48,7 +48,12 @@ export interface PlanOverview {
   nextDueDate: string | null
   cashBalance: number
   providentBalance: number
-  calendarDays?: TradingDay[]
+}
+
+export interface PlanCalendar {
+  year: number
+  month: number
+  days: TradingDay[]
 }
 
 export interface SavePlanInput {
@@ -65,28 +70,6 @@ export interface SavePlanInput {
   requestId: string
   expectedVersion?: number | null
   fundTarget?: FundPlanTarget | null
-}
-
-export interface PlanPreviewRow {
-  planId: string | null
-  planName: string
-  type: PlanType
-  amount: number
-  status: string
-  cashAfter: number
-  providentAfter: number
-  note: string | null
-}
-
-export interface PlanPreview {
-  date: string
-  trialCashStart: number
-  trialCashEnd: number
-  providentStart: number
-  providentEnd: number
-  rows: PlanPreviewRow[]
-  notes: string[]
-  calendarDay?: TradingDay
 }
 
 export interface PlanRunResult {

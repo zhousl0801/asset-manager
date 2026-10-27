@@ -5,8 +5,7 @@ import type {
   GoldQuoteRefreshResult,
   GoldSellArrivalInput,
   SaveGoldHoldingInput,
-  SellGoldInput,
-  UpdateGoldQuoteInput
+  SellGoldInput
 } from '../types/gold'
 import { apiRequest } from './client'
 
@@ -37,13 +36,6 @@ export function arriveGoldSell(transactionId: string, input: GoldSellArrivalInpu
 
 export function refreshGoldQuote(): Promise<GoldQuoteRefreshResult> {
   return apiRequest<GoldQuoteRefreshResult>('/api/ledger/gold/quote/refresh', { method: 'POST' })
-}
-
-export function updateGoldQuote(input: UpdateGoldQuoteInput): Promise<GoldMutationResult> {
-  return apiRequest<GoldMutationResult>('/api/ledger/gold/quote', {
-    method: 'POST',
-    body: JSON.stringify(input)
-  })
 }
 
 export function saveGoldHolding(input: SaveGoldHoldingInput): Promise<GoldMutationResult> {

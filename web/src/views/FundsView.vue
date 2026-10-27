@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import Decimal from 'decimal.js'
-import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -120,8 +119,7 @@ const form = reactive({
   fee: '0',
   confirmationDelayDays: '2',
   businessDate: today,
-  note: '',
-  relatedCashAdjustmentId: null as string | null
+  note: ''
 })
 
 const selectedPosition = computed<FundPosition | null>(() =>
@@ -790,7 +788,6 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   requestId.value = createRequestId()
   formError.value = ''
   form.note = ''
-  form.relatedCashAdjustmentId = null
   form.businessDate = today
   form.shares = ''
   form.cost = ''
@@ -929,7 +926,6 @@ async function submitBuy(): Promise<void> {
     fee,
     businessDate: form.businessDate,
     note: form.note.trim(),
-    relatedCashAdjustmentId: form.relatedCashAdjustmentId,
     requestId: requestId.value
   })
   notice.value = `已记录买入待确认 ¥${formatMoney(result.activity.amount)}，当前现金 ¥${formatMoney(result.cashBalance)}。`
@@ -1784,7 +1780,6 @@ function goBack(): void {
           <input v-model="form.note" type="text" maxlength="200" placeholder="选填" />
         </label>
 
-        <CashAdjustmentLink v-if="sheet === 'buy'" v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="-(parseAmount(form.amount) ?? 0)" :disabled="isSaving" />
         <p class="form-note">{{ sheetNote }}</p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 

@@ -1,1 +1,0 @@
-import{T as e,_ as t,m as n,o as r,v as i}from"./vue-router-oQB2-Q18.js";import{t as a}from"./AppIcon-BQtg7BTr.js";var o=r(i({__name:`BackButton`,emits:[`back`],setup(r){return(r,i)=>(e(),n(`button`,{class:`back-button`,type:`button`,"aria-label":`返回`,onClick:i[0]||=e=>r.$emit(`back`)},[t(a,{name:`chevron-back`})]))}}),[[`__scopeId`,`data-v-4a0a7c29`]]);export{o as t};

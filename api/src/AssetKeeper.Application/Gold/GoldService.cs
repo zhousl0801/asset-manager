@@ -177,7 +177,7 @@ public sealed class GoldService
                 await _ledgerRepository.AddGoldHoldingAsync(holding, cancellationToken);
             }
 
-            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, request.QuoteDate, request.RelatedCashAdjustmentId, cancellationToken);
+            await new LedgerHistoryRebuilder(_ledgerRepository, _businessDateProvider).StageAsync(ledger, transaction, request.BusinessDate, request.QuoteDate, null, cancellationToken);
 
 
             return AssetOperationResult<GoldMutationResultDto>.Created(

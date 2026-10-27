@@ -31,7 +31,7 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new QuoteUnavailableException($"工商银行积存金行情服务返回 {(int)response.StatusCode}。");
+            throw new QuoteUnavailableException($"积存金行情服务返回 {(int)response.StatusCode}。");
         }
 
         try
@@ -46,7 +46,7 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
             {
                 var displayMessage = ReadString(root, "TranErrorDisplayMsg");
                 throw new QuoteUnavailableException(string.IsNullOrWhiteSpace(displayMessage)
-                    ? "工商银行积存金行情服务返回错误。"
+                    ? "积存金行情服务返回错误。"
                     : displayMessage);
             }
 
@@ -54,7 +54,7 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
                 || records.ValueKind != JsonValueKind.Array
                 || records.GetArrayLength() == 0)
             {
-                throw new QuoteUnavailableException("工商银行积存金行情服务未返回积存金价格。");
+                throw new QuoteUnavailableException("积存金行情服务未返回积存金价格。");
             }
 
             var record = PickGoldRecord(records);
@@ -65,12 +65,12 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
             if (!decimal.TryParse(priceText, NumberStyles.Number, CultureInfo.InvariantCulture, out var quote)
                 || quote <= 0)
             {
-                throw new QuoteUnavailableException("工商银行积存金行情服务返回的价格无效。");
+                throw new QuoteUnavailableException("积存金行情服务返回的价格无效。");
             }
 
             if (!DateOnly.TryParseExact(dateText, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var effectiveDate))
             {
-                throw new QuoteUnavailableException("工商银行积存金行情服务返回的价格日期无效。");
+                throw new QuoteUnavailableException("积存金行情服务返回的价格日期无效。");
             }
 
             return new ExternalGoldQuote(quote, effectiveDate, SourceName, DateTimeOffset.UtcNow);
@@ -81,7 +81,7 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
         }
         catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            throw new QuoteUnavailableException("工商银行积存金行情服务返回的数据无法解析。", exception);
+            throw new QuoteUnavailableException("积存金行情服务返回的数据无法解析。", exception);
         }
     }
 
@@ -100,7 +100,7 @@ public sealed class IcbcGoldQuoteProvider : IGoldQuoteProvider
 
         if (first.ValueKind == JsonValueKind.Undefined)
         {
-            throw new QuoteUnavailableException("工商银行积存金行情服务未返回积存金价格。");
+            throw new QuoteUnavailableException("积存金行情服务未返回积存金价格。");
         }
 
         return first;

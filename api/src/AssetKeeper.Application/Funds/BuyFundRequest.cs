@@ -6,5 +6,4 @@ public sealed record BuyFundRequest(
     DateOnly BusinessDate,
     string? Note,
     Guid RequestId,
-    Guid? RelatedCashAdjustmentId = null,
     decimal Fee = 0m);

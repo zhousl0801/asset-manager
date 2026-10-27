@@ -1,11 +1,16 @@
 <script setup lang="ts">
-defineProps<{ title: string; backLabel?: string }>()
+import BackButton from './BackButton.vue'
+
+defineProps<{ title: string; back?: boolean }>()
 defineEmits<{ back: [] }>()
 </script>
 
 <template>
   <header class="page-header">
-    <div class="header-side"><button v-if="backLabel" type="button" class="back-link" @click="$emit('back')">‹ {{ backLabel }}</button><slot name="leading" /></div>
+    <div class="header-side">
+      <BackButton v-if="back" @back="$emit('back')" />
+      <slot name="leading" />
+    </div>
     <h1>{{ title }}</h1>
     <div class="header-side header-actions"><slot name="actions" /></div>
   </header>

@@ -43,8 +43,12 @@ public sealed record PlanOverviewDto(
     int ActiveCount,
     DateOnly? NextDueDate,
     decimal CashBalance,
-    decimal ProvidentBalance,
-    IReadOnlyList<TradingDayDto> CalendarDays);
+    decimal ProvidentBalance);
+
+public sealed record PlanCalendarDto(
+    int Year,
+    int Month,
+    IReadOnlyList<TradingDayDto> Days);
 
 public sealed record SavePlanRequest(
     Guid? Id,
@@ -67,28 +71,6 @@ public sealed record RecordOccurrenceResultDto(
     PlanOccurrenceDto Occurrence,
     bool Recorded,
     string? Error);
-
-public sealed record PlanPreviewRequest(DateOnly Date, decimal? TrialCash);
-
-public sealed record PlanPreviewRow(
-    Guid? PlanId,
-    string PlanName,
-    AutoPlanType Type,
-    decimal Amount,
-    string Status,
-    decimal CashAfter,
-    decimal ProvidentAfter,
-    string? Note);
-
-public sealed record PlanPreviewDto(
-    DateOnly Date,
-    decimal TrialCashStart,
-    decimal TrialCashEnd,
-    decimal ProvidentStart,
-    decimal ProvidentEnd,
-    IReadOnlyList<PlanPreviewRow> Rows,
-    IReadOnlyList<string> Notes,
-    TradingDayDto? CalendarDay = null);
 
 public sealed record PlanRunResultDto(
     int CreatedOccurrences,

@@ -4,11 +4,11 @@ import PlanView from './PlanView.vue'
 
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
+  calendar: vi.fn(),
   funds: vi.fn(),
   save: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
-  preview: vi.fn(),
   run: vi.fn(),
   retry: vi.fn(),
   skip: vi.fn()
@@ -17,10 +17,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/plans', () => ({
   fetchPlanOverview: mocks.overview,
+  fetchPlanCalendar: mocks.calendar,
   savePlan: mocks.save,
   pausePlan: mocks.pause,
   resumePlan: mocks.resume,
-  previewPlans: mocks.preview,
   runPlans: mocks.run,
   retryOccurrence: mocks.retry,
   skipOccurrence: mocks.skip
@@ -56,6 +56,19 @@ const overview = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.overview.mockResolvedValue(structuredClone(overview))
+  mocks.calendar.mockResolvedValue({
+    year: 2026,
+    month: 10,
+    days: [{
+      date: '2026-10-19',
+      isTradingDay: false,
+      markets: [
+        { name: '中国', market: 'CN', year: 2026, isOpen: true, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: null },
+        { name: '美国', market: 'US', year: 2026, isOpen: true, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: null },
+        { name: '香港', market: 'HK', year: 2026, isOpen: false, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: null }
+      ]
+    }]
+  })
   mocks.funds.mockResolvedValue({ positions: [] })
   document.body.innerHTML = ''
 })
@@ -91,26 +104,13 @@ test('plan list shows the active salary plan and can save a new salary plan', as
   view.unmount()
 })
 
-test('preview shows the projected rows and run-now result', async () => {
-  mocks.preview.mockResolvedValue({
-    date: '2026-10-21',
-    trialCashStart: 100,
-    trialCashEnd: 1100,
-    providentStart: 0,
-    providentEnd: 0,
-    rows: [{ planId: 'plan-1', planName: '工资到账', type: 'salaryIncome', amount: 1000, status: '预计记账', cashAfter: 1100, providentAfter: 0, note: null }],
-    notes: ['仅试算所选日']
-  })
+test('run-now reports results and the preview section is gone', async () => {
   mocks.run.mockResolvedValue({ createdOccurrences: 1, completed: 1, waiting: 0, failed: 0 })
   const view = mount(PlanView, { attachTo: document.body })
   await flushPromises()
 
-  const previewButton = view.findAll('button').find((button) => button.text() === '试算本期')!
-  await previewButton.trigger('click')
-  await flushPromises()
-
-  expect(view.text()).toContain('工资到账')
-  expect(view.text()).toContain('预计记账')
+  expect(view.text()).not.toContain('执行预览')
+  expect(view.text()).not.toContain('试算本期')
 
   const runButton = view.findAll('button').find((button) => button.text() === '立即执行')!
   await runButton.trigger('click')
@@ -118,6 +118,58 @@ test('preview shows the projected rows and run-now result', async () => {
 
   expect(mocks.run).toHaveBeenCalledTimes(1)
   expect(view.find('.notice').text()).toContain('已记账 1')
+  view.unmount()
+})
+
+test('plans are grouped by type and share classes of the same fund merge into one card', async () => {
+  const salary = overview.plans[0]!
+  const fund = {
+    ...salary,
+    id: 'fund-a',
+    type: 'fundSip',
+    name: '大成纳斯达克100ETF联接 A · 交易日定投',
+    amount: 100,
+    cycle: 'tradingDay',
+    dayOfMonth: null,
+    dayOfWeek: null,
+    fundPositionId: 'position-a',
+    fundPositionName: '大成纳斯达克100ETF联接 A',
+    fundTarget: { name: '大成纳斯达克100ETF联接', code: '000834', shareClass: 'A' },
+    nextDueDate: '2026-10-28'
+  }
+  const fundC = {
+    ...fund,
+    id: 'fund-c',
+    name: '大成纳斯达克100ETF联接 C · 交易日定投',
+    fundPositionId: 'position-c',
+    fundPositionName: '大成纳斯达克100ETF联接 C',
+    fundTarget: { name: '大成纳斯达克100ETF联接', code: '008971', shareClass: 'C' }
+  }
+  const provident = {
+    ...salary,
+    id: 'provident-1',
+    type: 'providentDeposit',
+    name: '公积金缴存',
+    amount: 3444
+  }
+  mocks.overview.mockResolvedValue({
+    ...structuredClone(overview),
+    plans: [salary, fund, fundC, provident],
+    activeCount: 4
+  })
+
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(view.text()).toContain('基金定投')
+  expect(view.text()).toContain('公积金')
+  expect(view.text()).toContain('定期收入')
+  expect(view.findAll('.fund-plan-card')).toHaveLength(1)
+  expect(view.findAll('.fund-plan-row')).toHaveLength(2)
+  expect(view.find('.fund-plan-card').text()).toContain('A 类 / C 类')
+  expect(view.find('.fund-plan-card').text()).toContain('¥200.00')
+  expect(view.find('.group-provident').text()).toContain('公积金缴存')
+  expect(view.find('.group-income').text()).toContain('工资到账')
   view.unmount()
 })
 
@@ -158,20 +210,22 @@ test('trading-day SIP selects one share class across channels and sends a busine
   view.unmount()
 })
 
-test('calendar shows official coverage, missing-year fallback and holiday preview', async () => {
-  const markets = [{ name: '中国', market: 'CN', year: 2027, isOpen: true, isHalfDay: false, usesWeekdayFallback: true, sourceUrl: null },
-    { name: '美国', market: 'US', year: 2027, isOpen: false, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: 'https://www.nasdaq.com/market-activity/stock-market-holiday-schedule' }]
+test('calendar shows official coverage, missing-year fallback and overseas closures', async () => {
+  const markets = [
+    { name: '中国', market: 'CN', year: 2027, isOpen: true, isHalfDay: false, usesWeekdayFallback: true, sourceUrl: null },
+    { name: '美国', market: 'US', year: 2027, isOpen: false, isHalfDay: false, usesWeekdayFallback: false, sourceUrl: 'https://www.nasdaq.com/market-activity/stock-market-holiday-schedule' },
+    { name: '香港', market: 'HK', year: 2027, isOpen: true, isHalfDay: false, usesWeekdayFallback: true, sourceUrl: null }
+  ]
   const day = { date: '2027-01-04', isTradingDay: false, markets }
-  mocks.overview.mockResolvedValue({ ...structuredClone(overview), calendarDays: [day] })
-  mocks.preview.mockResolvedValue({ date: day.date, trialCashStart: 100, trialCashEnd: 100, providentStart: 0, providentEnd: 0, rows: [], notes: [], calendarDay: day })
+  mocks.calendar.mockResolvedValue({ year: 2026, month: 10, days: [day] })
   const view = mount(PlanView, { attachTo: document.body })
   await flushPromises()
+
+  expect(view.text()).toContain('交易日历')
   expect(view.text()).toContain('中国 2027 · 工作日回退')
   expect(view.text()).toContain('美国 2027 · 官方日历')
-  await view.findAll('button').find(button => button.text() === '试算本期')!.trigger('click')
-  await flushPromises()
-  expect(view.text()).toContain('交易日定投跳过此日')
-  expect(view.text()).toContain('美国：休市')
+  expect(view.text()).toContain('本月有 1 天因海外休市')
+  expect(view.find('.closure-tag').text()).toBe('美')
   view.unmount()
 })
 

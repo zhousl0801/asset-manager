@@ -27,6 +27,20 @@ public sealed class PlansController : AssetOperationsControllerBase
         return overview is null ? LedgerNotFound() : Ok(overview);
     }
 
+    [HttpGet("calendar")]
+    [ProducesResponseType<PlanCalendarDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public IActionResult Calendar([FromQuery] int year, [FromQuery] int month)
+    {
+        if (year is < 2000 or > 2100 || month is < 1 or > 12)
+        {
+            ModelState.AddModelError("month", "年份需在 2000 至 2100 之间，月份需在 1 至 12 之间。");
+            return ValidationProblem(ModelState);
+        }
+
+        return Ok(_planService.GetCalendar(year, month));
+    }
+
     [HttpPost]
     [ProducesResponseType<PlanDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -106,19 +120,6 @@ public sealed class PlansController : AssetOperationsControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _executionService.RecordOccurrenceAsync(occurrenceId, request, cancellationToken);
-
-        return ToActionResult(result);
-    }
-
-    [HttpPost("preview")]
-    [ProducesResponseType<PlanPreviewDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Preview(
-        [FromBody] PlanPreviewRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _planService.PreviewAsync(request, cancellationToken);
 
         return ToActionResult(result);
     }

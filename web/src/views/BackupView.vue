@@ -8,6 +8,7 @@ import {
   validateBackup
 } from '../api/backup'
 import type { BackupSummary, BackupValidation, RestoreBackupResult } from '../api/backup'
+import BackButton from '../components/BackButton.vue'
 import { addAmounts, formatBusinessDate, formatMoney } from '../utils/format'
 
 const router = useRouter()
@@ -170,9 +171,9 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 <template>
   <main class="page backup-page">
     <header class="backup-header">
-      <button type="button" class="back-link" @click="goBack">‹ 我的</button>
+      <BackButton @back="goBack" />
       <h1>数据导出与备份</h1>
-      <span />
+      <span class="header-spacer" />
     </header>
 
     <p class="page-intro">
@@ -318,6 +319,11 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.header-spacer {
+  width: 36px;
+  flex-shrink: 0;
 }
 
 .backup-header h1 {

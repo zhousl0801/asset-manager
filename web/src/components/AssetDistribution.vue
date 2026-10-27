@@ -22,6 +22,7 @@ const props = defineProps<{
   changes?: AssetChange[]
   comparable?: boolean
   editable?: boolean
+  manageTo?: string
 }>()
 
 const emit = defineEmits<{ toggleNotHeld: [key: AssetKey, notHeld: boolean] }>()
@@ -132,7 +133,10 @@ function changeLabel(row: DistributionRow): string {
   <section class="distribution">
     <div class="distribution-head">
       <h2>资产分布</h2>
-      <span class="recorded-count">已记录 {{ recordedCount }} 类</span>
+      <span class="head-meta">
+        <span class="recorded-count">已记录 {{ recordedCount }} 类</span>
+        <RouterLink v-if="manageTo" :to="manageTo" class="manage-link">管理 ›</RouterLink>
+      </span>
     </div>
 
     <div class="ratio-bar" role="img" aria-label="各类资产占比">
@@ -213,6 +217,22 @@ function changeLabel(row: DistributionRow): string {
 .recorded-count {
   color: var(--color-text-secondary);
   font-size: 11px;
+}
+
+.head-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.manage-link {
+  color: var(--color-brand);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.manage-link:hover {
+  text-decoration: underline;
 }
 
 .ratio-bar {

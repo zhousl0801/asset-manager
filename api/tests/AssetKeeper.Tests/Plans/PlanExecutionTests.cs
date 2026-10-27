@@ -153,27 +153,6 @@ public sealed class PlanExecutionTests
     }
 
     [Fact]
-    public async Task Preview_ShowsExecutionOrderAndInsufficientCashWithoutWriting()
-    {
-        await using var context = await CreateAsync(100m);
-        var position = await CreatePositionAsync(context);
-        await SavePlanAsync(context, AutoPlanType.SalaryIncome, 1000m, null, null, new TimeOnly(9, 0), Today);
-        await SavePlanAsync(context, AutoPlanType.FundSip, 1200m, position, AutoPlanCycle.Monthly, new TimeOnly(9, 0), Today);
-
-        var preview = await context.Plans.PreviewAsync(new(Today, 100m), CancellationToken.None);
-
-        Assert.Equal(AssetOperationStatus.Success, preview.Status);
-        var rows = preview.Result!.Rows;
-        Assert.Equal(2, rows.Count);
-        Assert.Equal(AutoPlanType.SalaryIncome, rows[0].Type);
-        Assert.Equal(1100m, rows[0].CashAfter);
-        Assert.Equal(AutoPlanType.FundSip, rows[1].Type);
-        Assert.Equal("现金不足", rows[1].Status);
-        Assert.Equal(100m, (await context.Ledger.GetOverviewAsync(CancellationToken.None))!.Cash.Amount);
-        Assert.Empty(await context.PlanRepo.GetOccurrencesAsync(context.LedgerId, null, null, 10, CancellationToken.None));
-    }
-
-    [Fact]
     public async Task PauseAndResume_DoNotBackfillPausedPeriods()
     {
         await using var context = await CreateAsync(1000m);
@@ -261,20 +240,16 @@ public sealed class PlanExecutionTests
     }
 
     [Fact]
-    public async Task TradingDayRun_UsesPreviewCalendarAndRetriesWithoutDuplicateBuy()
+    public async Task TradingDayRun_RetriesWithoutDuplicateBuy()
     {
         await using var context = await CreateAsync(1000m);
         var position = await CreatePositionAsync(context);
         await SavePlanAsync(context, AutoPlanType.FundSip, 100m, position, AutoPlanCycle.TradingDay, new TimeOnly(9, 0), Today);
         var nextDates = new BusinessDateProvider(new FixedTimeProvider(Now.AddDays(1)));
-        var plans = new PlanService(context.Repository, context.PlanRepo, nextDates);
-        var preview = await plans.PreviewAsync(new(Today.AddDays(1), null), CancellationToken.None);
         var funds = new FundService(context.Repository, nextDates);
         var execution = new PlanExecutionService(context.Repository, context.PlanRepo, nextDates,
             new LedgerEntryService(context.Repository, nextDates), new ProvidentFundService(context.Repository, nextDates), funds);
 
-        Assert.True(preview.Result!.CalendarDay!.IsTradingDay);
-        Assert.Single(preview.Result.Rows);
         Assert.Equal(1, (await execution.RunDueAsync(CancellationToken.None)).Completed);
         Assert.Equal(0, (await execution.RunDueAsync(CancellationToken.None)).Completed);
         Assert.Equal(900m, (await context.Ledger.GetOverviewAsync(CancellationToken.None))!.Cash.Amount);

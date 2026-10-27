@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   buy: vi.fn(),
   sell: vi.fn(),
   arrive: vi.fn(),
-  quote: vi.fn(),
   holding: vi.fn(),
   refresh: vi.fn()
 }))
@@ -21,7 +20,6 @@ vi.mock('../api/gold', () => ({
   buyGold: mocks.buy,
   sellGold: mocks.sell,
   arriveGoldSell: mocks.arrive,
-  updateGoldQuote: mocks.quote,
   saveGoldHolding: mocks.holding,
   refreshGoldQuote: mocks.refresh
 }))
@@ -54,15 +52,15 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-test('gold sale can be recorded as pending arrival without cash', async () => {
+test('gold sale uses grams and quote and records received cash by default', async () => {
   mocks.sell.mockResolvedValue({
     grams: 29,
     cost: 24746.67,
     quote: 900,
-    quoteDate: '2026-10-21',
+    quoteDate: today,
     value: 26100,
-    cashBalance: 10000,
-    activity: { id: 'gp1', type: 'sellPending', grams: 1, amount: 898, cashEffect: 0 }
+    cashBalance: 10898,
+    activity: { id: 'gs1', type: 'sell', grams: 1, amount: 898, cashEffect: 898 }
   })
   const view = mount(GoldView, { attachTo: document.body })
   await flushPromises()
@@ -76,10 +74,10 @@ test('gold sale can be recorded as pending arrival without cash', async () => {
   inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
   inputs[1]!.value = '898'
   inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
-  const settlement = document.querySelector<HTMLSelectElement>('.sheet form select')!
-  settlement.value = 'pendingArrival'
-  settlement.dispatchEvent(new Event('change', { bubbles: true }))
   await flushPromises()
+
+  expect(document.querySelector('.sheet form select')).toBeNull()
+  expect(document.querySelector('.sheet')!.textContent).toContain('预计到账 ¥898.00')
 
   document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   await flushPromises()
@@ -87,38 +85,46 @@ test('gold sale can be recorded as pending arrival without cash', async () => {
   expect(mocks.sell).toHaveBeenCalledTimes(1)
   expect(mocks.sell.mock.calls[0]![0]).toMatchObject({
     grams: 1,
-    netAmount: 898,
-    settlement: 'pendingArrival',
-    relatedCashAdjustmentId: null
+    netAmount: 898
   })
+  expect(mocks.sell.mock.calls[0]![0]).not.toHaveProperty('settlement')
+  expect(mocks.sell.mock.calls[0]![0]).not.toHaveProperty('relatedCashAdjustmentId')
+  expect(view.find('.notice').text()).toContain('当前现金 ¥10,898.00')
   view.unmount()
 })
 
-test('quote sheet can fetch the reference gold quote', async () => {
-  mocks.refresh.mockResolvedValue({
-    updated: true,
-    source: 'icbc',
-    quote: 910,
-    quoteDate: '2026-10-21',
-    obtainedAt: '2026-10-21T02:00:00Z',
-    lastAttemptAt: '2026-10-21T02:00:00Z',
-    value: 27300,
-    cashBalance: 10000
+test('gold buy no longer asks for a quote or cash adjustment link', async () => {
+  mocks.buy.mockResolvedValue({
+    grams: 31,
+    cost: 26500,
+    quote: 900,
+    quoteDate: today,
+    value: 27900,
+    cashBalance: 9100,
+    activity: { id: 'gb1', type: 'buy', grams: 1, amount: 900, cashEffect: -900 }
   })
   const view = mount(GoldView, { attachTo: document.body })
   await flushPromises()
 
-  const quoteButton = view.findAll('button').find((button) => button.text() === '更新报价')!
-  await quoteButton.trigger('click')
+  expect(view.find('.quote-panel').text()).not.toContain('已实现盈亏')
+  await view.findAll('button').find((button) => button.text() === '买入')!.trigger('click')
   await flushPromises()
 
-  const fetchButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.sheet button'))
-    .find((button) => button.textContent?.includes('获取工行报价'))!
-  fetchButton.click()
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
+  expect(inputs).toHaveLength(3)
+  inputs[0]!.value = '1'
+  inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+  inputs[1]!.value = '900'
+  inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
   await flushPromises()
 
-  expect(mocks.refresh).toHaveBeenCalledTimes(1)
-  expect(view.find('.notice').text()).toContain('已获取工行积存金报价 910.00')
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('当前报价')
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('关联此前核对差额')
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.buy.mock.calls[0]![0]).toMatchObject({ grams: 1, amount: 900, quote: 900, quoteDate: today })
+  expect(mocks.buy.mock.calls[0]![0]).not.toHaveProperty('relatedCashAdjustmentId')
   view.unmount()
 })
 
@@ -194,5 +200,35 @@ test('opening the page keeps a fresh gold quote without refreshing', async () =>
 
   expect(mocks.refresh).not.toHaveBeenCalled()
   expect(mocks.overview).toHaveBeenCalledTimes(1)
+  view.unmount()
+})
+
+test('opening the page fetches a quote automatically when none exists', async () => {
+  const empty = {
+    ...structuredClone(overview),
+    hasEffectiveQuote: false,
+    isConfigured: false,
+    grams: 0,
+    cost: 0,
+    quote: 0,
+    quoteDate: null,
+    lastQuoteAttemptAt: null
+  }
+  mocks.overview.mockResolvedValue(empty)
+  mocks.refresh.mockResolvedValue({
+    updated: true,
+    source: 'icbc',
+    quote: 900,
+    quoteDate: today,
+    obtainedAt: new Date().toISOString(),
+    lastAttemptAt: new Date().toISOString(),
+    value: 0,
+    cashBalance: 10000
+  })
+
+  const view = mount(GoldView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(mocks.refresh).toHaveBeenCalledTimes(1)
   view.unmount()
 })
