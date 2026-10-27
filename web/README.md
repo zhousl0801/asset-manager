@@ -21,4 +21,6 @@ npm run test
 npm run build
 ```
 
+同源 API 部署前运行 `npm run build:api`，它会构建前端并同步产物到 `api/src/AssetKeeper.Api/wwwroot`。同步后的文件需随 API 一起提交，Render 的 API 服务会从该目录提供页面。
+
 配色变量直接引用 `docs/design/ui-color-tokens.css`，不在应用内另存色值。

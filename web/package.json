@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:api": "npm run build && node scripts/sync-api-assets.mjs",
     "type-check": "vue-tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
