@@ -628,17 +628,6 @@ function goBack(): void {
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
-      <PlanCalendar
-        :year="calendarYear"
-        :month="calendarMonth"
-        :days="calendarDays"
-        :loading="calendarLoading"
-        :error="calendarError"
-        @prev="shiftCalendar(-1)"
-        @next="shiftCalendar(1)"
-        @retry="loadCalendar()"
-      />
-
       <div class="section-head">
         <h2>计划</h2>
         <span class="meta">{{ overview.plans.length }} 个 · {{ overview.activeCount }} 个启用</span>
@@ -821,6 +810,17 @@ function goBack(): void {
           </article>
         </section>
       </template>
+
+      <PlanCalendar
+        :year="calendarYear"
+        :month="calendarMonth"
+        :days="calendarDays"
+        :loading="calendarLoading"
+        :error="calendarError"
+        @prev="shiftCalendar(-1)"
+        @next="shiftCalendar(1)"
+        @retry="loadCalendar()"
+      />
 
       <div class="section-head">
         <h2>执行记录</h2>

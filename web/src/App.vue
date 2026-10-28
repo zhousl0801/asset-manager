@@ -17,7 +17,11 @@ watch(hasAccess, (value) => {
   <AccessView v-else-if="!hasAccess" />
   <template v-else>
     <PendingMutationNotice />
-    <RouterView />
+    <RouterView v-slot="{ Component }">
+      <Transition name="page" mode="out-in">
+        <component :is="Component" />
+      </Transition>
+    </RouterView>
   </template>
 </template>
 
@@ -28,6 +32,6 @@ watch(hasAccess, (value) => {
   margin: 0;
   place-items: center;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--text-footnote);
 }
 </style>

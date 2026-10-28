@@ -263,7 +263,11 @@ onMounted(loadLedger)
 <template>
   <main class="page with-nav">
     <header class="home-header">
-      <p class="brand">资产管家</p>
+      <div>
+        <p class="brand">资产管家</p>
+        <h1>总览</h1>
+      </div>
+      <span class="header-date">{{ formatBusinessDate(updateDate) }}</span>
     </header>
 
     <p v-if="isLoading" class="state">正在读取账本…</p>
@@ -451,22 +455,38 @@ onMounted(loadLedger)
 .home-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
+  gap: 12px;
   margin: 0 calc(var(--page-gutter) * -1) 18px;
-  padding: max(12px, env(safe-area-inset-top)) var(--page-gutter) 12px;
+  padding: max(12px, env(safe-area-inset-top)) var(--page-gutter) 14px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
 }
 
 .brand {
+  margin: 0 0 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.home-header h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-large-title);
   font-weight: 600;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.8px;
+  line-height: var(--leading-tight);
+}
+
+.header-date {
+  padding-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
 }
 
 .hero {
-  padding: 0 3px 20px;
+  padding: 4px 3px 22px;
 }
 
 .hero-label {
@@ -475,7 +495,7 @@ onMounted(loadLedger)
   gap: 8px;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: var(--text-footnote);
 }
 
 .tag {
@@ -487,11 +507,11 @@ onMounted(loadLedger)
 }
 
 .hero-value {
-  margin: 8px 0 10px;
-  font-size: 40px;
-  font-weight: 500;
-  letter-spacing: -1.7px;
-  line-height: 1.25;
+  margin: 8px 0 12px;
+  font-size: clamp(34px, 10.5vw, 44px);
+  font-weight: 600;
+  letter-spacing: -1.4px;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
@@ -506,18 +526,20 @@ onMounted(loadLedger)
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  gap: 6px;
+  min-height: var(--touch-target);
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
-  line-height: 1.7;
+  line-height: 1.4;
 }
 
 .hero-change b {
   color: var(--color-text-primary);
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -581,13 +603,13 @@ b.loss {
 
 .section-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-headline);
   font-weight: 600;
   letter-spacing: -0.2px;
 }
 
 .trend-panel .section-head h2 {
-  font-size: 13px;
+  font-size: var(--text-headline);
 }
 
 .range {

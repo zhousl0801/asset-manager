@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import AppIcon from './AppIcon.vue'
 import { formatMoney, formatSignedMoney, sumAmounts } from '../utils/format'
 import type { AssetChange, AssetKey, LedgerOverview } from '../types/ledger'
 
@@ -164,7 +165,10 @@ function changeLabel(row: DistributionRow): string {
             <b class="asset-amount">{{ amountLabel(row) }}</b>
             <small>{{ changeLabel(row) }}</small>
           </span>
-          <span class="asset-percent">{{ row.percent === null ? '—' : `${row.percent.toFixed(1)}%` }}</span>
+          <span class="asset-percent">
+            <span>{{ row.percent === null ? '—' : `${row.percent.toFixed(1)}%` }}</span>
+            <AppIcon class="row-chevron" name="chevron" />
+          </span>
         </RouterLink>
 
         <div v-else class="asset-link static">
@@ -209,7 +213,7 @@ function changeLabel(row: DistributionRow): string {
 
 .distribution-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-headline);
   font-weight: 600;
   letter-spacing: -0.2px;
 }

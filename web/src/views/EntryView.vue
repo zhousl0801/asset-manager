@@ -312,6 +312,11 @@ function handleKeydown(event: KeyboardEvent): void {
   <main class="entry-screen">
     <header class="entry-header">
       <BackButton @back="goBack" />
+      <h1>记一笔</h1>
+      <span class="header-spacer"></span>
+    </header>
+
+    <div class="entry-kind-row">
       <div class="kind-tabs" role="tablist" aria-label="收支方向">
         <button
           type="button"
@@ -334,8 +339,7 @@ function handleKeydown(event: KeyboardEvent): void {
           收入
         </button>
       </div>
-      <span class="header-spacer"></span>
-    </header>
+    </div>
 
     <RouterLink v-if="form.kind === 'income' && !isEditing" class="automatic-income-link" :to="{ name: 'plans', query: { new: 'salaryIncome' } }">
       设置自动收入（工资、奖金等） ›
@@ -354,7 +358,12 @@ function handleKeydown(event: KeyboardEvent): void {
           该记录已撤销，不能修改。
         </div>
 
-        <div class="category-grid" role="group" aria-label="选择分类">
+        <section class="amount-hero">
+          <span class="amount-category">{{ form.category || '未选择分类' }}</span>
+          <output class="amount-expression" aria-label="输入金额">{{ form.expression || '0' }}</output>
+        </section>
+
+        <div class="category-strip" role="group" aria-label="选择分类">
           <button
             v-for="category in categories"
             :key="category"
@@ -438,10 +447,6 @@ function handleKeydown(event: KeyboardEvent): void {
       </div>
 
       <footer class="entry-footer">
-        <div class="amount-line">
-          <span class="amount-category">{{ form.category || '未选择分类' }}</span>
-          <output class="amount-expression" aria-label="输入金额">{{ form.expression || '0' }}</output>
-        </div>
         <AmountKeypad
           v-model="form.expression"
           :can-submit="canSubmit"
@@ -467,11 +472,23 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .entry-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: var(--touch-target) 1fr var(--touch-target);
   align-items: center;
-  gap: 12px;
-  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--color-bg-surface);
+}
+
+.entry-header h1 {
+  margin: 0;
+  font-size: var(--text-headline);
+  font-weight: 600;
+  text-align: center;
+}
+
+.entry-kind-row {
+  padding: 0 16px 12px;
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border-subtle);
 }
@@ -485,13 +502,14 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .kind-tabs button {
+  flex: 1;
   min-height: var(--touch-target);
   padding: 0 16px;
   border: 0;
   border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .kind-tabs button.active {
@@ -507,32 +525,65 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .header-spacer {
-  width: 38px;
+  width: var(--touch-target);
 }
 
 .entry-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 16px 20px;
+  padding: 0 16px 20px;
 }
 
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px 4px;
+.amount-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 20px 4px 8px;
+}
+
+.amount-category {
+  color: var(--color-text-secondary);
+  font-size: var(--text-subhead);
+}
+
+.amount-expression {
+  max-width: 68%;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: clamp(32px, 9vw, 40px);
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-strip {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 8px 16px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.category-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .category-tile {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
-  min-height: 76px;
-  padding: 8px 2px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
+  gap: 7px;
+  min-height: var(--touch-target);
+  padding: 0 12px 0 7px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
 }
@@ -542,27 +593,28 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .category-tile.active {
-  border-color: transparent;
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
 }
 
 .category-mark {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 38px;
-  height: 38px;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--color-bg-surface);
+  background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 14px;
   font-weight: 500;
 }
 
 .category-tile.active .category-mark {
-  background: var(--color-brand);
-  color: var(--color-on-brand);
+  background: var(--color-on-brand);
+  color: var(--color-brand);
 }
 
 .category-tile:disabled .category-mark {
@@ -582,7 +634,7 @@ function handleKeydown(event: KeyboardEvent): void {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
 .field {
@@ -693,26 +745,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-top: 1px solid var(--color-border-subtle);
 }
 
-.amount-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 14px 18px 10px;
-}
 
-.amount-category {
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.amount-expression {
-  color: var(--color-text-primary);
-  font-size: 30px;
-  font-weight: 500;
-  letter-spacing: -0.8px;
-  font-variant-numeric: tabular-nums;
-}
 
 .entry-state {
   padding: 24px 18px;

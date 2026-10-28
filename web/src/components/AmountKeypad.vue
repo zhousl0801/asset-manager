@@ -76,19 +76,20 @@ function pickDate(): void {
 .keypad {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+  gap: 6px;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
   background: var(--color-bg-surface);
   border-top: 1px solid var(--color-border-subtle);
 }
 
 .keypad button {
-  min-height: 48px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-surface);
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: transparent;
   color: var(--color-text-primary);
-  font-size: 19px;
+  font-size: 22px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -97,38 +98,33 @@ function pickDate(): void {
 }
 
 .keypad button:active:not(:disabled) {
-  background: var(--color-bg-selected);
+  background: var(--color-brand-soft);
 }
 
 .keypad .key-date {
   background: var(--color-brand-soft);
-  border-color: transparent;
   color: var(--color-brand);
-  font-size: 13px;
+  font-size: var(--text-footnote);
   font-weight: 500;
 }
 
 .keypad .key-done {
   background: var(--color-brand);
-  border-color: var(--color-brand);
   color: var(--color-on-brand);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: var(--text-subhead);
+  font-weight: 600;
 }
 
 .keypad .key-done:hover:not(:disabled) {
   background: var(--color-brand-hover);
-  border-color: var(--color-brand-hover);
 }
 
 .keypad .key-done:active:not(:disabled) {
   background: var(--color-brand-active);
-  border-color: var(--color-brand-active);
 }
 
 .keypad button:disabled {
-  background: var(--color-bg-disabled);
-  border-color: var(--color-border-disabled);
+  background: transparent;
   color: var(--color-text-disabled);
 }
 </style>

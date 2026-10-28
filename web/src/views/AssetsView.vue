@@ -29,6 +29,22 @@ const recordedCount = computed(() => {
     .length
 })
 
+const missingAssets = computed(() => {
+  const ledger = overview.value
+
+  if (!ledger) {
+    return []
+  }
+
+  return [
+    { label: '公积金', route: '/provident', configured: ledger.providentFund.isConfigured, notHeld: ledger.providentFund.notHeld },
+    { label: '基金', route: '/funds', configured: ledger.fund.isConfigured, notHeld: ledger.fund.notHeld },
+    { label: '积存金', route: '/gold', configured: ledger.gold.isConfigured, notHeld: ledger.gold.notHeld }
+  ].filter((asset) => !asset.configured && !asset.notHeld)
+})
+
+const primaryMissing = computed(() => missingAssets.value[0] ?? null)
+
 onMounted(load)
 
 async function load(): Promise<void> {
@@ -125,6 +141,14 @@ function goHome(): void {
 
       <p v-if="notice" class="notice">{{ notice }}</p>
       <p v-if="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
+
+      <section v-if="primaryMissing" class="asset-callout">
+        <div>
+          <strong>还有 {{ missingAssets.length }} 类资产未录入</strong>
+          <p>可以录入余额，或标记为不持有。</p>
+        </div>
+        <RouterLink :to="primaryMissing.route" class="callout-action">去录入 ›</RouterLink>
+      </section>
 
       <AssetDistribution
         :overview="overview"
@@ -237,6 +261,44 @@ function goHome(): void {
   background: var(--color-error-bg);
   color: var(--color-error);
   font-size: var(--text-footnote);
+}
+
+.asset-callout {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--color-brand-soft);
+}
+
+.asset-callout strong {
+  display: block;
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.asset-callout p {
+  margin: 3px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.callout-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: var(--touch-target);
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .foot-note {
