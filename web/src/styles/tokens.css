@@ -1,0 +1,49 @@
+/* 资产管家 · 基础设计 token
+ * 颜色 token 仍由 docs/design/ui-color-tokens.css 提供；本文件负责排版、间距、圆角与动效。
+ * 目标：减少组件内裸值，统一 iOS 风格的文本层级、点击尺寸和节奏。
+ */
+:root {
+  /* 文本层级：正文不小于 15px，说明文字不小于 12px。 */
+  --text-caption: 12px;
+  --text-footnote: 13px;
+  --text-subhead: 15px;
+  --text-body: 16px;
+  --text-headline: 17px;
+  --text-title3: 20px;
+  --text-title2: 22px;
+  --text-title1: 28px;
+  --text-large-title: 34px;
+  --text-display: 40px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+
+  /* 8pt 间距网格。 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* 页面与组件尺寸。 */
+  --page-gutter: 20px;
+  --card-padding: 16px;
+  --nav-height: 68px;
+  --touch-target: 44px;
+
+  /* 圆角只保留四档，避免 7/8/9/10/12/13/14/16 混用。 */
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-sheet: 24px;
+  --radius-tag: 6px;
+  --radius-pill: 999px;
+
+  /* 动效：快、准、少。 */
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --motion-sheet: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+}

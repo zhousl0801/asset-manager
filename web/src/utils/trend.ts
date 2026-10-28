@@ -1,4 +1,5 @@
 import { addAmounts, formatMoney } from './format'
+import { chartTheme } from './chartTheme'
 import type { AssetTrend, AssetTrendPoint, TrendRange } from '../types/trend'
 
 export type ScopedAssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
@@ -139,23 +140,23 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
   const values = scoped.points.map((point) => point.value)
   const marks = scoped.additions.map((addition) => ({
     xAxis: addition.date,
-    lineStyle: { type: 'dashed', color: '#9AA1B4', width: 1 },
+    lineStyle: { type: 'dashed', color: chartTheme.pointer, width: 1 },
     label: {
       show: true,
       position: 'insideEndTop',
       formatter: '新增',
-      color: '#7A8095',
-      fontSize: 9
+      color: chartTheme.text,
+      fontSize: 12
     }
   }))
 
   return {
     animation: false,
-    grid: { left: 10, right: 14, top: 24, bottom: 24 },
+    grid: { left: 10, right: 46, top: 28, bottom: 24 },
     tooltip: {
       trigger: 'axis',
       confine: true,
-      axisPointer: { type: 'line', lineStyle: { color: '#9AA1B4', type: 'dashed' } },
+      axisPointer: { type: 'line', lineStyle: { color: chartTheme.pointer, type: 'dashed' } },
       formatter: (params: { dataIndex?: number }[]) => {
         const index = params[0]?.dataIndex
 
@@ -171,11 +172,11 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
       boundaryGap: false,
       data: dates,
       axisLabel: {
-        color: '#7A8095',
-        fontSize: 9,
+        color: chartTheme.text,
+        fontSize: 12,
         formatter: (value: string) => trendAxisLabel(value, trend.range)
       },
-      axisLine: { lineStyle: { color: '#E6E8F0' } },
+      axisLine: { lineStyle: { color: chartTheme.axis } },
       axisTick: { show: false }
     },
     yAxis: {
@@ -194,8 +195,8 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
         showSymbol: false,
         connectNulls: false,
         smooth: false,
-        lineStyle: { width: 2, color: '#002FA7' },
-        itemStyle: { color: '#002FA7' },
+        lineStyle: { width: 2, color: chartTheme.brand },
+        itemStyle: { color: chartTheme.brand },
         areaStyle: {
           color: {
             type: 'linear',
@@ -204,8 +205,8 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(0, 47, 167, 0.16)' },
-              { offset: 1, color: 'rgba(0, 47, 167, 0.01)' }
+              { offset: 0, color: chartTheme.areaStrong },
+              { offset: 1, color: chartTheme.areaSoft }
             ]
           }
         },
@@ -216,12 +217,7 @@ export function buildTrendOption(trend: AssetTrend, scoped: ScopedTrend) {
             { type: 'min', name: '最低' }
           ],
           label: {
-            show: true,
-            position: 'top',
-            color: '#5C6272',
-            fontSize: 9,
-            formatter: (params: { name?: string; value?: number }) =>
-              `${params.name ?? ''} ¥${formatMoney(params.value ?? 0)}`
+            show: false
           }
         },
         markLine: {

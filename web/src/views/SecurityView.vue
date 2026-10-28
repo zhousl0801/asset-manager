@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { logout, passkeyEnabled } from '../api/access'
 import { deletePasskey, fetchPasskeys, passkeySupported, registerPasskey, type PasskeySummary } from '../api/passkeys'
+import ConfirmSheet from '../components/ConfirmSheet.vue'
 import PageHeader from '../components/PageHeader.vue'
 
 const router = useRouter()
@@ -11,6 +12,7 @@ const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const pendingRemoval = ref<PasskeySummary | null>(null)
 
 function goBack(): void {
   void router.push({ name: 'mine' })
@@ -67,7 +69,13 @@ async function enable(): Promise<void> {
 
 async function remove(credential: PasskeySummary): Promise<void> {
   if (busy.value) return
-  if (!window.confirm(`删除「${credential.label}」的 Passkey？删除后该设备需改用访问口令登录。`)) return
+  pendingRemoval.value = credential
+}
+
+async function confirmRemoval(): Promise<void> {
+  const credential = pendingRemoval.value
+
+  if (!credential || busy.value) return
 
   busy.value = true
   error.value = ''
@@ -76,6 +84,7 @@ async function remove(credential: PasskeySummary): Promise<void> {
   try {
     await deletePasskey(credential.id)
     notice.value = `已删除「${credential.label}」的 Passkey。`
+    pendingRemoval.value = null
     await load()
   } catch (value) {
     error.value = value instanceof Error ? value.message : '删除失败，请重试'
@@ -143,6 +152,17 @@ onMounted(load)
     <p class="timeline-note">
       Passkey 只用于验证本人身份，不参与账本数据；删除全部 Passkey 后仍可用访问口令登录。
     </p>
+
+    <ConfirmSheet
+      :open="pendingRemoval !== null"
+      title="删除 Passkey"
+      :message="pendingRemoval ? `删除「${pendingRemoval.label}」的 Passkey？删除后该设备需改用访问口令登录。` : ''"
+      confirm-label="删除"
+      danger
+      :busy="busy"
+      @confirm="confirmRemoval"
+      @cancel="pendingRemoval = null"
+    />
   </main>
 </template>
 
@@ -155,7 +175,7 @@ onMounted(load)
   gap: 10px;
   padding: 16px 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 .security-card + .security-card {
@@ -163,28 +183,28 @@ onMounted(load)
 }
 .security-card h2 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--text-headline);
+  font-weight: 600;
 }
 .security-card p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 .security-action {
   justify-self: start;
-  min-height: 38px;
+  min-height: var(--touch-target);
   padding: 0 14px;
 }
 .security-notice,
 .security-error {
   margin: 12px 0 0;
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 .security-notice { color: var(--color-brand); }
-.security-error { color: #ad3c32; }
+.security-error { color: var(--color-error); }
 .security-note { color: var(--color-text-secondary); }
 .passkey-list {
   display: grid;
@@ -211,6 +231,6 @@ onMounted(load)
   display: block;
   margin-top: 3px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 </style>

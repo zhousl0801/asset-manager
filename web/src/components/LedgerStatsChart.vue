@@ -6,6 +6,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { formatMoney } from '../utils/format'
+import { chartTheme } from '../utils/chartTheme'
 import type { EntryKind, EntryPeriod, EntryStatsPoint } from '../types/entry'
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
@@ -21,8 +22,8 @@ const container = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 
 const chartColors: Record<EntryKind, string> = {
-  expense: '#002FA7',
-  income: '#18734E'
+  expense: chartTheme.brand,
+  income: chartTheme.loss
 }
 
 function buildOption(): EChartsOption {
@@ -35,7 +36,7 @@ function buildOption(): EChartsOption {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(24, 32, 51, 0.05)' } },
+      axisPointer: { type: 'shadow', shadowStyle: { color: chartTheme.pointerShadow } },
       formatter: (params: unknown) => {
         const first = Array.isArray(params) ? params[0] as { dataIndex?: number } | undefined : undefined
         const index = first?.dataIndex
@@ -52,10 +53,10 @@ function buildOption(): EChartsOption {
       type: 'category',
       data: props.points.map((point) => point.label),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#E2E6EE' } },
+      axisLine: { lineStyle: { color: chartTheme.axis } },
       axisLabel: {
-        color: '#626C80',
-        fontSize: 9,
+        color: chartTheme.text,
+        fontSize: 12,
         interval: props.period === 'month' ? 4 : 0
       }
     },
@@ -63,11 +64,11 @@ function buildOption(): EChartsOption {
       type: 'value',
       min: 0,
       axisLabel: {
-        color: '#626C80',
-        fontSize: 9,
+        color: chartTheme.text,
+        fontSize: 12,
         formatter: (value: number) => value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value)
       },
-      splitLine: { lineStyle: { color: '#EEF0F6' } }
+      splitLine: { lineStyle: { color: chartTheme.grid } }
     },
     series: [
       {

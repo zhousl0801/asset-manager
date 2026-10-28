@@ -958,15 +958,15 @@ function goBack(): void {
 }
 
 .plan-hero {
-  padding: 19px 17px 17px;
-  border-radius: 14px;
+  padding: var(--card-padding);
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
 }
 
 .hero-label {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .plan-hero h2 {
@@ -978,7 +978,7 @@ function goBack(): void {
 .hero-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -991,9 +991,9 @@ function goBack(): void {
 
 .plan-actions button {
   min-height: 42px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .action-primary {
@@ -1011,7 +1011,7 @@ function goBack(): void {
 .notice {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: 12px;
@@ -1034,7 +1034,7 @@ function goBack(): void {
 
 .meta {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .plan-group {
@@ -1070,7 +1070,7 @@ function goBack(): void {
   flex: 0 0 auto;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--group-accent) 12%, var(--color-bg-surface));
   color: var(--group-accent);
 }
@@ -1088,14 +1088,14 @@ function goBack(): void {
 .group-heading h3 {
   margin: 0;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.1px;
 }
 
 .group-heading p {
   margin: 3px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
@@ -1103,10 +1103,10 @@ function goBack(): void {
   flex: 0 0 auto;
   padding: 4px 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--group-accent);
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
@@ -1124,9 +1124,9 @@ function goBack(): void {
   margin: 0;
   padding: 15px 12px;
   border: 1px dashed var(--color-border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-align: center;
 }
 
@@ -1135,14 +1135,14 @@ function goBack(): void {
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .plan-card,
 .occurrence-card {
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -1170,19 +1170,19 @@ function goBack(): void {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .plan-amount {
   font-size: 16px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .plan-meta {
   margin: 10px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -1193,13 +1193,13 @@ function goBack(): void {
 }
 
 .small-button {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 11px;
   border: 1px solid var(--color-border-control);
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .fund-details > summary {
@@ -1244,7 +1244,7 @@ function goBack(): void {
 
 .fund-summary-copy small {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .fund-summary-amount {
@@ -1257,18 +1257,18 @@ function goBack(): void {
 
 .fund-summary-amount b {
   font-size: 16px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .fund-summary-amount small {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .paused-label {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .fund-plan-rows {
@@ -1302,10 +1302,10 @@ function goBack(): void {
   min-width: 34px;
   min-height: 22px;
   padding: 0 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 9px;
+  font-size: var(--text-caption);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1324,13 +1324,13 @@ function goBack(): void {
 
 .fund-row-copy b {
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .fund-row-copy small {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
@@ -1345,9 +1345,9 @@ function goBack(): void {
 }
 
 .fund-row-actions .small-button {
-  min-height: 28px;
+  min-height: var(--touch-target);
   padding: 0 8px;
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .occurrence-list {
@@ -1373,12 +1373,12 @@ function goBack(): void {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
-.occurrence-error {
-  color: var(--color-finance-loss) !important;
+.occurrence-card .occurrence-error {
+  color: var(--color-finance-loss);
 }
 
 .occurrence-actions {
@@ -1403,7 +1403,7 @@ function goBack(): void {
 .summary-note {
   margin: 14px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
   text-align: center;
 }

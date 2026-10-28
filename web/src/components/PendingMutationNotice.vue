@@ -57,7 +57,7 @@ async function check(retry: boolean): Promise<void> {
   font-size: 12px;
 }
 .pending-notice button {
-  min-height: 40px;
+  min-height: var(--touch-target);
   margin-right: 12px;
   color: var(--color-brand);
 }

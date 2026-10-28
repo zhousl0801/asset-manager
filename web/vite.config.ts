@@ -12,16 +12,29 @@ export default defineConfig({
         short_name: '资产管家',
         description: '个人资产观察与日常记账',
         lang: 'zh-CN',
-        theme_color: '#002FA7',
+        theme_color: '#FFFFFF',
         background_color: '#F6F7FB',
         display: 'standalone',
+        orientation: 'portrait',
         start_url: '/',
         icons: [
           {
-            src: '/favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
+            src: '/icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
             purpose: 'any'
+          },
+          {
+            src: '/icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       }

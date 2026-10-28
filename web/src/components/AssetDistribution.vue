@@ -216,7 +216,7 @@ function changeLabel(row: DistributionRow): string {
 
 .recorded-count {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .head-meta {
@@ -227,7 +227,7 @@ function changeLabel(row: DistributionRow): string {
 
 .manage-link {
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   text-decoration: none;
 }
 
@@ -240,7 +240,7 @@ function changeLabel(row: DistributionRow): string {
   overflow: hidden;
   height: 8px;
   margin-bottom: 12px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--color-bg-subtle);
 }
 
@@ -282,7 +282,7 @@ function changeLabel(row: DistributionRow): string {
   margin: 0;
   padding: 0;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
   list-style: none;
 }
@@ -326,14 +326,14 @@ function changeLabel(row: DistributionRow): string {
 }
 
 .asset-title b {
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .asset-main small,
 .asset-side small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -347,14 +347,14 @@ function changeLabel(row: DistributionRow): string {
 
 .asset-amount {
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .asset-percent {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -379,10 +379,10 @@ function changeLabel(row: DistributionRow): string {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 12px;
   border: 0;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 12px;
@@ -415,13 +415,19 @@ function changeLabel(row: DistributionRow): string {
 }
 
 @media (max-width: 360px) {
-  .asset-link {
+  .asset-link,
+  .asset-link.static {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .asset-percent {
+    display: none;
+  }
+
+  .asset-link.static .row-actions {
     grid-column: 1 / -1;
-    text-align: left;
+    justify-self: end;
+    margin-top: 2px;
   }
 }
 </style>

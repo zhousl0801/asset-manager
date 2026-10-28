@@ -1,1 +1,0 @@
-import{E as e,m as t,o as n,v as r,y as i}from"./vue-router-DPk9BvxF.js";import{t as a}from"./AppIcon-CeEpZOAr.js";var o=n(i({__name:`BackButton`,emits:[`back`],setup(n){return(n,i)=>(e(),t(`button`,{class:`back-button`,type:`button`,"aria-label":`返回`,onClick:i[0]||=e=>n.$emit(`back`)},[r(a,{name:`chevron-back`})]))}}),[[`__scopeId`,`data-v-4a0a7c29`]]);export{o as t};

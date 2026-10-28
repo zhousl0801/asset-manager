@@ -324,7 +324,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .return-head p {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .range-tabs {
@@ -332,18 +332,18 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   flex: 0 0 auto;
   gap: 3px;
   padding: 3px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-brand-soft);
 }
 
 .range-tabs button {
-  min-height: 28px;
+  min-height: var(--touch-target);
   padding: 0 7px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .range-tabs button.active {
@@ -363,14 +363,14 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   min-width: 0;
   padding: 11px 9px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
 }
 
 .return-summary span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .return-summary b {
@@ -378,7 +378,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   margin-top: 5px;
   overflow: hidden;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -388,7 +388,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
   line-height: 1.45;
 }
 
@@ -403,14 +403,14 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .return-meta {
   margin: 9px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .chart-card {
   margin-top: 10px;
   padding: 8px 4px 2px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -418,7 +418,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -435,9 +435,9 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 
 .calendar-head button {
   width: 30px;
-  min-height: 28px;
+  min-height: var(--touch-target);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
   font-size: 16px;
@@ -457,7 +457,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .calendar-weekdays {
   margin-top: 8px;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
   text-align: center;
 }
 
@@ -474,30 +474,30 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   min-height: 42px;
   padding: 2px 1px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: transparent;
 }
 
 .calendar-day span {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .calendar-day small {
-  font-size: 7px;
+  font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
 }
 
 .calendar-day.profit {
-  background: rgba(196, 55, 43, 0.08);
+  background: var(--color-finance-gain-bg);
 }
 
 .calendar-day.loss {
-  background: rgba(24, 115, 78, 0.08);
+  background: var(--color-finance-loss-bg);
 }
 
 .calendar-day.quiet {
-  background: var(--color-bg-soft, rgba(24, 32, 51, 0.03));
+  background: var(--color-bg-subtle);
 }
 
 .calendar-day.empty,
@@ -516,7 +516,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .calendar-note {
   margin: 9px 0 0;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -524,7 +524,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   margin: 10px 0 0;
   padding-left: 16px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -540,21 +540,21 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .day-summary span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .day-summary b {
   display: block;
   margin-top: 5px;
   font-size: 20px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .day-summary p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   text-align: right;
 }
 
@@ -571,12 +571,12 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 .day-position strong {
   display: block;
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 600;
 }
 
@@ -584,7 +584,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   display: block;
   margin-top: 3px;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
@@ -595,7 +595,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 
 .day-position-value b {
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 </style>

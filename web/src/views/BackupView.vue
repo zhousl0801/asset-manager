@@ -329,14 +329,14 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 .backup-header h1 {
   margin: 0;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.4px;
 }
 
 .page-intro {
   margin: 14px 0 18px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.8;
 }
 
@@ -344,7 +344,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
   margin-top: 12px;
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -363,7 +363,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .backup-card header small {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .backup-actions {
@@ -374,9 +374,9 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .backup-actions button {
   flex: 1;
-  min-height: 38px;
-  border-radius: 9px;
-  font-size: 11px;
+  min-height: var(--touch-target);
+  border-radius: var(--radius-control);
+  font-size: var(--text-footnote);
 }
 
 .action-primary {
@@ -402,7 +402,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 .page-footnote {
   margin: 10px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -416,40 +416,40 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
   gap: 6px;
   margin-top: 12px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .file-field input {
   padding: 9px;
   border: 1px dashed var(--color-border-control);
-  border-radius: 9px;
-  background: var(--color-bg-soft, rgba(24, 32, 51, 0.03));
-  font-size: 10px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+  font-size: var(--text-caption);
 }
 
 .file-name {
   margin: 8px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .notice {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
 .form-error {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--color-danger-bg, rgba(196, 55, 43, 0.08));
+  border-radius: var(--radius-tag);
+  background: var(--color-error-bg);
   color: var(--color-finance-loss);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
@@ -464,7 +464,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 .validation-list {
   margin: 10px 0 0;
   padding-left: 16px;
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -492,7 +492,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .summary-compare h3 {
   margin: 0 0 8px;
-  font-size: 10px;
+  font-size: var(--text-caption);
   font-weight: 600;
 }
 
@@ -505,22 +505,22 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 .summary-grid > div {
   min-width: 0;
   padding: 8px;
-  border-radius: 8px;
-  background: var(--color-bg-soft, rgba(24, 32, 51, 0.03));
+  border-radius: var(--radius-tag);
+  background: var(--color-bg-subtle);
 }
 
 .summary-grid span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
 }
 
 .summary-grid b {
   display: block;
   margin-top: 3px;
   overflow: hidden;
-  font-size: 10px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -532,7 +532,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
   gap: 8px;
   margin-top: 14px;
   color: var(--color-text-primary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -542,13 +542,13 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .restore-button {
   width: 100%;
-  min-height: 40px;
+  min-height: var(--touch-target);
   margin-top: 12px;
   border: 1px solid var(--color-finance-loss);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-finance-loss);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 600;
 }
 
@@ -556,7 +556,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
   display: inline-block;
   margin-top: 12px;
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-decoration: none;
 }
 </style>

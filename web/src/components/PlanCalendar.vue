@@ -168,7 +168,7 @@ function closureTitle(market: MarketDay): string {
   margin-top: 14px;
   padding: 13px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -193,11 +193,11 @@ function closureTitle(market: MarketDay): string {
 
 .calendar-tag {
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 9px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -208,11 +208,11 @@ function closureTitle(market: MarketDay): string {
 }
 
 .calendar-nav button {
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
   font-size: 18px;
@@ -235,7 +235,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-note {
   margin: 8px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -246,7 +246,7 @@ function closureTitle(market: MarketDay): string {
   gap: 8px 12px;
   margin-top: 9px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .calendar-legend > span {
@@ -260,8 +260,8 @@ function closureTitle(market: MarketDay): string {
   place-items: center;
   width: 14px;
   height: 14px;
-  border-radius: 4px;
-  font-size: 7px;
+  border-radius: var(--radius-tag);
+  font-size: var(--text-caption);
   font-style: normal;
   font-weight: 600;
 }
@@ -283,7 +283,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-state {
   padding: 22px 0 18px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   text-align: center;
 }
 
@@ -300,7 +300,7 @@ function closureTitle(market: MarketDay): string {
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .calendar-weekdays {
@@ -309,7 +309,7 @@ function closureTitle(market: MarketDay): string {
   margin-top: 10px;
   padding-bottom: 5px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   text-align: center;
 }
 
@@ -329,7 +329,7 @@ function closureTitle(market: MarketDay): string {
   min-height: 42px;
   padding: 5px 1px 3px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
 }
 
 .calendar-cell.blank {
@@ -352,7 +352,7 @@ function closureTitle(market: MarketDay): string {
 }
 
 .day-number {
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -360,7 +360,7 @@ function closureTitle(market: MarketDay): string {
 
 .calendar-cell.today .day-number {
   color: var(--color-brand);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .closure-tags {
@@ -375,10 +375,10 @@ function closureTitle(market: MarketDay): string {
   min-width: 13px;
   height: 13px;
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-warning-bg);
   color: var(--color-warning);
-  font-size: 8px;
+  font-size: var(--text-caption);
   font-weight: 600;
   line-height: 1;
 }
@@ -391,7 +391,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-summary {
   margin: 9px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -403,7 +403,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-sources > summary {
   padding: 9px 0 2px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   cursor: pointer;
   list-style: none;
 }
@@ -429,7 +429,7 @@ function closureTitle(market: MarketDay): string {
   gap: 3px 10px;
   margin-top: 7px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -445,7 +445,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-footnote {
   margin: 7px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 </style>

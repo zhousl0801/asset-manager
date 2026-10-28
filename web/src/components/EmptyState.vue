@@ -28,7 +28,7 @@ defineEmits<{ action: [] }>()
   flex-direction: column;
   align-items: center;
   padding: 36px 20px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
   text-align: center;
 }
@@ -38,7 +38,7 @@ defineEmits<{ action: [] }>()
   width: 48px;
   height: 48px;
   margin-bottom: 14px;
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
   color: var(--color-brand);
 }
@@ -46,7 +46,7 @@ h3 {
   margin: 0;
   color: var(--color-text-primary);
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.5;
 }
 p {
@@ -67,7 +67,7 @@ p {
   width: 38px;
   height: 38px;
   margin-bottom: 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
 }
 .compact h3 {
   font-size: 13px;

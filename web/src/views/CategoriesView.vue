@@ -281,23 +281,23 @@ onMounted(loadCategories)
 }
 
 .add-button {
-  min-height: 36px;
+  min-height: var(--touch-target);
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   text-decoration: none;
 }
 
 .page-note {
   margin: 0 0 14px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -308,10 +308,10 @@ onMounted(loadCategories)
 }
 
 .kind-tabs button {
-  min-height: 34px;
+  min-height: var(--touch-target);
   padding: 0 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -321,23 +321,23 @@ onMounted(loadCategories)
   border-color: var(--color-brand);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .notice {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.6;
 }
 
 .category-list {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -374,10 +374,10 @@ onMounted(loadCategories)
 
 .status-tag {
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .status-tag.system {
@@ -393,13 +393,13 @@ onMounted(loadCategories)
 
 .icon-action,
 .text-action {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 6px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .icon-action {

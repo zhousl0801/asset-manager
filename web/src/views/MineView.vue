@@ -50,8 +50,6 @@ onMounted(async () => {
       </RouterLink>
     </div>
 
-    <p class="timeline-note">首版只提供本账本已上线的记录与计划入口。</p>
-
     <AppNav />
   </main>
 </template>
@@ -63,21 +61,21 @@ onMounted(async () => {
 
 .mine-header h1 {
   margin: 0;
-  font-size: 23px;
-  font-weight: 650;
+  font-size: var(--text-title1);
+  font-weight: 600;
   letter-spacing: -0.6px;
 }
 
 .mine-header p {
   margin: 5px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .list-box {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -87,10 +85,10 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
-  min-height: 52px;
-  padding: 0 14px;
+  min-height: 56px;
+  padding: 0 16px;
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: var(--text-subhead);
   text-decoration: none;
 }
 
@@ -104,14 +102,7 @@ onMounted(async () => {
 
 .list-row b {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 400;
-}
-
-.timeline-note {
-  margin: 14px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 10px;
-  line-height: 1.7;
 }
 </style>

@@ -29,7 +29,7 @@ h1 {
   margin: 0;
   color: var(--color-text-primary);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.4px;
   white-space: nowrap;
 }

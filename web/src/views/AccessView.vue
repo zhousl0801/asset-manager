@@ -82,16 +82,16 @@ async function usePasskey(): Promise<void> {
   gap: 14px;
   padding: 30px 24px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 18px;
+  border-radius: var(--radius-sheet);
   background: var(--color-bg-surface);
-  box-shadow: 0 12px 36px rgb(30 50 40 / 8%);
+  box-shadow: 0 12px 36px var(--color-shadow);
 }
 .access-mark {
   display: grid;
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 20px;
@@ -103,19 +103,22 @@ h1 { margin: 4px 0 0; font-size: 22px; }
   min-height: 48px;
   margin-top: 8px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-brand);
-  color: white;
-  font-weight: 650;
+  color: var(--color-on-brand);
+  font-weight: 600;
 }
-.access-passkey:disabled { opacity: .6; }
+.access-passkey:disabled {
+  background: var(--color-bg-disabled);
+  color: var(--color-text-disabled);
+}
 .access-divider {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 2px 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 .access-divider::before,
 .access-divider::after {
@@ -132,18 +135,21 @@ input {
   min-height: 48px;
   padding: 0 13px;
   border: 1px solid var(--color-border-control);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-page);
 }
-.access-card .access-error { color: #ad3c32; }
+.access-card .access-error { color: var(--color-error); }
 .access-submit {
   min-height: 48px;
   margin-top: 4px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-brand);
-  color: white;
-  font-weight: 650;
+  color: var(--color-on-brand);
+  font-weight: 600;
 }
-.access-submit:disabled { opacity: .6; }
+.access-submit:disabled {
+  background: var(--color-bg-disabled);
+  color: var(--color-text-disabled);
+}
 </style>

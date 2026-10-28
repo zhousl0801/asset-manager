@@ -85,7 +85,7 @@ function pickDate(): void {
 .keypad button {
   min-height: 48px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 19px;
@@ -105,7 +105,7 @@ function pickDate(): void {
   border-color: transparent;
   color: var(--color-brand);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .keypad .key-done {
@@ -113,7 +113,7 @@ function pickDate(): void {
   border-color: var(--color-brand);
   color: var(--color-on-brand);
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .keypad .key-done:hover:not(:disabled) {

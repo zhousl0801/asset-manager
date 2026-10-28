@@ -221,7 +221,7 @@ function auditSummary(json: string | null): string {
 .history-fact { padding:14px 0;border-bottom:1px solid var(--color-border-default); }
 .history-fact:last-child { border:0; }
 .history-fact p { font-size:12px;color:var(--color-text-secondary);margin:8px 0; }
-.history-warning { display:inline-block;margin-left:8px;padding:3px 6px;border:1px solid currentColor;border-radius:5px;color:var(--color-brand);font-size:11px; }
+.history-warning { display:inline-block;margin-left:8px;padding:3px 6px;border:1px solid currentColor;border-radius:5px;color:var(--color-brand);font-size: var(--text-footnote); }
 .history-fact-actions { display:flex;gap:22px;margin-top:10px; }
 .reversed { opacity:.65; }
 .history-preview table { width:100%;border-collapse:collapse;font-size:12px; }
@@ -230,5 +230,5 @@ function auditSummary(json: string | null): string {
 .changed td:last-child { color:var(--color-brand);font-weight:600; }
 .history-preview .primary-button { width:100%; }
 .history-audit { margin-top:16px;font-size:12px; }
-.history-audit pre { overflow:auto;max-height:320px;font-size:11px; }
+.history-audit pre { overflow:auto;max-height:320px;font-size: var(--text-footnote); }
 </style>

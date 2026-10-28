@@ -541,8 +541,8 @@ function goBack(): void {
 
 
 .provident-hero {
-  padding: 19px 17px 17px;
-  border-radius: 14px;
+  padding: var(--card-padding);
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
 }
 
@@ -552,16 +552,16 @@ function goBack(): void {
   gap: 7px;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .hero-tag {
   padding: 2px 5px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .hero-balance {
@@ -583,7 +583,7 @@ function goBack(): void {
 .hero-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -602,14 +602,14 @@ function goBack(): void {
 .hero-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .hero-metrics b {
   display: block;
   margin-top: 7px;
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
 }
@@ -623,9 +623,9 @@ function goBack(): void {
 .provident-actions button {
   flex: 1;
   min-height: 44px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .action-primary {
@@ -652,7 +652,7 @@ function goBack(): void {
 .notice {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: 12px;
@@ -663,7 +663,7 @@ function goBack(): void {
 .summary-note {
   margin: 14px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -684,13 +684,13 @@ function goBack(): void {
 
 .meta {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .activity-card {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -717,7 +717,7 @@ function goBack(): void {
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .activity-copy {
@@ -736,7 +736,7 @@ function goBack(): void {
 .activity-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -745,7 +745,7 @@ function goBack(): void {
 .activity-value {
   flex: 0 0 auto;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -756,7 +756,7 @@ function goBack(): void {
 .empty-state {
   padding: 34px 16px;
   border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   text-align: center;
 }
 
@@ -776,7 +776,7 @@ function goBack(): void {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-subtle);
 }
 
@@ -803,12 +803,12 @@ function goBack(): void {
 .monthly-toggle b {
   color: var(--color-text-primary);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .monthly-toggle small {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 

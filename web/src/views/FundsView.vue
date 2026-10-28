@@ -24,6 +24,7 @@ import AppIcon from '../components/AppIcon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
+import ConfirmSheet from '../components/ConfirmSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
   formatBusinessDate,
@@ -95,6 +96,7 @@ const sortKey = ref<FundSortKey>('value')
 const metricKeys = ref<FundMetricKey[]>(loadMetricKeys())
 const metricNotice = ref('')
 const groupSheetOpen = ref(false)
+const pendingGroupRemoval = ref<{ id: string; name: string } | null>(null)
 const groupDraft = ref('')
 const groupError = ref('')
 const groupBusy = ref(false)
@@ -723,8 +725,14 @@ async function saveGroupName(groupId: string): Promise<void> {
   }
 }
 
-async function removeGroup(groupId: string, name: string): Promise<void> {
-  if (!window.confirm(`删除分组「${name}」？组内基金会回到未分组，持仓和收益不变。`)) {
+function removeGroup(groupId: string, name: string): void {
+  pendingGroupRemoval.value = { id: groupId, name }
+}
+
+async function confirmRemoveGroup(): Promise<void> {
+  const target = pendingGroupRemoval.value
+
+  if (!target || groupBusy.value) {
     return
   }
 
@@ -732,16 +740,18 @@ async function removeGroup(groupId: string, name: string): Promise<void> {
   groupError.value = ''
 
   try {
-    await deleteFundGroup(groupId)
+    await deleteFundGroup(target.id)
 
-    if (activeGroup.value === groupId) {
+    if (activeGroup.value === target.id) {
       activeGroup.value = 'all'
     }
 
-    notice.value = `已删除分组「${name}」，组内基金回到未分组。`
+    notice.value = `已删除分组「${target.name}」，组内基金回到未分组。`
+    pendingGroupRemoval.value = null
     await loadOverview()
   } catch (error) {
     groupError.value = getApiErrorMessage(error, '删除分组失败，请重试。')
+    pendingGroupRemoval.value = null
   } finally {
     groupBusy.value = false
   }
@@ -1793,6 +1803,17 @@ function goBack(): void {
         </div>
       </form>
     </BottomSheet>
+
+    <ConfirmSheet
+      :open="pendingGroupRemoval !== null"
+      title="删除分组"
+      :message="pendingGroupRemoval ? `删除分组「${pendingGroupRemoval.name}」？组内基金会回到未分组，持仓和收益不变。` : ''"
+      confirm-label="删除"
+      danger
+      :busy="groupBusy"
+      @confirm="confirmRemoveGroup"
+      @cancel="pendingGroupRemoval = null"
+    />
     <AppNav />
   </main>
 </template>
@@ -1818,7 +1839,7 @@ function goBack(): void {
 }
 
 .back-link {
-  min-height: 36px;
+  min-height: var(--touch-target);
   padding: 0 4px;
   border: 0;
   background: transparent;
@@ -1841,16 +1862,16 @@ function goBack(): void {
   gap: 7px;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .hero-tag {
   padding: 2px 5px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .hero-balance {
@@ -1872,7 +1893,7 @@ function goBack(): void {
 .hero-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -1887,14 +1908,14 @@ function goBack(): void {
 .hero-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .hero-metrics b {
   display: block;
   margin-top: 7px;
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
 }
@@ -1919,7 +1940,7 @@ function goBack(): void {
   align-items: center;
   margin: -8px 0 12px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 .funds-header {
   display: flex;
@@ -1952,14 +1973,14 @@ function goBack(): void {
   width: 180px;
   padding: 10px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
   box-shadow: 0 8px 24px var(--color-shadow);
 }
 .funds-actions button {
   min-height: 42px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   font-size: 13px;
   text-align: left;
 }
@@ -1979,7 +2000,7 @@ function goBack(): void {
   container-type: inline-size;
   margin: 0 0 18px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--color-brand-soft);
 }
 .pending-overview summary {
@@ -2051,13 +2072,13 @@ function goBack(): void {
 
 .group-chips button {
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 11px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .group-chips button.active {
@@ -2069,18 +2090,18 @@ function goBack(): void {
 
 .group-chips small {
   margin-left: 3px;
-  font-size: 9px;
+  font-size: var(--text-caption);
   font-weight: 400;
 }
 
 .group-manage {
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 8px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .portfolio-toolbar {
@@ -2091,12 +2112,12 @@ function goBack(): void {
 
 .portfolio-toolbar input,
 .portfolio-toolbar select {
-  min-height: 36px;
+  min-height: var(--touch-target);
   border: 1px solid var(--color-border-control);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .portfolio-toolbar input {
@@ -2121,17 +2142,17 @@ function goBack(): void {
 
 .metric-picker > span {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .metric-picker button {
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 9px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .metric-picker button.active {
@@ -2145,7 +2166,7 @@ function goBack(): void {
 }
 .fund-list {
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 .fund-card {
@@ -2154,28 +2175,38 @@ function goBack(): void {
 .fund-card:last-child {
   border-bottom: 0;
 }
-.fund-card > header, .fund-columns {
+.fund-card > header {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 2.1fr) 12px;
+  grid-template-columns: minmax(0, 1fr) 12px;
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 4px 8px;
+  padding: 12px 10px;
+  cursor: pointer;
+}
+.fund-columns {
+  display: grid;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 8px;
 }
-.fund-card > header {
-  min-height: 84px;
-  padding: 10px 10px;
-  cursor: pointer;
+.fund-columns > span:first-child,
+.fund-columns > span:last-child {
+  display: none;
 }
 .fund-card > header:hover {
   background: var(--color-bg-hover);
 }
 .fund-title {
   min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
 }
 .fund-title strong {
   display: block;
   color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -2183,15 +2214,18 @@ function goBack(): void {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 .fund-metrics {
   display: grid;
+  grid-column: 1 / -1;
+  grid-row: 2;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
+  margin-top: 6px;
   text-align: right;
 }
 .fund-metrics > div {
@@ -2207,16 +2241,17 @@ function goBack(): void {
 }
 .fund-metrics b {
   display: block;
-  font-size: 11px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .fund-columns {
   padding: 10px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 .fund-columns > div {
   display: grid;
@@ -2225,8 +2260,11 @@ function goBack(): void {
   text-align: right;
 }
 .expand-mark {
+  grid-column: 2;
+  grid-row: 1;
   width: 12px;
   height: 16px;
+  margin-top: 4px;
   color: var(--color-text-secondary);
 }
 .expand-mark.expanded {
@@ -2247,7 +2285,7 @@ function goBack(): void {
     grid-row: 1;
   }
   .fund-title small {
-    font-size: 11px;
+    font-size: var(--text-footnote);
   }
   .expand-mark {
     grid-column: 2;
@@ -2265,7 +2303,7 @@ function goBack(): void {
     height: auto;
     margin-bottom: 5px;
     color: var(--color-text-secondary);
-    font-size: 10px;
+    font-size: var(--text-caption);
     clip-path: none;
   }
   .fund-metrics b {
@@ -2286,43 +2324,43 @@ function goBack(): void {
   gap: 8px;
   margin-top: 12px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .fund-group-select select {
   flex: 1;
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 8px;
   border: 1px solid var(--color-border-control);
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .fund-class {
   margin-top: 12px;
   padding: 11px;
-  border-radius: 10px;
-  background: var(--color-bg-soft, rgba(0, 47, 167, 0.04));
+  border-radius: var(--radius-control);
+  background: var(--color-brand-soft);
 }
 
 .fund-class header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .fund-class header span {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .fund-class-meta {
   margin: 6px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -2340,7 +2378,7 @@ function goBack(): void {
   padding-top: 8px;
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .holding-action-row > div {
@@ -2350,13 +2388,13 @@ function goBack(): void {
 }
 
 .holding-action-row button {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 9px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .holding-action-row button:disabled {
@@ -2374,15 +2412,15 @@ function goBack(): void {
 
 .fund-platform-row strong {
   display: block;
-  font-size: 10px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
 }
 
 .fund-platform-row small {
   display: block;
   margin-top: 3px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .fund-platform-value {
@@ -2390,8 +2428,8 @@ function goBack(): void {
 }
 
 .fund-platform-value b {
-  font-size: 10px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2407,7 +2445,7 @@ function goBack(): void {
   gap: 10px;
   padding: 13px 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -2426,19 +2464,19 @@ function goBack(): void {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
 .fund-plan-row > b {
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .fund-plan-row a {
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-decoration: none;
 }
 
@@ -2454,10 +2492,10 @@ function goBack(): void {
 
 .group-create-row button {
   flex: 0 0 auto;
-  min-height: 38px;
+  min-height: var(--touch-target);
   padding: 0 14px;
-  border-radius: 9px;
-  font-size: 11px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-footnote);
 }
 
 .group-manage-list {
@@ -2474,7 +2512,7 @@ function goBack(): void {
   min-height: 44px;
   padding: 8px 10px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .group-manage-row > div {
@@ -2484,7 +2522,7 @@ function goBack(): void {
 
 .group-manage-row strong {
   display: block;
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 600;
 }
 
@@ -2492,27 +2530,27 @@ function goBack(): void {
   display: block;
   margin-top: 3px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .group-manage-row input {
   flex: 1;
   min-width: 0;
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 8px;
   border: 1px solid var(--color-border-control);
-  border-radius: 8px;
-  font-size: 11px;
+  border-radius: var(--radius-tag);
+  font-size: var(--text-footnote);
 }
 
 .text-button {
   flex: 0 0 auto;
-  min-height: 28px;
+  min-height: var(--touch-target);
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .text-button.danger {
@@ -2522,7 +2560,7 @@ function goBack(): void {
 .notice {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: 12px;
@@ -2546,7 +2584,7 @@ function goBack(): void {
 
 .meta {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .pending-list {
@@ -2562,7 +2600,7 @@ function goBack(): void {
   gap: 12px;
   padding: 13px 14px;
   border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
 }
 
@@ -2582,7 +2620,7 @@ function goBack(): void {
 .pending-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2599,7 +2637,7 @@ function goBack(): void {
 .pending-side b {
   flex: 0 0 auto;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2607,7 +2645,7 @@ function goBack(): void {
   flex: 1 1 120px;
   min-width: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   text-align: right;
   white-space: normal;
@@ -2625,14 +2663,14 @@ function goBack(): void {
 }
 
 .confirm-button {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 10px;
   border: 1px solid var(--color-brand);
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 10px;
-  font-weight: 550;
+  font-size: var(--text-caption);
+  font-weight: 500;
 }
 
 .position-list {
@@ -2644,7 +2682,7 @@ function goBack(): void {
 .position-card {
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -2665,12 +2703,12 @@ function goBack(): void {
   display: block;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .position-card header > b {
   font-size: 16px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2691,14 +2729,14 @@ function goBack(): void {
 .position-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .position-metrics b {
   display: block;
   margin-top: 5px;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2708,21 +2746,21 @@ function goBack(): void {
   gap: 10px;
   margin-top: 11px;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .quote-error {
   display: block;
   margin-top: 7px;
   color: var(--color-finance-loss);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.5;
 }
 
 .empty-state {
   padding: 34px 16px;
   border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   text-align: center;
 }
 
@@ -2739,7 +2777,7 @@ function goBack(): void {
 .activity-card {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -2766,7 +2804,7 @@ function goBack(): void {
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .activity-copy {
@@ -2785,7 +2823,7 @@ function goBack(): void {
 .activity-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2794,7 +2832,7 @@ function goBack(): void {
 .activity-value {
   flex: 0 0 auto;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2805,7 +2843,7 @@ function goBack(): void {
 .summary-note {
   margin: 14px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
   text-align: center;
 }

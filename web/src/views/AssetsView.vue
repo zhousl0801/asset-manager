@@ -149,8 +149,8 @@ function goHome(): void {
 }
 
 .page-head {
-  margin: 0 -19px 18px;
-  padding: max(14px, env(safe-area-inset-top)) 19px 13px;
+  margin: 0 calc(var(--page-gutter) * -1) 18px;
+  padding: max(14px, env(safe-area-inset-top)) var(--page-gutter) 13px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
 }
@@ -175,7 +175,7 @@ function goHome(): void {
 .page-head p {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .hero {
@@ -193,16 +193,16 @@ function goHome(): void {
 
 .tag {
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .hero-value {
   margin: 8px 0 8px;
   font-size: 40px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -1.7px;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
@@ -218,31 +218,31 @@ function goHome(): void {
 .hero-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .notice {
   margin: 0 0 14px;
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .form-error {
   margin: 0 0 14px;
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .foot-note {
   margin: 0 0 16px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 </style>

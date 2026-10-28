@@ -463,19 +463,19 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .reconcile-link {
-  min-height: 36px;
+  min-height: var(--touch-target);
   margin-left: auto;
   padding: 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-brand);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .cash-hero {
-  padding: 19px 17px 17px;
-  border-radius: 14px;
+  padding: var(--card-padding);
+  border-radius: var(--radius-card);
   background: var(--color-brand-soft);
 }
 
@@ -485,16 +485,16 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 7px;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .hero-tag {
   padding: 2px 5px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .hero-balance {
@@ -516,7 +516,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .hero-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
@@ -535,14 +535,14 @@ function handleKeydown(event: KeyboardEvent): void {
 .hero-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .hero-metrics b {
   display: block;
   margin-top: 7px;
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
 }
@@ -564,9 +564,9 @@ function handleKeydown(event: KeyboardEvent): void {
 .cash-actions button {
   flex: 1;
   min-height: 44px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .action-primary {
@@ -593,7 +593,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .notice {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
   font-size: 12px;
@@ -603,7 +603,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .cash-note {
   margin: 14px 0 22px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -624,7 +624,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .meta {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .filter-tabs {
@@ -641,13 +641,13 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .filter-tabs button {
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 11px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   white-space: nowrap;
 }
 
@@ -669,13 +669,13 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 10px;
   padding: 0 2px 7px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .day-card {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -712,7 +712,7 @@ function handleKeydown(event: KeyboardEvent): void {
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .activity-copy {
@@ -734,7 +734,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .activity-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -743,7 +743,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .activity-value {
   flex: 0 0 auto;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -751,7 +751,7 @@ function handleKeydown(event: KeyboardEvent): void {
   margin-top: 16px;
   padding: 34px 16px;
   border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   text-align: center;
 }
 
@@ -768,7 +768,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .summary-note {
   margin: 14px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
   text-align: center;
 }
@@ -788,8 +788,8 @@ function handleKeydown(event: KeyboardEvent): void {
   width: min(100%, 430px);
   max-height: 88dvh;
   overflow-y: auto;
-  padding: 20px 19px calc(24px + env(safe-area-inset-bottom));
-  border-radius: 18px 18px 0 0;
+  padding: 20px var(--page-gutter) calc(24px + env(safe-area-inset-bottom));
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   background: var(--color-bg-surface);
   box-shadow: 0 -8px 30px var(--color-shadow);
 }
@@ -812,11 +812,11 @@ function handleKeydown(event: KeyboardEvent): void {
 .sheet-head p {
   margin: 5px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .sheet-close {
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 6px;
   border: 0;
   background: transparent;
@@ -837,7 +837,7 @@ function handleKeydown(event: KeyboardEvent): void {
   align-items: baseline;
   gap: 12px;
   padding: 11px 12px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -847,7 +847,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .difference-row b {
   color: var(--color-text-primary);
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -865,7 +865,7 @@ function handleKeydown(event: KeyboardEvent): void {
   min-height: 46px;
   padding: 0 12px;
   border: 1px solid var(--color-border-control);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 16px;
@@ -882,17 +882,17 @@ function handleKeydown(event: KeyboardEvent): void {
 .sheet-note {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
 .form-error {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
   font-size: 12px;
@@ -909,7 +909,7 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 
   .sheet {
-    border-radius: 16px;
+    border-radius: var(--radius-card);
   }
 }
 </style>

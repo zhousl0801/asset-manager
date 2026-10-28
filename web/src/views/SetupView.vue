@@ -186,7 +186,7 @@ function clearErrors(): void {
   min-height: 48px;
   padding: 0 13px;
   border: 1px solid var(--color-border-control);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 16px;
@@ -202,20 +202,20 @@ function clearErrors(): void {
 
 .field-hint {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
 .field-error {
   color: var(--color-error);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.6;
 }
 
 .form-error {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
   font-size: 12px;

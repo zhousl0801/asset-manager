@@ -15,14 +15,14 @@ defineEmits<{ back: [] }>()
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  width: 36px;
-  height: 36px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   padding: 0;
   border: 1px solid var(--color-border-subtle);
   border-radius: 50%;
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  transition: background .15s ease, transform .15s ease;
+  transition: background var(--motion-fast) ease, transform var(--motion-fast) ease;
 }
 
 .back-button:hover {
@@ -34,7 +34,7 @@ defineEmits<{ back: [] }>()
 }
 
 .back-button :deep(.app-icon) {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 </style>

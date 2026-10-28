@@ -6,6 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } f
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { formatSignedMoney } from '../utils/format'
+import { chartTheme } from '../utils/chartTheme'
 import type { FundReturnPoint } from '../types/fundReturn'
 
 echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, CanvasRenderer])
@@ -27,7 +28,7 @@ function buildOption(): EChartsOption {
       right: 0,
       itemWidth: 10,
       itemHeight: 8,
-      textStyle: { fontSize: 9, color: '#626C80' }
+      textStyle: { fontSize: 12, color: chartTheme.text }
     },
     tooltip: {
       trigger: 'axis',
@@ -58,21 +59,21 @@ function buildOption(): EChartsOption {
       type: 'category',
       data: props.points.map((point) => point.date.slice(5).replace('-', '/')),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#E2E6EE' } },
+      axisLine: { lineStyle: { color: chartTheme.axis } },
       axisLabel: {
-        color: '#626C80',
-        fontSize: 9,
+        color: chartTheme.text,
+        fontSize: 12,
         interval: axisInterval()
       }
     },
     yAxis: {
       type: 'value',
       axisLabel: {
-        color: '#626C80',
-        fontSize: 9,
+        color: chartTheme.text,
+        fontSize: 12,
         formatter: (value: number) => Math.abs(value) >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value)
       },
-      splitLine: { lineStyle: { color: '#EEF0F6' } }
+      splitLine: { lineStyle: { color: chartTheme.grid } }
     },
     dataZoom: [{ type: 'inside' }],
     series: [
@@ -83,7 +84,7 @@ function buildOption(): EChartsOption {
           ? null
           : {
               value: point.dailyProfit,
-              itemStyle: { color: point.dailyProfit >= 0 ? '#C4372B' : '#18734E' }
+              itemStyle: { color: point.dailyProfit >= 0 ? chartTheme.gain : chartTheme.loss }
             }),
         barMaxWidth: 8
       },
@@ -94,8 +95,8 @@ function buildOption(): EChartsOption {
         smooth: false,
         showSymbol: false,
         connectNulls: false,
-        lineStyle: { width: 2, color: '#002FA7' },
-        itemStyle: { color: '#002FA7' }
+        lineStyle: { width: 2, color: chartTheme.brand },
+        itemStyle: { color: chartTheme.brand }
       }
     ]
   }

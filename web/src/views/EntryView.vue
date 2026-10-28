@@ -480,15 +480,15 @@ function handleKeydown(event: KeyboardEvent): void {
   display: flex;
   gap: 4px;
   padding: 3px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-subtle);
 }
 
 .kind-tabs button {
-  min-height: 32px;
+  min-height: var(--touch-target);
   padding: 0 16px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
   font-size: 13px;
@@ -531,10 +531,10 @@ function handleKeydown(event: KeyboardEvent): void {
   min-height: 76px;
   padding: 8px 2px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .category-tile:hover:not(:disabled) {
@@ -557,7 +557,7 @@ function handleKeydown(event: KeyboardEvent): void {
   background: var(--color-bg-surface);
   color: var(--color-brand);
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .category-tile.active .category-mark {
@@ -611,7 +611,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .reversed-banner {
   margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-warning-bg);
   color: var(--color-warning);
   font-size: 12px;
@@ -631,14 +631,14 @@ function handleKeydown(event: KeyboardEvent): void {
   margin-top: 12px;
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-surface);
 }
 
 .reverse-panel p {
   margin: 0 0 8px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
@@ -650,10 +650,10 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .danger-button {
-  min-height: 40px;
+  min-height: var(--touch-target);
   padding: 0 16px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--color-danger);
   color: var(--color-on-brand);
   font-size: 13px;
@@ -675,7 +675,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .form-error {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
   font-size: 12px;
@@ -685,7 +685,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .source-note {
   margin: 12px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .entry-footer {
@@ -709,7 +709,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .amount-expression {
   color: var(--color-text-primary);
   font-size: 30px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -0.8px;
   font-variant-numeric: tabular-nums;
 }

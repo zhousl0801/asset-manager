@@ -271,7 +271,7 @@ function priceText(item: QuoteStatusItem): string {
 .quote-header h1 {
   margin: 0;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.4px;
 }
 
@@ -279,7 +279,7 @@ function priceText(item: QuoteStatusItem): string {
   margin-top: 14px;
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -298,17 +298,17 @@ function priceText(item: QuoteStatusItem): string {
 
 .quote-card header span {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
-.scheduler-state {
-  color: var(--color-brand) !important;
+.quote-card header .scheduler-state {
+  color: var(--color-brand);
 }
 
 .scheduler-meta {
   margin: 9px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .refresh-actions {
@@ -319,9 +319,9 @@ function priceText(item: QuoteStatusItem): string {
 }
 
 .refresh-actions button {
-  min-height: 36px;
-  border-radius: 8px;
-  font-size: 10px;
+  min-height: var(--touch-target);
+  border-radius: var(--radius-tag);
+  font-size: var(--text-caption);
 }
 
 .refresh-primary {
@@ -345,20 +345,20 @@ function priceText(item: QuoteStatusItem): string {
 .notice {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
 .form-error {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--color-danger-bg, rgba(196, 55, 43, 0.08));
+  border-radius: var(--radius-tag);
+  background: var(--color-error-bg);
   color: var(--color-finance-loss);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
@@ -371,21 +371,21 @@ function priceText(item: QuoteStatusItem): string {
 
 .run-metrics > div {
   padding: 8px;
-  border-radius: 8px;
-  background: var(--color-bg-soft, rgba(24, 32, 51, 0.03));
+  border-radius: var(--radius-tag);
+  background: var(--color-bg-subtle);
 }
 
 .run-metrics span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
 }
 
 .run-metrics b {
   display: block;
   margin-top: 3px;
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -394,7 +394,7 @@ function priceText(item: QuoteStatusItem): string {
   padding: 0;
   list-style: none;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -414,7 +414,7 @@ function priceText(item: QuoteStatusItem): string {
   margin: 10px 0 0;
   padding-left: 16px;
   color: var(--color-finance-loss);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -431,7 +431,7 @@ function priceText(item: QuoteStatusItem): string {
   gap: 4px 10px;
   padding: 11px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 .quote-item-title {
@@ -441,7 +441,7 @@ function priceText(item: QuoteStatusItem): string {
 }
 
 .quote-item-title strong {
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 600;
 }
 
@@ -450,7 +450,7 @@ function priceText(item: QuoteStatusItem): string {
   display: block;
   margin-top: 3px;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
 }
 
 .quote-item-value {
@@ -459,7 +459,7 @@ function priceText(item: QuoteStatusItem): string {
 
 .quote-item-value b {
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -470,7 +470,7 @@ function priceText(item: QuoteStatusItem): string {
   gap: 4px 9px;
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 8px;
+  font-size: var(--text-caption);
 }
 
 .quote-error {
@@ -479,8 +479,8 @@ function priceText(item: QuoteStatusItem): string {
 
 .quote-tag {
   padding: 2px 5px;
-  border-radius: 999px;
-  font-size: 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption);
 }
 
 .quote-tag.fresh {
@@ -489,17 +489,17 @@ function priceText(item: QuoteStatusItem): string {
 }
 
 .quote-tag.failed {
-  background: var(--color-danger-bg, rgba(196, 55, 43, 0.08));
+  background: var(--color-error-bg);
   color: var(--color-finance-loss);
 }
 
 .quote-tag.stale {
-  background: rgba(196, 148, 43, 0.12);
-  color: #9a6b12;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .quote-tag.quiet {
-  background: var(--color-bg-soft, rgba(24, 32, 51, 0.04));
+  background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
 }
 
@@ -507,7 +507,7 @@ function priceText(item: QuoteStatusItem): string {
 .page-footnote {
   margin: 10px 0 0;
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 

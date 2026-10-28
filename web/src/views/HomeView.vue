@@ -452,8 +452,8 @@ onMounted(loadLedger)
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0 -19px 18px;
-  padding: max(12px, env(safe-area-inset-top)) 19px 12px;
+  margin: 0 calc(var(--page-gutter) * -1) 18px;
+  padding: max(12px, env(safe-area-inset-top)) var(--page-gutter) 12px;
   border-bottom: 1px solid var(--color-border-subtle);
   background: var(--color-bg-surface);
 }
@@ -480,16 +480,16 @@ onMounted(loadLedger)
 
 .tag {
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .hero-value {
   margin: 8px 0 10px;
   font-size: 40px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: -1.7px;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
@@ -511,13 +511,13 @@ onMounted(loadLedger)
   border: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
 .hero-change b {
   color: var(--color-text-primary);
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -532,34 +532,34 @@ onMounted(loadLedger)
 
 .info-mark {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .added-note {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .hero-meta {
   margin: 8px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
 .meta {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
-.gain {
-  color: var(--color-finance-gain) !important;
+b.gain {
+  color: var(--color-finance-gain);
 }
 
-.loss {
-  color: var(--color-finance-loss) !important;
+b.loss {
+  color: var(--color-finance-loss);
 }
 
 .trend-panel {
@@ -567,7 +567,7 @@ onMounted(loadLedger)
   margin-bottom: 20px;
   padding: 15px 13px 11px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -596,13 +596,13 @@ onMounted(loadLedger)
 }
 
 .range-button {
-  min-height: 28px;
+  min-height: var(--touch-target);
   padding: 5px 6px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .range-button:hover {
@@ -628,26 +628,26 @@ onMounted(loadLedger)
   min-height: 22px;
   margin: 10px 1px 2px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .chart-readout b {
   color: var(--color-text-primary);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .chart-readout b.faint {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   font-weight: 500;
 }
 
 .trend-wait {
   padding: 14px 4px 16px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .trend-wait p {
@@ -660,20 +660,20 @@ onMounted(loadLedger)
 .trend-wait small {
   display: block;
   margin-top: 7px;
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .progress {
   overflow: hidden;
   height: 5px;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--color-bg-subtle);
 }
 
 .progress span {
   display: block;
   height: 100%;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--color-brand);
   transition: width 0.2s ease;
 }
@@ -683,7 +683,7 @@ onMounted(loadLedger)
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   text-decoration: none;
 }
 
@@ -696,7 +696,7 @@ onMounted(loadLedger)
   margin-bottom: 22px;
   padding: 15px 13px 11px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -714,14 +714,14 @@ onMounted(loadLedger)
 .month-grid span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .month-grid b {
   display: block;
   margin-top: 7px;
   font-size: 18px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -734,7 +734,7 @@ onMounted(loadLedger)
   padding-top: 10px;
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -743,7 +743,7 @@ onMounted(loadLedger)
   padding-top: 11px;
   border-top: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
@@ -755,7 +755,7 @@ onMounted(loadLedger)
 .plan-box {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -783,16 +783,16 @@ onMounted(loadLedger)
   align-items: center;
   min-width: 40px;
   padding: 7px 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-tag);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .date-box b {
   margin-top: 3px;
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -806,19 +806,19 @@ onMounted(loadLedger)
 
 .plan-main b {
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .plan-main small {
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
 .plan-amount {
   color: var(--color-text-primary);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -826,13 +826,13 @@ onMounted(loadLedger)
 .plan-note {
   margin: 8px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
 .tiny {
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .breakdown {
@@ -854,7 +854,7 @@ onMounted(loadLedger)
 .breakdown-total b {
   color: var(--color-text-primary);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -877,7 +877,7 @@ onMounted(loadLedger)
 .sheet-note {
   margin: 6px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 </style>

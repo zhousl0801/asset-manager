@@ -464,7 +464,7 @@ function goBack(): void {
 }
 
 .back-link {
-  min-height: 36px;
+  min-height: var(--touch-target);
   padding: 0 4px;
   border: 0;
   background: transparent;
@@ -496,7 +496,7 @@ function goBack(): void {
   display: flex;
   justify-content: center;
   margin-top: 24px;
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .stats-direction {
@@ -506,10 +506,10 @@ function goBack(): void {
 }
 
 .stats-direction button {
-  min-height: 34px;
+  min-height: var(--touch-target);
   padding: 0 16px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -519,7 +519,7 @@ function goBack(): void {
   border-color: var(--color-brand);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .stats-panel,
@@ -528,7 +528,7 @@ function goBack(): void {
   margin-bottom: 14px;
   padding: 14px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -548,28 +548,28 @@ function goBack(): void {
 
 .stats-head b {
   font-size: 22px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .stats-meta {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.7;
 }
 
 .stats-note {
   margin: 8px 0 0;
   color: var(--color-warning);
-  font-size: 10px;
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
 .state-inline {
   margin: 8px 0 4px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   line-height: 1.7;
 }
 
@@ -598,7 +598,7 @@ function goBack(): void {
 }
 
 .rank-top b {
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -607,14 +607,14 @@ function goBack(): void {
   height: 5px;
   margin: 6px 0 4px;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
 }
 
 .rank-bar span {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-tag);
   background: var(--color-brand);
 }
 
@@ -624,14 +624,14 @@ function goBack(): void {
 
 .rank-row small {
   color: var(--color-text-secondary);
-  font-size: 9px;
+  font-size: var(--text-caption);
 }
 
 .period-panel {
   margin-bottom: 18px;
   padding: 16px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -648,18 +648,18 @@ function goBack(): void {
   display: flex;
   gap: 2px;
   padding: 2px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-subtle);
 }
 
 .period-tabs button {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .period-tabs button.active {
@@ -675,10 +675,10 @@ function goBack(): void {
 }
 
 .period-nav button {
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
   font-size: 18px;
@@ -711,14 +711,14 @@ function goBack(): void {
 .summary-grid span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .summary-grid b {
   display: block;
   margin-top: 8px;
-  font-size: clamp(16px, 5vw, 20px);
-  font-weight: 550;
+  font-size: clamp(13px, 4.4vw, 20px);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -739,13 +739,13 @@ function goBack(): void {
 }
 
 .kind-tabs button {
-  min-height: 30px;
+  min-height: var(--touch-target);
   padding: 0 12px;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
 }
 
 .kind-tabs button.active {
@@ -763,10 +763,10 @@ function goBack(): void {
 .filter-row input,
 .filter-row select {
   box-sizing: border-box;
-  min-height: 38px;
+  min-height: var(--touch-target);
   padding: 0 10px;
   border: 1px solid var(--color-border-control);
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
   font-size: 13px;
@@ -792,7 +792,7 @@ function goBack(): void {
   gap: 10px;
   padding: 0 2px 8px;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
 }
 
 .day-totals {
@@ -803,7 +803,7 @@ function goBack(): void {
 .day-card {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-surface);
 }
 
@@ -838,7 +838,7 @@ function goBack(): void {
   background: var(--color-brand-soft);
   color: var(--color-brand);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .entry-copy {
@@ -856,7 +856,7 @@ function goBack(): void {
 .entry-copy small {
   overflow: hidden;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--text-footnote);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -864,14 +864,14 @@ function goBack(): void {
 .entry-row b {
   flex: 0 0 auto;
   font-size: 14px;
-  font-weight: 550;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .empty-state {
   padding: 36px 16px;
   border: 1px dashed var(--color-border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   text-align: center;
 }
 
@@ -888,7 +888,24 @@ function goBack(): void {
 .list-note {
   margin: 4px 0 0;
   color: var(--color-text-secondary);
-  font-size: 10px;
+  font-size: var(--text-caption);
   text-align: center;
+}
+@media (max-width: 360px) {
+  .period-panel {
+    padding: 14px;
+  }
+
+  .summary-grid {
+    gap: 6px;
+  }
+
+  .summary-grid > div + div {
+    padding-left: 6px;
+  }
+
+  .summary-grid b {
+    font-size: 13px;
+  }
 }
 </style>
