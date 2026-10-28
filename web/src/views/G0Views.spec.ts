@@ -6,7 +6,7 @@ import CashView from './CashView.vue'
 import { ApiError } from '../api/client'
 
 const mocks = vi.hoisted(() => ({ provident: vi.fn(), deposit: vi.fn(), withdraw: vi.fn(), opening: vi.fn(), plans: vi.fn(), savePlan: vi.fn(), pausePlan: vi.fn(), resumePlan: vi.fn(), entries: vi.fn(), cash: vi.fn(), reconcile: vi.fn() }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/provident', () => ({ fetchProvidentOverview: mocks.provident, depositProvident: mocks.deposit, withdrawProvident: mocks.withdraw, setProvidentOpening: mocks.opening }))
 vi.mock('../api/plans', () => ({ fetchPlanOverview: mocks.plans, savePlan: mocks.savePlan, pausePlan: mocks.pausePlan, resumePlan: mocks.resumePlan }))
 vi.mock('../api/cash', () => ({ fetchCashOverview: mocks.cash, reconcileCash: mocks.reconcile }))

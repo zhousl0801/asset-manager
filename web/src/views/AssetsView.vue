@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import AssetDistribution from '../components/AssetDistribution.vue'
 import BackButton from '../components/BackButton.vue'
+import BottomSheet from '../components/BottomSheet.vue'
 import { useLedgerStore } from '../stores/ledger'
 import { formatBusinessDate, formatMoney, todayInBusinessTimeZone } from '../utils/format'
 import type { AssetKey, LedgerOverview, MonthChange } from '../types/ledger'
@@ -18,6 +19,7 @@ const updateDate = ref(todayInBusinessTimeZone())
 const isLoading = ref(false)
 const errorMessage = ref('')
 const notice = ref('')
+const maintenanceOpen = ref(false)
 
 const recordedCount = computed(() => {
   if (!overview.value) {
@@ -44,6 +46,49 @@ const missingAssets = computed(() => {
 })
 
 const primaryMissing = computed(() => missingAssets.value[0] ?? null)
+
+const maintenanceRows = computed(() => {
+  const ledger = overview.value
+
+  if (!ledger) {
+    return []
+  }
+
+  return [
+    {
+      key: 'cash' as const,
+      label: '现金',
+      note: ledger.cash.note,
+      route: '/cash?action=reconcile',
+      action: '核对余额',
+      notHeld: false
+    },
+    {
+      key: 'providentFund' as const,
+      label: '公积金',
+      note: ledger.providentFund.note ?? (ledger.providentFund.isConfigured ? '统一公积金余额' : '尚未录入'),
+      route: '/provident',
+      action: ledger.providentFund.notHeld ? '恢复' : ledger.providentFund.isConfigured ? '更新' : '去录入',
+      notHeld: ledger.providentFund.notHeld
+    },
+    {
+      key: 'fund' as const,
+      label: '基金',
+      note: ledger.fund.note ?? (ledger.fund.isConfigured ? '基金持仓与交易' : '尚未录入'),
+      route: '/funds',
+      action: ledger.fund.notHeld ? '恢复' : ledger.fund.isConfigured ? '查看' : '去录入',
+      notHeld: ledger.fund.notHeld
+    },
+    {
+      key: 'gold' as const,
+      label: '积存金',
+      note: ledger.gold.note ?? (ledger.gold.isConfigured ? '持仓与交易' : '尚未录入'),
+      route: '/gold',
+      action: ledger.gold.notHeld ? '恢复' : ledger.gold.isConfigured ? '核对' : '去录入',
+      notHeld: ledger.gold.notHeld
+    }
+  ]
+})
 
 onMounted(load)
 
@@ -119,6 +164,7 @@ function goHome(): void {
           <h1>资产</h1>
           <p>维护每类资产的余额与覆盖范围</p>
         </div>
+        <button type="button" class="maintenance-link" @click="maintenanceOpen = true">维护</button>
       </div>
     </header>
 
@@ -163,6 +209,38 @@ function goHome(): void {
       </p>
     </template>
 
+    <BottomSheet
+      :open="maintenanceOpen"
+      title="维护资产"
+      subtitle="录入、核对余额，或恢复已标记不持有的资产"
+      @close="maintenanceOpen = false"
+    >
+      <div class="maintenance-list">
+        <div v-for="row in maintenanceRows" :key="row.key" class="maintenance-row">
+          <div class="maintenance-copy">
+            <strong>{{ row.label }}</strong>
+            <small>{{ row.note }}</small>
+          </div>
+          <button
+            v-if="row.notHeld"
+            type="button"
+            class="maintenance-action"
+            @click="toggleNotHeld(row.key, false)"
+          >
+            恢复
+          </button>
+          <RouterLink
+            v-else
+            :to="row.route"
+            class="maintenance-action"
+            @click="maintenanceOpen = false"
+          >
+            {{ row.action }} ›
+          </RouterLink>
+        </div>
+      </div>
+    </BottomSheet>
+
     <AppNav />
   </main>
 </template>
@@ -187,6 +265,73 @@ function goHome(): void {
 
 .page-head-title {
   min-width: 0;
+}
+
+.maintenance-link {
+  min-height: var(--touch-target);
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+}
+
+.maintenance-list {
+  display: grid;
+  gap: 2px;
+}
+
+.maintenance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.maintenance-row:first-child {
+  border-top: 0;
+}
+
+.maintenance-copy {
+  min-width: 0;
+}
+
+.maintenance-copy strong {
+  display: block;
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.maintenance-copy small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maintenance-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: var(--touch-target);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .page-head h1 {

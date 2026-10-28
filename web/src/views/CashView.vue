@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchCashOverview, reconcileCash } from '../api/cash'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
@@ -18,6 +18,7 @@ interface ActivityGroup {
   activities: CashActivity[]
 }
 
+const route = useRoute()
 const router = useRouter()
 const overview = ref<CashOverview | null>(null)
 const isLoading = ref(false)
@@ -78,6 +79,11 @@ const canSave = computed(() =>
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
   await loadCash()
+
+  if (route.query.action === 'reconcile' && overview.value) {
+    openReconcile()
+    void router.replace({ name: 'cash' })
+  }
 })
 
 onBeforeUnmount(() => {
