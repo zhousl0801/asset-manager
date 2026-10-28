@@ -96,6 +96,7 @@ const sortKey = ref<FundSortKey>('value')
 const metricKeys = ref<FundMetricKey[]>(loadMetricKeys())
 const metricNotice = ref('')
 const groupSheetOpen = ref(false)
+const settingsOpen = ref(false)
 const pendingGroupRemoval = ref<{ id: string; name: string } | null>(null)
 const groupDraft = ref('')
 const groupError = ref('')
@@ -1240,31 +1241,34 @@ function goBack(): void {
   <main class="page funds-page with-nav">
     <header class="funds-header">
       <BackButton @back="goBack" />
-      <details class="investment-actions">
+      <h1>投资</h1>
+      <div class="funds-header-actions">
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="搜索、排序与指标"
+          :class="{ active: searchText.trim() }"
+          @click="settingsOpen = true"
+        >
+          <AppIcon name="filter" />
+        </button>
+        <details class="investment-actions">
           <summary class="icon-button" aria-label="记录投资"><AppIcon name="plus" /></summary>
           <div class="funds-actions" @click="($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">
-        <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
-        <button
-          type="button"
-          class="action-primary"
-          :disabled="!overview?.positions.length"
-          @click="openSheet('buy')"
-        >
-          买入
-        </button>
-        <button
-          type="button"
-          class="action-secondary"
-          :disabled="!overview?.positions.length"
-          @click="openSheet('sell')"
-        >
-          卖出
-        </button>
+            <button type="button" class="action-secondary" @click="openSheet('opening')">录入持仓</button>
+            <button type="button" class="action-primary" :disabled="!overview?.positions.length" @click="openSheet('buy')">买入</button>
+            <button type="button" class="action-secondary" :disabled="!overview?.positions.length" @click="openSheet('sell')">卖出</button>
+          </div>
+        </details>
       </div>
-      </details>
     </header>
 
-    <p v-if="isLoading && !overview" class="state">正在读取基金…</p>
+    <div v-if="isLoading && !overview" class="skeleton-stack" role="status" aria-label="正在读取基金">
+      <div class="skeleton skeleton-hero" />
+      <div class="skeleton skeleton-card" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+    </div>
 
     <section v-else-if="errorMessage" class="state">
       <p>{{ errorMessage }}</p>
@@ -1326,30 +1330,6 @@ function goBack(): void {
         <button type="button" role="tab" :aria-selected="activeView === 'activities'" :class="{ active: activeView === 'activities' }" @click="setView('activities')">交易</button>
         <button type="button" role="tab" :aria-selected="activeView === 'plans'" :class="{ active: activeView === 'plans' }" @click="setView('plans')">定投</button>
       </div>
-      <details v-if="allFunds.length" class="portfolio-settings ui-disclosure">
-        <summary><span><AppIcon name="filter" /> {{ searchText.trim() ? `已筛选：${searchText.trim()}` : '搜索、排序与指标' }}</span></summary>
-      <div class="portfolio-toolbar">
-        <input v-model="searchText" type="search" placeholder="搜索基金名称或代码" aria-label="搜索基金" />
-        <select v-model="sortKey" aria-label="排序方式">
-          <option v-for="option in sortOptions" :key="option.key" :value="option.key">按{{ option.label }}</option>
-        </select>
-      </div>
-
-      <div class="metric-picker" aria-label="持仓指标">
-        <span>指标</span>
-        <button
-          v-for="option in metricOptions"
-          :key="option.key"
-          type="button"
-          :class="{ active: metricKeys.includes(option.key) }"
-          @click="toggleMetric(option.key)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-      <p v-if="metricNotice" class="summary-note">{{ metricNotice }}</p>
-
-      </details>
       <div v-if="searchText.trim()" class="active-search">
         <span>当前仅显示搜索结果</span>
         <button type="button" class="back-link" @click="searchText = ''">清除搜索</button>
@@ -1599,6 +1579,34 @@ function goBack(): void {
     </template>
 
     <BottomSheet
+      :open="settingsOpen"
+      title="搜索、排序与指标"
+      subtitle="只影响当前查看，不改变持仓"
+      @close="settingsOpen = false"
+    >
+      <div class="portfolio-toolbar">
+        <input v-model="searchText" type="search" placeholder="搜索基金名称或代码" aria-label="搜索基金" />
+        <select v-model="sortKey" aria-label="排序方式">
+          <option v-for="option in sortOptions" :key="option.key" :value="option.key">按{{ option.label }}</option>
+        </select>
+      </div>
+
+      <div class="metric-picker" aria-label="持仓指标">
+        <span>显示指标</span>
+        <button
+          v-for="option in metricOptions"
+          :key="option.key"
+          type="button"
+          :class="{ active: metricKeys.includes(option.key) }"
+          @click="toggleMetric(option.key)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <p v-if="metricNotice" class="summary-note">{{ metricNotice }}</p>
+    </BottomSheet>
+
+    <BottomSheet
       :open="groupSheetOpen"
       title="投资分组"
       subtitle="自定义组合视角，最多 20 个字"
@@ -1824,18 +1832,29 @@ function goBack(): void {
 }
 
 .funds-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: var(--touch-target) 1fr auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
 .funds-header h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--text-title3);
   font-weight: 600;
   letter-spacing: -0.3px;
+}
+
+.funds-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+}
+
+.funds-header-actions .icon-button.active {
+  background: var(--color-brand-soft);
 }
 
 .back-link {
@@ -1942,15 +1961,8 @@ function goBack(): void {
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
 }
-.funds-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
 .funds-header .investment-actions {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .investment-actions {
@@ -1983,18 +1995,6 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   font-size: 13px;
   text-align: left;
-}
-.portfolio-settings {
-  margin: 0 0 14px;
-}
-.portfolio-settings summary .app-icon {
-  width: 16px;
-  height: 16px;
-  margin-right: 5px;
-}
-.portfolio-settings[open] {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--color-border-subtle);
 }
 .pending-overview {
   container-type: inline-size;

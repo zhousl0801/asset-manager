@@ -343,7 +343,12 @@ function goBack(): void {
     <button v-if="hasFilters && groupedEntries.length" type="button" class="back-link" @click="clearFilters">清除筛选</button>
     </details>
 
-    <p v-if="isLoading && !summary" class="state">正在读取记录…</p>
+    <div v-if="isLoading && !summary" class="skeleton-stack" role="status" aria-label="正在读取记录">
+      <div class="skeleton skeleton-card" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+    </div>
 
     <section v-else-if="errorMessage" class="state">
       <p>{{ errorMessage }}</p>

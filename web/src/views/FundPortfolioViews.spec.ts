@@ -246,12 +246,16 @@ test('switching group filters total, funds, pending items and activities consist
 test('a collapsed search keeps its scope visible and can be cleared', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
-  await view.get('.portfolio-toolbar input').setValue('纳指')
-  view.get<HTMLDetailsElement>('.portfolio-settings').element.open = false
+
+  await view.get('button[aria-label="搜索、排序与指标"]').trigger('click')
+  await flushPromises()
+  const input = document.querySelector<HTMLInputElement>('.portfolio-toolbar input')!
+  input.value = '纳指'
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
 
   expect(view.get('.hero-balance').text()).toContain('1,800.00')
   expect(view.get('.hero-label').text()).toContain('搜索「纳指」')
-  expect(view.get('.portfolio-settings summary').text()).toContain('已筛选：纳指')
   await view.get('.active-search button').trigger('click')
   expect(view.get('.hero-balance').text()).toContain('2,400.00')
   expect(view.find('.active-search').exists()).toBe(false)
@@ -317,12 +321,15 @@ test('metric picker keeps at most three indicators', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
-  const costButton = view.findAll('.metric-picker button').find((button) => button.text() === '持仓成本')!
-  await costButton.trigger('click')
+  await view.get('button[aria-label="搜索、排序与指标"]').trigger('click')
+  await flushPromises()
+  const costButton = [...document.querySelectorAll<HTMLButtonElement>('.metric-picker button')]
+    .find((button) => button.textContent?.trim() === '持仓成本')!
+  costButton.click()
   await flushPromises()
 
-  expect(view.text()).toContain('最多同时显示 3 项指标')
-  expect(view.findAll('.metric-picker button.active')).toHaveLength(3)
+  expect(document.body.textContent).toContain('最多同时显示 3 项指标')
+  expect(document.querySelectorAll('.metric-picker button.active')).toHaveLength(3)
 
   view.unmount()
 })

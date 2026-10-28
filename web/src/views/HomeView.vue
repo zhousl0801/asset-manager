@@ -270,7 +270,12 @@ onMounted(loadLedger)
       <span class="header-date">{{ formatBusinessDate(updateDate) }}</span>
     </header>
 
-    <p v-if="isLoading" class="state">正在读取账本…</p>
+    <div v-if="isLoading" class="skeleton-stack" role="status" aria-label="正在读取账本">
+      <div class="skeleton skeleton-hero" />
+      <div class="skeleton skeleton-card" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+    </div>
 
     <section v-else-if="errorMessage" class="state">
       <p>{{ errorMessage }}</p>
