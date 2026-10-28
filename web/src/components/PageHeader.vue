@@ -28,7 +28,7 @@ defineEmits<{ back: [] }>()
 h1 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.4px;
   white-space: nowrap;

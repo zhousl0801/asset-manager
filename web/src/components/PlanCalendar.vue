@@ -187,7 +187,7 @@ function closureTitle(market: MarketDay): string {
 }
 
 .calendar-title strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -215,7 +215,7 @@ function closureTitle(market: MarketDay): string {
   border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
 }
 
@@ -226,7 +226,7 @@ function closureTitle(market: MarketDay): string {
 .calendar-nav b {
   min-width: 86px;
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   text-align: center;
   white-space: nowrap;

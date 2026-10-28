@@ -336,7 +336,7 @@ function goHome(): void {
 
 .page-head h1 {
   margin: 0;
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -357,7 +357,7 @@ function goHome(): void {
   gap: 8px;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .tag {
@@ -370,7 +370,7 @@ function goHome(): void {
 
 .hero-value {
   margin: 8px 0 8px;
-  font-size: 40px;
+  font-size: 2.5rem;
   font-weight: 500;
   letter-spacing: -1.7px;
   line-height: 1.25;
@@ -379,7 +379,7 @@ function goHome(): void {
 
 .hero-value .currency {
   margin-right: 5px;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 400;
   letter-spacing: 0;
 }

@@ -474,7 +474,7 @@ function goBack(): void {
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .view-tabs {
@@ -517,7 +517,7 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .stats-direction button.active {
@@ -547,12 +547,12 @@ function goBack(): void {
 
 .stats-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
 .stats-head b {
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -599,7 +599,7 @@ function goBack(): void {
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .rank-top b {
@@ -686,7 +686,7 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
 }
 
@@ -696,7 +696,7 @@ function goBack(): void {
 }
 
 .period-nav strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: -0.2px;
   white-space: nowrap;
@@ -722,7 +722,7 @@ function goBack(): void {
 .summary-grid b {
   display: block;
   margin-top: 8px;
-  font-size: clamp(13px, 4.4vw, 20px);
+  font-size: clamp(0.8125rem, 4.4vw, 1.25rem);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -774,7 +774,7 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .filter-row input {
@@ -842,7 +842,7 @@ function goBack(): void {
   border-radius: 50%;
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
 }
 
@@ -855,7 +855,7 @@ function goBack(): void {
 }
 
 .entry-title {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .entry-copy small {
@@ -868,7 +868,7 @@ function goBack(): void {
 
 .entry-row b {
   flex: 0 0 auto;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -883,7 +883,7 @@ function goBack(): void {
 .empty-state p {
   margin: 0 0 14px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .empty-state .primary-button {
@@ -910,7 +910,7 @@ function goBack(): void {
   }
 
   .summary-grid b {
-    font-size: 13px;
+    font-size: 0.8125rem;
   }
 }
 </style>

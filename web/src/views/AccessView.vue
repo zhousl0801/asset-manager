@@ -94,11 +94,11 @@ async function usePasskey(): Promise<void> {
   border-radius: var(--radius-card);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
 }
-h1 { margin: 4px 0 0; font-size: 22px; }
-.access-card > p { margin: 0; color: var(--color-text-secondary); font-size: 13px; }
+h1 { margin: 4px 0 0; font-size: 1.375rem; }
+.access-card > p { margin: 0; color: var(--color-text-secondary); font-size: 0.8125rem; }
 .access-passkey {
   min-height: 48px;
   margin-top: 8px;
@@ -128,7 +128,7 @@ h1 { margin: 4px 0 0; font-size: 22px; }
   background: var(--color-border-subtle);
 }
 .access-form { display: grid; gap: 12px; }
-label { margin-top: 2px; font-size: 13px; font-weight: 600; }
+label { margin-top: 2px; font-size: 0.8125rem; font-weight: 600; }
 input {
   box-sizing: border-box;
   width: 100%;

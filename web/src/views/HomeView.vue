@@ -513,7 +513,7 @@ onMounted(loadLedger)
 
 .hero-value {
   margin: 8px 0 12px;
-  font-size: clamp(34px, 10.5vw, 44px);
+  font-size: clamp(2.125rem, 10.5vw, 2.75rem);
   font-weight: 600;
   letter-spacing: -1.4px;
   line-height: 1.2;
@@ -522,7 +522,7 @@ onMounted(loadLedger)
 
 .hero-value .currency {
   margin-right: 5px;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -660,7 +660,7 @@ b.loss {
 
 .chart-readout b {
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -680,7 +680,7 @@ b.loss {
 .trend-wait p {
   margin: 0 0 10px;
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -747,7 +747,7 @@ b.loss {
 .month-grid b {
   display: block;
   margin-top: 7px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -818,7 +818,7 @@ b.loss {
 
 .date-box b {
   margin-top: 3px;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -832,7 +832,7 @@ b.loss {
 }
 
 .plan-main b {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -844,7 +844,7 @@ b.loss {
 
 .plan-amount {
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -874,13 +874,13 @@ b.loss {
   align-items: baseline;
   gap: 12px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .breakdown-row b,
 .breakdown-total b {
   color: var(--color-text-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }

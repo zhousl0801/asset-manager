@@ -317,7 +317,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 
 .return-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -377,7 +377,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   display: block;
   margin-top: 5px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -429,7 +429,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 }
 
 .calendar-head strong {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -440,7 +440,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-brand);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .calendar-head button:disabled {
@@ -546,7 +546,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .day-summary b {
   display: block;
   margin-top: 5px;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -594,7 +594,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 }
 
 .day-position-value b {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }

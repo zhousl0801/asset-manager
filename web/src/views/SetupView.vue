@@ -154,7 +154,7 @@ function clearErrors(): void {
 <style scoped>
 .intro h1 {
   margin: 0 0 10px;
-  font-size: 26px;
+  font-size: 1.625rem;
   font-weight: 600;
   letter-spacing: -0.6px;
 }
@@ -162,7 +162,7 @@ function clearErrors(): void {
 .intro p {
   margin: 0 0 28px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.8;
 }
 
@@ -177,7 +177,7 @@ function clearErrors(): void {
   flex-direction: column;
   gap: 8px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .field input {
@@ -189,7 +189,7 @@ function clearErrors(): void {
   border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .field input:hover {
@@ -218,7 +218,7 @@ function clearErrors(): void {
   border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 </style>

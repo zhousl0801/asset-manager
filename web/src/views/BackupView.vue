@@ -328,7 +328,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .backup-header h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.4px;
 }
@@ -357,7 +357,7 @@ function summaryItems(summary: BackupSummary): { label: string; value: string }[
 
 .backup-card h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 

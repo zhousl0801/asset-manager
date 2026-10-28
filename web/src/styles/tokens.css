@@ -4,16 +4,16 @@
  */
 :root {
   /* 文本层级：正文不小于 15px，说明文字不小于 12px。 */
-  --text-caption: 12px;
-  --text-footnote: 13px;
-  --text-subhead: 15px;
-  --text-body: 16px;
-  --text-headline: 17px;
-  --text-title3: 20px;
-  --text-title2: 22px;
-  --text-title1: 28px;
-  --text-large-title: 34px;
-  --text-display: 40px;
+  --text-caption: 0.75rem;
+  --text-footnote: 0.8125rem;
+  --text-subhead: 0.9375rem;
+  --text-body: 1rem;
+  --text-headline: 1.0625rem;
+  --text-title3: 1.25rem;
+  --text-title2: 1.375rem;
+  --text-title1: 1.75rem;
+  --text-large-title: 2.125rem;
+  --text-display: 2.5rem;
 
   --leading-tight: 1.2;
   --leading-normal: 1.45;

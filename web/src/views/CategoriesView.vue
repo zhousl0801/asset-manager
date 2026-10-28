@@ -275,7 +275,7 @@ onMounted(loadCategories)
 
 .categories-header h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -286,7 +286,7 @@ onMounted(loadCategories)
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   text-decoration: none;
 }
@@ -314,7 +314,7 @@ onMounted(loadCategories)
   border-radius: var(--radius-tag);
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .kind-tabs button.active {
@@ -369,7 +369,7 @@ onMounted(loadCategories)
 }
 
 .category-name {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .status-tag {
@@ -403,7 +403,7 @@ onMounted(loadCategories)
 }
 
 .icon-action {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .icon-action:disabled,

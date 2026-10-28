@@ -6,7 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } f
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { formatSignedMoney } from '../utils/format'
-import { chartTheme } from '../utils/chartTheme'
+import { chartFontSize, chartTheme } from '../utils/chartTheme'
 import type { FundReturnPoint } from '../types/fundReturn'
 
 echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, CanvasRenderer])
@@ -18,8 +18,17 @@ const props = defineProps<{
 
 const container = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
+const colorScheme = typeof window !== 'undefined'
+  ? window.matchMedia?.('(prefers-color-scheme: dark)')
+  : undefined
+
+function render(): void {
+  chart?.setOption(buildOption(), { notMerge: true })
+}
 
 function buildOption(): EChartsOption {
+  const theme = chartTheme()
+
   return {
     animation: false,
     grid: { left: 48, right: 14, top: 34, bottom: 26 },
@@ -28,7 +37,7 @@ function buildOption(): EChartsOption {
       right: 0,
       itemWidth: 10,
       itemHeight: 8,
-      textStyle: { fontSize: 12, color: chartTheme.text }
+      textStyle: { fontSize: chartFontSize(12), color: theme.text }
     },
     tooltip: {
       trigger: 'axis',
@@ -59,21 +68,21 @@ function buildOption(): EChartsOption {
       type: 'category',
       data: props.points.map((point) => point.date.slice(5).replace('-', '/')),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: chartTheme.axis } },
+      axisLine: { lineStyle: { color: theme.axis } },
       axisLabel: {
-        color: chartTheme.text,
-        fontSize: 12,
+        color: theme.text,
+        fontSize: chartFontSize(12),
         interval: axisInterval()
       }
     },
     yAxis: {
       type: 'value',
       axisLabel: {
-        color: chartTheme.text,
-        fontSize: 12,
+        color: theme.text,
+        fontSize: chartFontSize(12),
         formatter: (value: number) => Math.abs(value) >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value)
       },
-      splitLine: { lineStyle: { color: chartTheme.grid } }
+      splitLine: { lineStyle: { color: theme.grid } }
     },
     dataZoom: [{ type: 'inside' }],
     series: [
@@ -84,7 +93,7 @@ function buildOption(): EChartsOption {
           ? null
           : {
               value: point.dailyProfit,
-              itemStyle: { color: point.dailyProfit >= 0 ? chartTheme.gain : chartTheme.loss }
+              itemStyle: { color: point.dailyProfit >= 0 ? theme.gain : theme.loss }
             }),
         barMaxWidth: 8
       },
@@ -95,8 +104,8 @@ function buildOption(): EChartsOption {
         smooth: false,
         showSymbol: false,
         connectNulls: false,
-        lineStyle: { width: 2, color: chartTheme.brand },
-        itemStyle: { color: chartTheme.brand }
+        lineStyle: { width: 2, color: theme.brand },
+        itemStyle: { color: theme.brand }
       }
     ]
   }
@@ -120,20 +129,22 @@ onMounted(() => {
   }
 
   chart = echarts.init(container.value, undefined, { renderer: 'canvas' })
-  chart.setOption(buildOption())
+  render()
   window.addEventListener('resize', resize)
+  colorScheme?.addEventListener?.('change', render)
 })
 
 watch(
   () => [props.points, props.range],
   () => {
-    chart?.setOption(buildOption(), { notMerge: true })
+    render()
   },
   { deep: true }
 )
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
+  colorScheme?.removeEventListener?.('change', render)
   chart?.dispose()
   chart = null
 })

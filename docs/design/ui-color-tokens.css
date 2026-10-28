@@ -1,9 +1,9 @@
-/* 资产管家 · 瓷白 + 克莱因蓝 · v1.0 · 2026-10-20
- * 配套说明：UI配色规范.md。仅定义浅色主题，不自动跟随系统切换深色。
+/* 资产管家 · 瓷白 + 克莱因蓝 · v1.1 · 2026-10-28
+ * 配套说明：UI配色规范.md。浅色为默认主题，并跟随系统 prefers-color-scheme 切换深色。
  * 应用在页面或根容器设置 data-theme="porcelain" 后生效。
  */
 [data-theme="porcelain"] {
-  color-scheme: light;
+  color-scheme: light dark;
 
   /* 原始色板：业务组件优先引用下方语义变量。 */
   --palette-white: #FFFFFF;
@@ -45,6 +45,7 @@
   --color-brand-soft-hover: var(--palette-blue-200);
   --color-on-brand: var(--palette-white);
   --color-bg-page: var(--palette-gray-50);
+  --color-bg-canvas: var(--palette-gray-150);
   --color-bg-surface: var(--palette-white);
   --color-bg-subtle: var(--palette-gray-100);
   --color-bg-hover: var(--palette-blue-50);
@@ -114,8 +115,96 @@
   --color-text-tooltip: var(--palette-white);
   --color-overlay: rgba(24, 32, 51, 0.40);
   --color-shadow: rgba(24, 32, 51, 0.08);
+  --color-shadow-strong: rgba(24, 32, 51, 0.16);
   --color-skeleton-base: var(--palette-gray-150);
   --color-skeleton-highlight: var(--palette-gray-100);
   --color-text-selection-bg: var(--palette-blue-200);
   --color-text-selection-fg: var(--palette-gray-900);
+}
+
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="porcelain"] {
+    color-scheme: dark;
+
+    --color-brand: #6E8EFF;
+    --color-brand-hover: #8AA4FF;
+    --color-brand-active: #5F7FF0;
+    --color-brand-soft: #1E2A4D;
+    --color-brand-soft-hover: #28365F;
+    --color-on-brand: #07101F;
+
+    --color-bg-page: #0B0C0F;
+    --color-bg-canvas: #050506;
+    --color-bg-surface: #1C1C1E;
+    --color-bg-subtle: #2C2C2E;
+    --color-bg-hover: #242428;
+    --color-bg-selected: #1E2A4D;
+    --color-text-primary: #F5F5F7;
+    --color-text-secondary: #A1A1A6;
+    --color-text-placeholder: #8E8E93;
+    --color-text-link: #9BB6FF;
+    --color-text-inverse: #0B0C0F;
+    --color-icon-default: #A1A1A6;
+    --color-border-subtle: rgba(84, 84, 88, 0.55);
+    --color-border-default: rgba(84, 84, 88, 0.75);
+    --color-border-control: #636366;
+    --color-border-hover: #8E8E93;
+    --color-border-focus: #9BB6FF;
+    --color-focus-ring: #9BB6FF;
+    --color-focus-gap: #0B0C0F;
+    --color-bg-disabled: #2C2C2E;
+    --color-text-disabled: #636366;
+    --color-border-disabled: #3A3A3C;
+    --color-bg-readonly: #242428;
+
+    --color-info: #9BB6FF;
+    --color-info-bg: #1E2A4D;
+    --color-success: #4CD97B;
+    --color-success-bg: #112B1C;
+    --color-warning: #FFC65C;
+    --color-warning-bg: #2B2110;
+    --color-error: #FF6B6B;
+    --color-error-bg: #2E1414;
+    --color-danger: #FF6B6B;
+    --color-danger-hover: #FF8585;
+    --color-danger-active: #E85A5A;
+    --color-on-danger: #0B0C0F;
+
+    --color-finance-gain: #FF6B6B;
+    --color-finance-loss: #4CD97B;
+    --color-finance-gain-bg: #2E1414;
+    --color-finance-loss-bg: #112B1C;
+    --color-finance-flat: #A1A1A6;
+    --color-finance-income: #4CD97B;
+    --color-finance-expense: #F5F5F7;
+    --color-finance-transfer: #9BB6FF;
+    --color-finance-net-change: #F5F5F7;
+    --color-finance-liability: #F5F5F7;
+
+    --color-chart-cash: #9BB6FF;
+    --color-chart-investment: #B39DFF;
+    --color-chart-property: #5EE0D0;
+    --color-chart-receivable: #FFD166;
+    --color-chart-other: #A1A1A6;
+    --color-chart-liability: #E58BB4;
+    --color-chart-net-assets: #9BB6FF;
+    --color-chart-total-assets: #5EE0D0;
+    --color-chart-total-liabilities: #E58BB4;
+    --color-chart-grid: rgba(255, 255, 255, 0.08);
+    --color-chart-track: rgba(255, 255, 255, 0.12);
+    --color-chart-separator: #1C1C1E;
+    --color-chart-reference: #8E8E93;
+
+    --color-bg-popover: #1C1C1E;
+    --color-bg-tooltip: #F5F5F7;
+    --color-text-tooltip: #0B0C0F;
+    --color-overlay: rgba(0, 0, 0, 0.62);
+    --color-shadow: rgba(0, 0, 0, 0.45);
+    --color-shadow-strong: rgba(0, 0, 0, 0.62);
+    --color-skeleton-base: #2C2C2E;
+    --color-skeleton-highlight: #3A3A3C;
+    --color-text-selection-bg: #1E2A4D;
+    --color-text-selection-fg: #F5F5F7;
+  }
 }

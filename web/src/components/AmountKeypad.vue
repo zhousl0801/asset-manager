@@ -88,7 +88,7 @@ function pickDate(): void {
   border-radius: var(--radius-card);
   background: transparent;
   color: var(--color-text-primary);
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }

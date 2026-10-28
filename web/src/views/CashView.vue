@@ -475,7 +475,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -505,7 +505,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .hero-balance {
   margin: 8px 0 7px;
-  font-size: 38px;
+  font-size: 2.375rem;
   font-weight: 600;
   letter-spacing: -1.1px;
   line-height: 1.2;
@@ -514,7 +514,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .hero-balance span {
   margin-right: 5px;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -547,7 +547,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .hero-metrics b {
   display: block;
   margin-top: 7px;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
@@ -571,7 +571,7 @@ function handleKeydown(event: KeyboardEvent): void {
   flex: 1;
   min-height: 44px;
   border-radius: var(--radius-control);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
 }
 
@@ -602,7 +602,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 
@@ -623,7 +623,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .section-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.2px;
 }
@@ -717,7 +717,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 50%;
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -731,7 +731,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .activity-copy strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -748,7 +748,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .activity-value {
   flex: 0 0 auto;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -764,7 +764,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .empty-state p {
   margin: 0 0 14px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .empty-state .primary-button {
@@ -810,7 +810,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .sheet-head h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -827,7 +827,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .sheet-body {
@@ -846,13 +846,13 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-control);
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .balance-row b,
 .difference-row b {
   color: var(--color-text-primary);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -862,7 +862,7 @@ function handleKeydown(event: KeyboardEvent): void {
   flex-direction: column;
   gap: 8px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .field input {
@@ -874,7 +874,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .field input:hover {
@@ -901,7 +901,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 

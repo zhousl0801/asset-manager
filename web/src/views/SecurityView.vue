@@ -224,7 +224,7 @@ onMounted(load)
 .passkey-list li:first-child { border-top: 0; }
 .passkey-list strong {
   display: block;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 .passkey-list small {

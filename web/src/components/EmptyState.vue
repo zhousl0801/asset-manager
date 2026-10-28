@@ -45,7 +45,7 @@ defineEmits<{ action: [] }>()
 h3 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 500;
   line-height: 1.5;
 }
@@ -53,7 +53,7 @@ p {
   max-width: 260px;
   margin: 7px 0 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 .secondary-button {
@@ -70,6 +70,6 @@ p {
   border-radius: var(--radius-card);
 }
 .compact h3 {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 </style>

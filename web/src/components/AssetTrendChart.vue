@@ -31,9 +31,16 @@ const emit = defineEmits<{ select: [point: AssetTrendPoint] }>()
 const container = ref<HTMLElement | null>(null)
 const scoped = computed(() => buildScopedTrend(props.trend))
 let chart: echarts.ECharts | null = null
+const colorScheme = typeof window !== 'undefined'
+  ? window.matchMedia?.('(prefers-color-scheme: dark)')
+  : undefined
 
 function resize(): void {
   chart?.resize()
+}
+
+function render(): void {
+  chart?.setOption(buildTrendOption(props.trend, scoped.value) as EChartsOption, { notMerge: true })
 }
 
 onMounted(() => {
@@ -42,7 +49,7 @@ onMounted(() => {
   }
 
   chart = echarts.init(container.value, undefined, { renderer: 'canvas' })
-  chart.setOption(buildTrendOption(props.trend, scoped.value) as EChartsOption)
+  render()
   chart.on('updateAxisPointer', (event: unknown) => {
     const payload = event as { axesInfo?: { axisDim: string; value: number | string }[] }
     const value = payload.axesInfo?.find((axis) => axis.axisDim === 'x')?.value
@@ -53,18 +60,20 @@ onMounted(() => {
     if (point) emit('select', point)
   })
   window.addEventListener('resize', resize)
+  colorScheme?.addEventListener?.('change', render)
 })
 
 watch(
   () => props.trend,
-  (trend) => {
-    chart?.setOption(buildTrendOption(trend, buildScopedTrend(trend)) as EChartsOption, { notMerge: true })
+  () => {
+    render()
   },
   { deep: true }
 )
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
+  colorScheme?.removeEventListener?.('change', render)
   chart?.dispose()
   chart = null
 })

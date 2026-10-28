@@ -738,7 +738,7 @@ function goBack(): void {
 
 .hero-balance {
   margin: 8px 0 7px;
-  font-size: 38px;
+  font-size: 2.375rem;
   font-weight: 600;
   letter-spacing: -1.1px;
   line-height: 1.2;
@@ -747,7 +747,7 @@ function goBack(): void {
 
 .hero-balance span {
   margin-right: 5px;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -780,7 +780,7 @@ function goBack(): void {
 .hero-metrics b {
   display: block;
   margin-top: 7px;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
@@ -804,7 +804,7 @@ function goBack(): void {
 .gold-actions button {
   min-height: 42px;
   border-radius: var(--radius-control);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -841,7 +841,7 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 
@@ -870,7 +870,7 @@ function goBack(): void {
 .quote-panel b {
   display: block;
   margin-top: 6px;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -900,7 +900,7 @@ function goBack(): void {
 
 .section-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: -0.2px;
 }
@@ -942,7 +942,7 @@ function goBack(): void {
 }
 
 .pending-copy strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -963,7 +963,7 @@ function goBack(): void {
 }
 
 .pending-side b {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1008,7 +1008,7 @@ function goBack(): void {
   border-radius: 50%;
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -1021,7 +1021,7 @@ function goBack(): void {
 }
 
 .activity-copy strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
 }
 
@@ -1036,7 +1036,7 @@ function goBack(): void {
 
 .activity-value {
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1059,7 +1059,7 @@ function goBack(): void {
 .empty-state p {
   margin: 0 0 14px;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .empty-state .primary-button {
@@ -1077,7 +1077,7 @@ function goBack(): void {
 
 .sell-preview b {
   color: var(--color-brand);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

@@ -509,7 +509,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-tag);
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .kind-tabs button.active {
@@ -552,7 +552,7 @@ function handleKeydown(event: KeyboardEvent): void {
   max-width: 68%;
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: clamp(32px, 9vw, 40px);
+  font-size: clamp(2rem, 9vw, 2.5rem);
   font-weight: 600;
   letter-spacing: -1px;
   line-height: 1.15;
@@ -608,7 +608,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 50%;
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
 }
 
@@ -627,7 +627,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-top: 1px solid var(--color-border-subtle);
 }
 .entry-options .back-link {
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .entry-fields {
@@ -645,7 +645,7 @@ function handleKeydown(event: KeyboardEvent): void {
   padding: 10px 0;
   border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .field input {
@@ -656,7 +656,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: 0;
   background: transparent;
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: 0.875rem;
   text-align: right;
 }
 
@@ -666,7 +666,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-tag);
   background: var(--color-warning-bg);
   color: var(--color-warning);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 
@@ -676,7 +676,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: 0;
   background: transparent;
   color: var(--color-danger);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .reverse-panel {
@@ -708,7 +708,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-control);
   background: var(--color-danger);
   color: var(--color-on-brand);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .danger-button:hover:not(:disabled) {
@@ -730,7 +730,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: var(--radius-tag);
   background: var(--color-error-bg);
   color: var(--color-error);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 

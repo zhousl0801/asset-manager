@@ -1,6 +1,6 @@
 html {
   background: var(--color-bg-page);
-  color-scheme: light;
+  color-scheme: light dark;
 }
 
 body {
@@ -112,7 +112,7 @@ summary:focus-visible {
   border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-brand);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .secondary-button:hover {
@@ -210,7 +210,7 @@ summary:focus-visible {
 .ui-disclosure > summary::after {
   content: '⌄';
   color: var(--color-brand);
-  font-size: 16px;
+  font-size: 1rem;
 }
 .ui-disclosure[open] > summary::after {
   transform: rotate(180deg);
@@ -232,7 +232,7 @@ summary:focus-visible {
   border: 0;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .ui-segmented button.active {
@@ -286,7 +286,7 @@ summary:focus-visible {
   border-radius: var(--radius-control);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .form-field input:hover,
@@ -377,7 +377,7 @@ summary:focus-visible {
 
 @media (min-width: 600px) {
   body {
-    background: var(--palette-gray-150);
+    background: var(--color-bg-canvas);
   }
 
   .page,
@@ -385,7 +385,7 @@ summary:focus-visible {
     min-height: calc(100dvh - 48px);
     margin: 24px auto;
     border-radius: 28px;
-    box-shadow: 0 24px 64px color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+    box-shadow: 0 24px 64px var(--color-shadow-strong);
     overflow: hidden;
   }
 

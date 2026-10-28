@@ -948,7 +948,7 @@ function goBack(): void {
 
 .plan-header h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 600;
 }
 
@@ -971,7 +971,7 @@ function goBack(): void {
 
 .plan-hero h2 {
   margin: 8px 0 7px;
-  font-size: 30px;
+  font-size: 1.875rem;
   font-weight: 600;
 }
 
@@ -992,7 +992,7 @@ function goBack(): void {
 .plan-actions button {
   min-height: 42px;
   border-radius: var(--radius-control);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -1014,7 +1014,7 @@ function goBack(): void {
   border-radius: var(--radius-tag);
   background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 
@@ -1028,7 +1028,7 @@ function goBack(): void {
 
 .section-head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -1087,7 +1087,7 @@ function goBack(): void {
 
 .group-heading h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: -0.1px;
 }
@@ -1162,7 +1162,7 @@ function goBack(): void {
 
 .plan-card header strong {
   display: block;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -1174,7 +1174,7 @@ function goBack(): void {
 }
 
 .plan-amount {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1217,7 +1217,7 @@ function goBack(): void {
 .fund-details > summary::after {
   flex: 0 0 auto;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
   content: '⌄';
   transition: transform .15s ease;
 }
@@ -1236,7 +1236,7 @@ function goBack(): void {
 
 .fund-summary-copy strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1256,7 +1256,7 @@ function goBack(): void {
 }
 
 .fund-summary-amount b {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1323,7 +1323,7 @@ function goBack(): void {
 }
 
 .fund-row-copy b {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1365,7 +1365,7 @@ function goBack(): void {
 
 .occurrence-card strong {
   display: block;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 

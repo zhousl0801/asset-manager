@@ -284,7 +284,7 @@ function endDrag(): void {
 
 .sheet-head h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -305,7 +305,7 @@ function endDrag(): void {
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-brand);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .sheet-close:hover:not(:disabled) {

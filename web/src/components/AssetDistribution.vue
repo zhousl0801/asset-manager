@@ -311,7 +311,7 @@ function changeLabel(row: DistributionRow): string {
 }
 
 .asset-link.static .asset-amount {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -326,7 +326,7 @@ function changeLabel(row: DistributionRow): string {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .asset-title b {
@@ -350,7 +350,7 @@ function changeLabel(row: DistributionRow): string {
 }
 
 .asset-amount {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -389,7 +389,7 @@ function changeLabel(row: DistributionRow): string {
   border-radius: var(--radius-pill);
   background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;

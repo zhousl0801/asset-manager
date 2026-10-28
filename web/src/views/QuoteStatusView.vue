@@ -270,7 +270,7 @@ function priceText(item: QuoteStatusItem): string {
 
 .quote-header h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.4px;
 }
@@ -292,7 +292,7 @@ function priceText(item: QuoteStatusItem): string {
 
 .quote-card h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -384,7 +384,7 @@ function priceText(item: QuoteStatusItem): string {
 .run-metrics b {
   display: block;
   margin-top: 3px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -458,7 +458,7 @@ function priceText(item: QuoteStatusItem): string {
 }
 
 .quote-item-value b {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
