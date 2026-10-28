@@ -7,11 +7,15 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'prompt',
+      injectRegister: null,
       manifest: {
         name: '资产管家',
         short_name: '资产管家',
         description: '个人资产观察与日常记账',
         lang: 'zh-CN',
+        id: '/',
+        scope: '/',
+        prefer_related_applications: false,
         theme_color: '#FFFFFF',
         background_color: '#F6F7FB',
         display: 'standalone',

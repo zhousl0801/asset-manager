@@ -220,6 +220,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 
       <div v-if="data.points.length" class="chart-card">
         <FundReturnChart :points="data.points" :range="data.range" />
+        <p class="chart-color-note">红涨绿跌；柱形在零线上下表示当日盈亏，折线为累计收益。</p>
       </div>
 
       <div class="calendar-card">
@@ -597,5 +598,12 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+.chart-color-note {
+  margin: 6px 2px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  text-align: center;
 }
 </style>

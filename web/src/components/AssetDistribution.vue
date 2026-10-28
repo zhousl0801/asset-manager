@@ -97,6 +97,14 @@ const barSegments = computed(() => rows.value
 
 const recordedCount = computed(() => rows.value.filter((row) => row.configured && !row.notHeld).length)
 
+const barLabel = computed(() => {
+  const parts = rows.value
+    .filter((row) => row.configured && !row.notHeld && row.percent !== null)
+    .map((row) => `${row.label} ${row.percent!.toFixed(1)}%`)
+
+  return parts.length ? `资产占比：${parts.join('、')}` : '暂无可计算资产占比'
+})
+
 function amountLabel(row: DistributionRow): string {
   if (row.notHeld) {
     return '不持有'
@@ -140,7 +148,7 @@ function changeLabel(row: DistributionRow): string {
       </span>
     </div>
 
-    <div class="ratio-bar" role="img" aria-label="各类资产占比">
+    <div class="ratio-bar" role="img" :aria-label="barLabel">
       <span
         v-for="segment in barSegments"
         :key="segment.key"

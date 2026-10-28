@@ -2,6 +2,7 @@
 import { onMounted, watch } from 'vue'
 import { accessReady, hasAccess, refreshAccess } from './api/access'
 import PendingMutationNotice from './components/PendingMutationNotice.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
 import AccessView from './views/AccessView.vue'
 
 onMounted(refreshAccess)
@@ -17,6 +18,7 @@ watch(hasAccess, (value) => {
   <AccessView v-else-if="!hasAccess" />
   <template v-else>
     <PendingMutationNotice />
+    <UpdateBanner />
     <RouterView v-slot="{ Component }">
       <Transition name="page" mode="out-in">
         <component :is="Component" />

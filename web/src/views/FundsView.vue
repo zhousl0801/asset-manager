@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Decimal from 'decimal.js'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   arriveFundSell,
   assignFundGroup,
@@ -75,7 +75,15 @@ const sortOptions: { key: FundSortKey; label: string }[] = [
   { key: 'name', label: '基金名称' }
 ]
 
+const route = useRoute()
 const router = useRouter()
+const portfolioViews: PortfolioView[] = ['positions', 'returns', 'activities', 'plans']
+
+function normalizeView(value: unknown): PortfolioView {
+  const candidate = Array.isArray(value) ? value[0] : value
+  return portfolioViews.includes(candidate as PortfolioView) ? candidate as PortfolioView : 'positions'
+}
+
 const today = todayInBusinessTimeZone()
 const overview = ref<FundOverview | null>(null)
 const isLoading = ref(false)
@@ -89,7 +97,7 @@ const confirmingSellId = ref<string | null>(null)
 const arrivingConfirmId = ref<string | null>(null)
 const refreshingQuote = ref(false)
 const activeGroup = ref<GroupScope>('all')
-const activeView = ref<PortfolioView>('positions')
+const activeView = ref<PortfolioView>(normalizeView(route.params.view))
 const expandedFund = ref<string | null>(null)
 const searchText = ref('')
 const sortKey = ref<FundSortKey>('value')
@@ -230,6 +238,9 @@ const scopedPendingArrivals = computed(() => {
 
   return (overview.value?.pendingArrivals ?? []).filter((item) => scopedPositionIds.value.has(item.positionId))
 })
+
+const pendingCount = computed(() =>
+  scopedPendingBuys.value.length + scopedSellApplications.value.length + scopedPendingArrivals.value.length)
 
 const scopedActivities = computed(() => {
   const trades = (overview.value?.activities ?? []).filter((item) => item.type !== 'quote')
@@ -388,7 +399,24 @@ watch(
   }
 )
 
-onMounted(loadOverview)
+onMounted(async () => {
+  await loadOverview()
+
+  if (activeView.value === 'plans') {
+    await loadPlans()
+  }
+})
+
+watch(
+  () => route.params.view,
+  (value) => {
+    activeView.value = normalizeView(value)
+
+    if (activeView.value === 'plans') {
+      void loadPlans()
+    }
+  }
+)
 
 async function loadOverview(): Promise<void> {
   isLoading.value = true
@@ -635,6 +663,11 @@ function selectGroup(key: GroupScope): void {
 
 async function setView(view: PortfolioView): Promise<void> {
   activeView.value = view
+  const target = view === 'positions' ? '/funds' : `/funds/${view}`
+
+  if (route.path !== target) {
+    await router.replace(target)
+  }
 
   if (view === 'plans') {
     await loadPlans()
@@ -1337,7 +1370,16 @@ function goBack(): void {
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
-      <details v-if="scopedPendingBuys.length || scopedSellApplications.length || scopedPendingArrivals.length" class="pending-overview ui-disclosure">
+      <RouterLink
+        v-if="activeView === 'positions' && pendingCount"
+        class="pending-shortcut"
+        to="/funds/activities"
+      >
+        <span>待处理交易</span>
+        <b>{{ pendingCount }} 笔待核对 ›</b>
+      </RouterLink>
+
+      <details v-if="activeView === 'activities' && pendingCount" class="pending-overview ui-disclosure">
         <summary><span>待处理交易</span><b>{{ scopedPendingBuys.length + scopedSellApplications.length + scopedPendingArrivals.length }} 笔待核对</b></summary>
       <template v-if="scopedPendingBuys.length">
         <div class="section-head">
@@ -1996,6 +2038,25 @@ function goBack(): void {
   font-size: 0.8125rem;
   text-align: left;
 }
+.pending-shortcut {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--touch-target);
+  margin-bottom: 16px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+  text-decoration: none;
+}
+
+.pending-shortcut b {
+  font-weight: 600;
+}
+
 .pending-overview {
   container-type: inline-size;
   margin: 0 0 18px;

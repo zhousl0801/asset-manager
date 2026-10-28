@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
@@ -17,6 +17,14 @@ const props = defineProps<{
 }>()
 
 const container = ref<HTMLElement | null>(null)
+
+const chartLabel = computed(() => {
+  const latest = [...props.points].reverse().find((point) => point.cumulativeProfit !== null)
+
+  return latest
+    ? `投资收益走势图，${props.range}；最新累计收益 ${formatSignedMoney(latest.cumulativeProfit!)} 元；红涨绿跌，柱子方向表示当日盈亏`
+    : `投资收益走势图，${props.range}；暂无已披露收益`
+})
 let chart: echarts.ECharts | null = null
 const colorScheme = typeof window !== 'undefined'
   ? window.matchMedia?.('(prefers-color-scheme: dark)')
@@ -151,7 +159,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" class="fund-return-chart" role="img" aria-label="投资收益走势图" />
+  <div ref="container" class="fund-return-chart" role="img" :aria-label="chartLabel" />
 </template>
 
 <style scoped>

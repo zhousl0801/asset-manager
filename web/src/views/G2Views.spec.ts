@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn()
 }))
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ params: {}, path: '/funds' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/funds', () => ({
   fetchFundOverview: mocks.overview,
   buyFund: mocks.buy,
@@ -79,9 +79,15 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
+async function showActivities(view: ReturnType<typeof mount>): Promise<void> {
+  await view.findAll('.view-tabs button').find((button) => button.text() === '交易')!.trigger('click')
+  await flushPromises()
+}
+
 test('pending buy shows trade and automatic confirmation dates without manual confirmation', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
+  await showActivities(view)
   expect(view.find('.hero-meta').text()).toContain('含待确认 ¥300.00')
   expect(view.find('.pending-card').text()).toContain('纳指基金')
   expect(view.find('.pending-card').text()).toContain('T 日 2026年10月21日')
@@ -97,6 +103,7 @@ test('pending buy before cutoff can be cancelled with an idempotent request', as
   mocks.cancel.mockResolvedValue({})
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
+  await showActivities(view)
   await view.get('.pending-card .confirm-button').trigger('click')
   await flushPromises()
   expect(mocks.cancel).toHaveBeenCalledWith('pb1', expect.any(String))
@@ -201,6 +208,7 @@ test('redemption confirmation submits shares, net value, fee and proceeds', asyn
   })
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
+  await showActivities(view)
 
   const confirmButton = view.findAll('button').find((button) => button.text() === '登记实际结果')!
   await confirmButton.trigger('click')
@@ -244,6 +252,7 @@ test('redemption arrival sends the pending amount to cash', async () => {
   })
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
+  await showActivities(view)
 
   const arrivalButton = view.findAll('button').find((button) => button.text() === '登记到账')!
   await arrivalButton.trigger('click')

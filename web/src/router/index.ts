@@ -69,7 +69,7 @@ const router = createRouter({
       component: () => import('../views/GoldView.vue')
     },
     {
-      path: '/funds',
+      path: '/funds/:view?',
       name: 'funds',
       component: () => import('../views/FundsView.vue')
     },

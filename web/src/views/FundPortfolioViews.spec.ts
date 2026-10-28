@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   plans: vi.fn()
 }))
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ params: {}, path: '/funds' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/funds', () => ({
   fetchFundOverview: mocks.overview,
   buyFund: vi.fn(),
@@ -224,7 +224,7 @@ test('switching group filters total, funds, pending items and activities consist
 
   expect(view.find('.hero-balance').text()).toContain('2,400.00')
   expect(view.findAll('.fund-card')).toHaveLength(2)
-  expect(view.findAll('.pending-card')).toHaveLength(1)
+  expect(view.get('.pending-shortcut').text()).toContain('1 笔待核对')
 
   const groupChip = view.findAll('.group-chips button').find((button) => button.text().includes('纳斯达克指数'))!
   await groupChip.trigger('click')
@@ -233,10 +233,11 @@ test('switching group filters total, funds, pending items and activities consist
   expect(view.find('.hero-balance').text()).toContain('1,800.00')
   expect(view.findAll('.fund-card')).toHaveLength(1)
   expect(view.findAll('.fund-card')[0]!.text()).toContain('纳指基金')
-  expect(view.findAll('.pending-card')).toHaveLength(0)
+  expect(view.find('.pending-shortcut').exists()).toBe(false)
 
   await view.findAll('.view-tabs button').find((button) => button.text() === '交易')!.trigger('click')
   await flushPromises()
+  expect(view.findAll('.pending-card')).toHaveLength(0)
   expect(view.findAll('.activity-row')).toHaveLength(1)
   expect(view.find('.activity-row').text()).toContain('纳指基金')
 

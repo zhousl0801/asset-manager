@@ -443,3 +443,33 @@ summary:focus-visible {
     animation: none;
   }
 }
+
+@media (forced-colors: active) {
+  .primary-button,
+  .secondary-button,
+  .confirm-button,
+  .back-button,
+  .icon-button,
+  .nav-add-circle,
+  .maintenance-action,
+  .row-action {
+    border: 1px solid ButtonText;
+  }
+
+  .nav-item.active,
+  .ui-segmented button.active {
+    border-bottom: 2px solid Highlight;
+  }
+
+  .ratio-bar,
+  .skeleton,
+  .app-nav,
+  .trend-panel,
+  .chart-card {
+    border: 1px solid CanvasText;
+  }
+
+  .skeleton::after {
+    display: none;
+  }
+}

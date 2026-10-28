@@ -10,7 +10,7 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
-import { buildScopedTrend, buildTrendOption } from '../utils/trend'
+import { assetLabels, buildScopedTrend, buildTrendOption } from '../utils/trend'
 import type { AssetTrend, AssetTrendPoint } from '../types/trend'
 
 echarts.use([
@@ -30,6 +30,12 @@ const emit = defineEmits<{ select: [point: AssetTrendPoint] }>()
 
 const container = ref<HTMLElement | null>(null)
 const scoped = computed(() => buildScopedTrend(props.trend))
+const chartLabel = computed(() => {
+  const latest = scoped.value.latest
+  const latestText = latest?.value == null ? '最新依据不足' : `最新同口径资产 ${latest.value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`
+  const types = scoped.value.baselineTypes.map((key) => assetLabels[key]).join('、')
+  return `资产趋势图，${props.trend.from} 至 ${props.trend.to}；${latestText}${types ? `；包含${types}` : ''}`
+})
 let chart: echarts.ECharts | null = null
 const colorScheme = typeof window !== 'undefined'
   ? window.matchMedia?.('(prefers-color-scheme: dark)')
@@ -80,7 +86,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="container" class="trend-chart" role="img" aria-label="资产趋势图" />
+  <div ref="container" class="trend-chart" role="img" :aria-label="chartLabel" />
 </template>
 
 <style scoped>
