@@ -42,6 +42,13 @@ internal sealed class AutoPlanConfiguration : IEntityTypeConfiguration<AutoPlan>
             .HasDefaultValue(0m)
             .IsRequired();
 
+        builder.Property(plan => plan.TradingScope)
+            .HasColumnName("trading_scope")
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(AutoPlanTradingScope.ThreeMarkets)
+            .IsRequired();
+
         builder.Property(plan => plan.Cycle)
             .HasColumnName("cycle")
             .HasConversion<string>()

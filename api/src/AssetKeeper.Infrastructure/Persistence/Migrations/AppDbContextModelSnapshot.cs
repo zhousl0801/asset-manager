@@ -915,6 +915,14 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("time")
                         .HasColumnName("time");
 
+                    b.Property<string>("TradingScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("ThreeMarkets")
+                        .HasColumnName("trading_scope");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(32)

@@ -249,13 +249,27 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
+test('pending shortcut opens the transaction tab and expands pending items', async () => {
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+
+  await view.get('.pending-shortcut').trigger('click')
+  await flushPromises()
+
+  expect(view.find('.view-tabs button[aria-selected="true"]').text()).toBe('交易')
+  expect(view.find('.pending-overview').element.hasAttribute('open')).toBe(true)
+  expect(view.findAll('.pending-card')).toHaveLength(1)
+  view.unmount()
+})
+
 test('switching group filters total, funds, pending items and activities consistently', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
   expect(view.find('.hero-balance').text()).toContain('2,400.00')
   expect(view.findAll('.fund-card')).toHaveLength(2)
-  expect(view.find('.pending-shortcut').exists()).toBe(false)
+  expect(view.find('.pending-shortcut').exists()).toBe(true)
+  expect(view.find('.pending-shortcut').text()).toContain('1 笔待处理')
 
   const groupSelect = view.get('.filter-pill select')
   await groupSelect.setValue('g1')

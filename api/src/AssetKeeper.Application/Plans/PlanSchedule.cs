@@ -18,7 +18,7 @@ public static class PlanSchedule
         {
             for (var date = start; date <= toDate; date = date.AddDays(1))
             {
-                if ((calendar ?? TradingCalendar.Default).GetDay(date).IsTradingDay)
+                if (IsTradingDay(plan, calendar ?? TradingCalendar.Default, date))
                 {
                     periods.Add(new PlanDuePeriod(PeriodKeyFor(plan, date), date, plan.Time));
                 }
@@ -97,7 +97,7 @@ public static class PlanSchedule
 
         if (plan.Cycle == AutoPlanCycle.TradingDay)
         {
-            return (calendar ?? TradingCalendar.Default).GetDay(date).IsTradingDay;
+            return IsTradingDay(plan, calendar ?? TradingCalendar.Default, date);
         }
 
         if (plan.Cycle == AutoPlanCycle.Monthly)
@@ -108,6 +108,15 @@ public static class PlanSchedule
         }
 
         return (int)date.DayOfWeek == plan.DayOfWeek!.Value % 7;
+    }
+
+    private static bool IsTradingDay(AutoPlan plan, TradingCalendar calendar, DateOnly date)
+    {
+        var day = calendar.GetDay(date);
+
+        return plan.TradingScope == AutoPlanTradingScope.China
+            ? day.Markets.Any(market => market.Market == "CN" && market.IsOpen)
+            : day.IsTradingDay;
     }
 }
 

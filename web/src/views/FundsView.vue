@@ -71,6 +71,7 @@ const metricOptions: { key: FundMetricKey; label: string }[] = [
   { key: 'weight', label: '占比' },
   { key: 'pending', label: '待确认' }
 ]
+const platformPresets = ['直销', '代销', '支付宝', '天天基金', '蛋卷', '且慢', '招商银行']
 
 const route = useRoute()
 const router = useRouter()
@@ -97,6 +98,7 @@ const duplicatePrompt = ref<{ position: FundPosition; shares: number; cost: numb
 const activeGroup = ref<GroupScope>('all')
 const activeView = ref<PortfolioView>(normalizeView(route.params.view))
 const expandedFund = ref<string | null>(null)
+const pendingOpen = ref(false)
 const searchText = ref('')
 const metricKeys = ref<FundMetricKey[]>(loadMetricKeys())
 const metricNotice = ref('')
@@ -248,6 +250,10 @@ const scopedPendingArrivals = computed(() => {
 const pendingCount = computed(() =>
   scopedPendingBuys.value.length + scopedSellApplications.value.length + scopedPendingArrivals.value.length)
 
+const cancellablePendingCount = computed(() =>
+  scopedPendingBuys.value.filter((item) => item.canCancel).length
+  + scopedSellApplications.value.filter((item) => item.canCancel).length)
+
 const scopedActivities = computed(() => {
   const trades = (overview.value?.activities ?? []).filter((item) => item.type !== 'quote')
 
@@ -375,6 +381,7 @@ const canSubmit = computed(() => {
       return form.positionId !== '' && !!selectedPosition.value?.code && (parseAmount(form.amount) ?? 0) > 0
         && (parseAmount(form.fee) ?? -1) >= 0
         && (parseAmount(form.fee) ?? Number.POSITIVE_INFINITY) < (parseAmount(form.amount) ?? 0)
+        && form.businessDate !== ''
     case 'buyConfirm':
       return confirmingBuyId.value !== null
         && parseQuantity(form.shares) !== null
@@ -386,15 +393,17 @@ const canSubmit = computed(() => {
     case 'shares':
       return form.positionId !== '' && parseNonNegativeQuantity(form.shares) !== null
     case 'sell':
-      return form.positionId !== '' && parseQuantity(form.shares) !== null
+      return form.positionId !== '' && parseQuantity(form.shares) !== null && form.businessDate !== ''
     case 'sellConfirm':
       return confirmingSellId.value !== null
         && parseQuantity(form.shares) !== null
         && parsePrice(form.netValue) !== null
         && (parseAmount(form.netAmount) ?? 0) > 0
         && parseAmount(form.fee) !== null
+        && form.businessDate !== ''
     case 'sellArrival':
       return arrivingConfirmId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
+        && form.businessDate !== ''
     default:
       return false
   }
@@ -714,6 +723,11 @@ async function setView(view: PortfolioView): Promise<void> {
   }
 }
 
+async function showPending(): Promise<void> {
+  await setView('activities')
+  pendingOpen.value = true
+}
+
 async function loadPlans(): Promise<void> {
   if (plansLoaded.value || plansLoading.value) {
     return
@@ -855,7 +869,7 @@ async function moveFund(fund: FundSummary, event: Event): Promise<void> {
 
 function planCycleLabel(plan: AutoPlan): string {
   if (plan.cycle === 'tradingDay') {
-    return '三地交易日'
+    return plan.tradingScope === 'china' ? '中国交易日' : '三地交易日'
   }
 
   if (plan.cycle === 'weekly') {
@@ -940,6 +954,27 @@ function estimateBuyShares(): void {
 
   formError.value = ''
   form.shares = new Decimal(pending.amount).minus(fee).div(netValue).toFixed(4, Decimal.ROUND_DOWN)
+}
+
+function estimateSellNetAmount(): void {
+  const shares = parseQuantity(form.shares)
+  const netValue = parsePrice(form.netValue)
+  const fee = parseAmount(form.fee)
+
+  if (shares === null || netValue === null || netValue <= 0 || fee === null || fee < 0) {
+    formError.value = '请先填写有效的确认份额、成交净值和费用。'
+    return
+  }
+
+  const gross = new Decimal(shares).mul(netValue).minus(fee)
+
+  if (gross.lte(0)) {
+    formError.value = '扣除费用后的净回款必须大于 0。'
+    return
+  }
+
+  formError.value = ''
+  form.netAmount = gross.toFixed(2, Decimal.ROUND_DOWN)
 }
 
 function openArrivalSheet(arrival: PendingFundArrival): void {
@@ -1657,7 +1692,29 @@ function goBack(): void {
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
 
-      <details v-if="activeView === 'activities' && pendingCount" class="pending-overview ui-disclosure">
+      <button
+        v-if="pendingCount && activeView !== 'activities'"
+        type="button"
+        class="pending-shortcut"
+        @click="showPending"
+      >
+        <span class="pending-shortcut-copy">
+          <b>{{ pendingCount }} 笔待处理</b>
+          <small>
+            买入待确认 {{ scopedPendingBuys.length }} · 赎回申请 {{ scopedSellApplications.length }}
+            · 待到账 {{ scopedPendingArrivals.length }}
+            <template v-if="cancellablePendingCount"> · 15:00 前可撤销</template>
+          </small>
+        </span>
+        <span class="pending-shortcut-action">去处理 ›</span>
+      </button>
+
+      <details
+        v-if="activeView === 'activities' && pendingCount"
+        class="pending-overview ui-disclosure"
+        :open="pendingOpen"
+        @toggle="pendingOpen = ($event.target as HTMLDetailsElement).open"
+      >
         <summary><span>待处理交易</span><b>{{ scopedPendingBuys.length + scopedSellApplications.length + scopedPendingArrivals.length }} 笔待核对</b></summary>
       <template v-if="scopedPendingBuys.length">
         <div class="section-head">
@@ -2074,11 +2131,25 @@ function goBack(): void {
             </label>
             <label class="form-field">
               <span>平台</span>
-              <select v-model="form.platform">
-                <option value="直销">直销</option>
-                <option value="代销">代销</option>
-                <option value="">未标平台</option>
-              </select>
+              <input
+                v-model="form.platform"
+                type="text"
+                maxlength="30"
+                list="fund-platform-options"
+                placeholder="如 支付宝、天天基金"
+              />
+              <datalist id="fund-platform-options">
+                <option v-for="platform in platformPresets" :key="platform" :value="platform" />
+              </datalist>
+              <div class="platform-presets" aria-label="常用平台">
+                <button
+                  v-for="platform in platformPresets"
+                  :key="platform"
+                  type="button"
+                  :class="{ active: form.platform === platform }"
+                  @click="form.platform = platform"
+                >{{ platform }}</button>
+              </div>
             </label>
           </div>
 
@@ -2122,6 +2193,11 @@ function goBack(): void {
           <label class="form-field">
             <span>实际申购费（元）</span>
             <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label class="form-field">
+            <span>下单日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+            <small>补录历史买入时选择实际下单日期；15:00 前按当日 T 日计算。</small>
           </label>
           <small v-if="!selectedPosition?.code" class="form-note">请先为该持仓设置基金代码，才能从数据源自动确认份额。</small>
         </template>
@@ -2181,6 +2257,10 @@ function goBack(): void {
             <input v-model="form.shares" type="text" inputmode="decimal" placeholder="0.0000" />
             <small>申请后份额冻结，仍计入持仓估值；确认时才减少份额并转为待到账。</small>
           </label>
+          <label class="form-field">
+            <span>申请日期</span>
+            <input v-model="form.businessDate" type="date" :max="today" />
+          </label>
         </template>
 
         <template v-else-if="sheet === 'sellConfirm'">
@@ -2194,6 +2274,9 @@ function goBack(): void {
               <input v-model="form.netValue" type="text" inputmode="decimal" placeholder="0.0000" />
             </label>
           </div>
+          <button type="button" class="text-button estimate-button" @click="estimateSellNetAmount">
+            按 份额 × 净值 − 费用 试算净到账
+          </button>
           <div class="form-row">
             <label class="form-field">
               <span>净值日期</span>
@@ -2208,7 +2291,16 @@ function goBack(): void {
             <span>净到账金额（元）</span>
             <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
           </label>
-          <p class="form-note">确认份额不能超过申请份额；按今天的净值日期结转。</p>
+          <label class="form-field">
+            <span>确认日期</span>
+            <input
+              v-model="form.businessDate"
+              type="date"
+              :min="selectedSellApplication?.businessDate"
+              :max="today"
+            />
+          </label>
+          <p class="form-note">确认份额不能超过申请份额；净值日期默认取申请日 T 日，可按实际成交调整。</p>
         </template>
 
         <template v-else-if="sheet === 'sellArrival'">
@@ -2216,6 +2308,15 @@ function goBack(): void {
             <span>到账金额（元）</span>
             <input v-model="form.netAmount" type="text" inputmode="decimal" placeholder="0.00" />
             <small>必须与待到账金额一致；如有差额，请先更正赎回确认。</small>
+          </label>
+          <label class="form-field">
+            <span>到账日期</span>
+            <input
+              v-model="form.businessDate"
+              type="date"
+              :min="selectedPendingArrival?.businessDate"
+              :max="today"
+            />
           </label>
         </template>
 
@@ -2464,6 +2565,46 @@ function goBack(): void {
   padding: 0 12px;
   border-radius: var(--radius-control);
   background: var(--color-brand-soft);
+}
+
+.pending-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-control);
+  background: var(--color-brand-soft);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.pending-shortcut-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pending-shortcut-copy b {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.pending-shortcut-copy small {
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.pending-shortcut-action {
+  flex: 0 0 auto;
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+  font-weight: 500;
 }
 .pending-overview summary {
   color: var(--color-brand);
@@ -3452,6 +3593,29 @@ function goBack(): void {
   min-height: 32px;
   padding: 0;
   font-size: var(--text-caption);
+}
+
+.platform-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.platform-presets button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.platform-presets button.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
 }
 
 .duplicate-note {

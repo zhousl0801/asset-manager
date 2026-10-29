@@ -21,6 +21,8 @@ public sealed class AutoPlan
 
     public decimal Fee { get; private set; }
 
+    public AutoPlanTradingScope TradingScope { get; private set; } = AutoPlanTradingScope.ThreeMarkets;
+
     public AutoPlanCycle Cycle { get; private set; }
 
     public int? DayOfMonth { get; private set; }
@@ -55,7 +57,8 @@ public sealed class AutoPlan
         DateOnly startDate,
         Guid? fundPositionId,
         DateTimeOffset now,
-        decimal fee = 0m)
+        decimal fee = 0m,
+        AutoPlanTradingScope tradingScope = AutoPlanTradingScope.ThreeMarkets)
     {
         var plan = new AutoPlan
         {
@@ -64,7 +67,7 @@ public sealed class AutoPlan
             IsActive = true,
             CreatedAt = now
         };
-        plan.SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
+        plan.SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, tradingScope, now);
 
         return plan;
     }
@@ -81,14 +84,15 @@ public sealed class AutoPlan
         Guid? fundPositionId,
         DateTimeOffset now,
         DateOnly generationFloor,
-        decimal fee = 0m)
+        decimal fee = 0m,
+        AutoPlanTradingScope tradingScope = AutoPlanTradingScope.ThreeMarkets)
     {
         if (type != Type)
         {
             throw new ArgumentException("计划类型不能修改，请新建对应计划。");
         }
 
-        SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
+        SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, tradingScope, now);
         GenerateFrom = GenerateFrom > startDate ? GenerateFrom : startDate;
         if (cycle == AutoPlanCycle.TradingDay && GenerateFrom < generationFloor)
         {
@@ -141,6 +145,7 @@ public sealed class AutoPlan
         TimeOnly time,
         DateOnly startDate,
         Guid? fundPositionId,
+        AutoPlanTradingScope tradingScope,
         DateTimeOffset now)
     {
         if (LedgerId == Guid.Empty)
@@ -194,6 +199,11 @@ public sealed class AutoPlan
             {
                 throw new ArgumentException("交易日计划不填写每月日期或星期。");
             }
+
+            if (!Enum.IsDefined(tradingScope))
+            {
+                throw new ArgumentException("交易日范围无效。", nameof(tradingScope));
+            }
         }
         else if (cycle == AutoPlanCycle.Monthly)
         {
@@ -205,6 +215,11 @@ public sealed class AutoPlan
         else if (dayOfWeek is null || dayOfWeek < 1 || dayOfWeek > 7 || dayOfMonth is not null)
         {
             throw new ArgumentException("每周计划须选择星期。", nameof(dayOfWeek));
+        }
+
+        if (cycle != AutoPlanCycle.TradingDay && tradingScope != AutoPlanTradingScope.ThreeMarkets)
+        {
+            throw new ArgumentException("只有交易日计划可以选择交易日范围。", nameof(tradingScope));
         }
 
         if (type == AutoPlanType.FundSip && (fundPositionId is null || fundPositionId == Guid.Empty))
@@ -221,6 +236,7 @@ public sealed class AutoPlan
         Name = name.Trim();
         Amount = amount;
         Fee = fee;
+        TradingScope = tradingScope;
         Cycle = cycle;
         DayOfMonth = dayOfMonth;
         DayOfWeek = dayOfWeek;

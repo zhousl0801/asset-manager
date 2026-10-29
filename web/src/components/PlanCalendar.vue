@@ -97,7 +97,7 @@ function closureTitle(market: MarketDay): string {
       </div>
     </header>
 
-    <p class="calendar-note">按中国日期展示；浅色为中国休市，美/港彩色圆点标记为海外休市，基金定投会顺延到下一个三地交易日。</p>
+    <p class="calendar-note">按中国日期展示；浅色为中国休市，美/港彩色圆点标记为海外休市。中国交易日计划只看中国休市，三地交易日计划会顺延到下一个三地交易日。</p>
 
     <div class="calendar-legend">
       <span><i class="legend-dot china" />中国休市</span>
@@ -139,7 +139,7 @@ function closureTitle(market: MarketDay): string {
       </div>
       <p class="calendar-summary">
         <template v-if="overseasClosedDays.length">
-          本月有 {{ overseasClosedDays.length }} 天因海外休市，定投日顺延。
+          本月有 {{ overseasClosedDays.length }} 天因海外休市，三地交易日计划顺延。
         </template>
         <template v-else>
           本月中国交易日三地均开市。

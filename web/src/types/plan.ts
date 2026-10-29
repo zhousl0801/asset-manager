@@ -2,6 +2,8 @@ export type PlanType = 'salaryIncome' | 'providentDeposit' | 'providentWithdrawa
 
 export type PlanCycle = 'monthly' | 'weekly' | 'tradingDay'
 
+export type PlanTradingScope = 'china' | 'threeMarkets'
+
 export type OccurrenceStatus = 'pending' | 'completed' | 'waiting' | 'failed' | 'skipped'
 
 export interface AutoPlan {
@@ -10,6 +12,7 @@ export interface AutoPlan {
   name: string
   amount: number
   fee?: number
+  tradingScope?: PlanTradingScope
   cycle: PlanCycle
   dayOfMonth: number | null
   dayOfWeek: number | null
@@ -70,6 +73,7 @@ export interface SavePlanInput {
   name: string
   amount: number
   fee?: number
+  tradingScope?: PlanTradingScope
   cycle: PlanCycle
   dayOfMonth: number | null
   dayOfWeek: number | null

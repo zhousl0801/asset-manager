@@ -35,6 +35,7 @@ import type {
   PlanCycle,
   PlanOccurrence,
   PlanOverview,
+  PlanTradingScope,
   PlanType,
   SavePlanInput,
   TradingDay
@@ -77,6 +78,7 @@ const form = reactive({
   amount: '',
   fee: '0',
   cycle: 'monthly' as PlanCycle,
+  tradingScope: 'threeMarkets' as PlanTradingScope,
   dayOfMonth: '15',
   dayOfWeek: '1',
   time: '09:00',
@@ -257,6 +259,28 @@ watch(
   }
 )
 
+watch(
+  () => form.cycle,
+  (cycle) => {
+    if (cycle === 'tradingDay' && editingPlan.value === null) {
+      applyDefaultTradingScope()
+    }
+  }
+)
+
+function defaultTradingScope(): PlanTradingScope {
+  if (selectedFundTarget.value) {
+    return selectedFundTarget.value.isQdii ? 'threeMarkets' : 'china'
+  }
+
+  const position = fundChoices.value.find(item => item.id === form.fundPositionId)
+  return position && (position.confirmationDelayDays ?? 1) >= 2 ? 'threeMarkets' : 'china'
+}
+
+function applyDefaultTradingScope(): void {
+  form.tradingScope = defaultTradingScope()
+}
+
 watch(fundSearch, (value) => {
   fundSearchError.value = ''
 
@@ -388,6 +412,7 @@ function openNew(type: PlanType = 'salaryIncome'): void {
   form.amount = ''
   form.fee = '0'
   form.cycle = 'monthly'
+  form.tradingScope = 'threeMarkets'
   form.dayOfMonth = '15'
   form.dayOfWeek = '1'
   form.time = '09:00'
@@ -409,6 +434,7 @@ function openEdit(plan: AutoPlan): void {
   form.amount = String(plan.amount)
   form.fee = String(plan.fee ?? 0)
   form.cycle = plan.cycle
+  form.tradingScope = plan.tradingScope ?? 'threeMarkets'
   form.dayOfMonth = plan.dayOfMonth ? String(plan.dayOfMonth) : '15'
   form.dayOfWeek = plan.dayOfWeek ? String(plan.dayOfWeek) : '1'
   form.time = plan.time.slice(0, 5)
@@ -465,6 +491,7 @@ async function submit(): Promise<void> {
     name: form.name.trim(),
     amount,
     fee,
+    tradingScope: isFundSip && form.cycle === 'tradingDay' ? form.tradingScope : 'threeMarkets',
     cycle: isFundSip ? form.cycle : 'monthly',
     dayOfMonth: (isFundSip && form.cycle !== 'monthly') ? null : Number(form.dayOfMonth),
     dayOfWeek: (isFundSip && form.cycle === 'weekly') ? Number(form.dayOfWeek) : null,
@@ -514,6 +541,18 @@ function chooseFundTarget(result: FundSearchResult): void {
   fundSearch.value = ''
   fundSearchResults.value = []
   fundSearchError.value = ''
+
+  if (form.cycle === 'tradingDay') {
+    applyDefaultTradingScope()
+  }
+}
+
+function onFundSelectChange(): void {
+  selectedFundTarget.value = null
+
+  if (form.cycle === 'tradingDay') {
+    applyDefaultTradingScope()
+  }
 }
 
 function clearFundTarget(): void {
@@ -795,7 +834,7 @@ function scheduleText(plan: AutoPlan): string {
   const time = plan.time.slice(0, 5)
 
   if (plan.cycle === 'tradingDay') {
-    return `交易日 ${time}`
+    return `${plan.tradingScope === 'china' ? '中国交易日' : '三地交易日'} ${time}`
   }
 
   if (plan.cycle === 'weekly') {
@@ -1147,7 +1186,7 @@ function goBack(): void {
           <select
             v-model="form.fundPositionId"
             :disabled="positionsLoading || selectedFundTarget !== null"
-            @change="selectedFundTarget = null"
+            @change="onFundSelectChange"
           >
             <option value="">请选择已持有的基金</option>
             <option v-for="position in fundChoices" :key="position.id" :value="position.id">
@@ -1213,8 +1252,17 @@ function goBack(): void {
           <select v-model="form.cycle">
             <option value="monthly">每月</option>
             <option value="weekly">每周</option>
-            <option value="tradingDay">交易日（中国、美国、香港均开市）</option>
+            <option value="tradingDay">交易日</option>
           </select>
+        </label>
+
+        <label v-if="form.type === 'fundSip' && form.cycle === 'tradingDay'" class="form-field">
+          <span>交易日范围</span>
+          <select v-model="form.tradingScope">
+            <option value="china">中国交易日</option>
+            <option value="threeMarkets">三地交易日（中、美、港均开市）</option>
+          </select>
+          <small>默认按基金是否 QDII 选择：QDII 用三地交易日，境内基金用中国交易日。</small>
         </label>
 
         <label v-if="form.type !== 'fundSip' || form.cycle === 'monthly'" class="form-field">

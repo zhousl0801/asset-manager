@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AssetKeeper.Domain.Plans;
 
 namespace AssetKeeper.Application.Plans;
 
@@ -46,14 +47,28 @@ public sealed class TradingCalendar
 
     public DateOnly NextTradingDay(DateOnly after)
     {
+        return NextTradingDay(after, AutoPlanTradingScope.ThreeMarkets);
+    }
+
+    public DateOnly NextTradingDay(DateOnly after, AutoPlanTradingScope scope)
+    {
         var date = after.AddDays(1);
 
-        while (!GetDay(date).IsTradingDay)
+        while (!IsTradingDay(date, scope))
         {
             date = date.AddDays(1);
         }
 
         return date;
+    }
+
+    private bool IsTradingDay(DateOnly date, AutoPlanTradingScope scope)
+    {
+        var day = GetDay(date);
+
+        return scope == AutoPlanTradingScope.China
+            ? day.Markets.Any(market => market.Market == "CN" && market.IsOpen)
+            : day.IsTradingDay;
     }
 
     public IReadOnlyList<TradingDayDto> GetDays(DateOnly from, DateOnly to)

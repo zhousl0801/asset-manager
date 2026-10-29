@@ -1,4 +1,5 @@
 using AssetKeeper.Application.Plans;
+using AssetKeeper.Domain.Plans;
 
 namespace AssetKeeper.Tests.Plans;
 
@@ -35,6 +36,15 @@ public sealed class TradingCalendarTests
         var firstImport = new TradingCalendar([newVersion]);
         Assert.True(firstImport.GetDay(past).IsTradingDay);
         Assert.True(firstImport.GetDay(past).Markets.Single(market => market.Market == "US").UsesWeekdayFallback);
+    }
+
+    [Fact]
+    public void NextTradingDay_ChinaScope_IgnoresForeignClosures()
+    {
+        var after = new DateOnly(2026, 11, 25);
+
+        Assert.Equal(new DateOnly(2026, 11, 26), TradingCalendar.Default.NextTradingDay(after, AutoPlanTradingScope.China));
+        Assert.Equal(new DateOnly(2026, 11, 27), TradingCalendar.Default.NextTradingDay(after, AutoPlanTradingScope.ThreeMarkets));
     }
 
     [Fact]

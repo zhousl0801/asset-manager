@@ -20,7 +20,8 @@ public sealed record PlanDto(
     int Version,
     FundPlanTarget? FundTarget = null,
     IReadOnlyList<DateOnly>? UpcomingDates = null,
-    decimal Fee = 0m);
+    decimal Fee = 0m,
+    AutoPlanTradingScope TradingScope = AutoPlanTradingScope.ThreeMarkets);
 
 public sealed record PlanOccurrenceDto(
     Guid Id,
@@ -71,7 +72,8 @@ public sealed record SavePlanRequest(
     Guid RequestId,
     int? ExpectedVersion,
     FundPlanTarget? FundTarget = null,
-    decimal Fee = 0m);
+    decimal Fee = 0m,
+    AutoPlanTradingScope TradingScope = AutoPlanTradingScope.ThreeMarkets);
 
 public sealed record PlanActionRequest(Guid RequestId);
 

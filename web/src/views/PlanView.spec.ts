@@ -231,7 +231,7 @@ test('execution records paginate ten per page', async () => {
 })
 
 test('trading-day SIP selects one share class across channels and sends a business target', async () => {
-  const position = { id: 'source-1', name: '测试基金', code: '000001', shareClass: 'C', platform: '渠道甲' }
+  const position = { id: 'source-1', name: '测试基金', code: '000001', shareClass: 'C', platform: '渠道甲', confirmationDelayDays: 2 }
   mocks.funds.mockResolvedValue({ positions: [position, { ...position, id: 'source-2', platform: '渠道乙' }] })
   mocks.save.mockResolvedValue({})
   const view = mount(PlanView, { attachTo: document.body })
@@ -261,7 +261,8 @@ test('trading-day SIP selects one share class across channels and sends a busine
   await flushPromises()
   expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
     cycle: 'tradingDay', dayOfMonth: null, dayOfWeek: null, fundPositionId: null,
-    fundTarget: { name: '测试基金', code: '000001', shareClass: 'C' }
+    fundTarget: { name: '测试基金', code: '000001', shareClass: 'C' },
+    tradingScope: 'threeMarkets'
   }))
   view.unmount()
 })

@@ -134,6 +134,9 @@ public sealed class PlanService
         var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
         string? positionName = null;
         var fee = request.Type == AutoPlanType.FundSip ? request.Fee : 0m;
+        var tradingScope = request.Cycle == AutoPlanCycle.TradingDay
+            ? request.TradingScope
+            : AutoPlanTradingScope.ThreeMarkets;
 
         if (request.Type == AutoPlanType.FundSip)
         {
@@ -179,7 +182,7 @@ public sealed class PlanService
         if (plan is null && request.Cycle == AutoPlanCycle.TradingDay)
         {
             var earliest = request.StartDate > _dates.Today ? request.StartDate.AddDays(-1) : _dates.Today;
-            request = request with { StartDate = TradingCalendar.Default.NextTradingDay(earliest) };
+            request = request with { StartDate = TradingCalendar.Default.NextTradingDay(earliest, tradingScope) };
         }
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? DefaultName(request.Type, positionName) : request.Name.Trim();
@@ -201,7 +204,8 @@ public sealed class PlanService
                     request.StartDate,
                     request.FundPositionId,
                     now,
-                    fee);
+                    fee,
+                    tradingScope);
                 await _planRepository.AddPlanAsync(plan, cancellationToken);
             }
             else
@@ -220,7 +224,8 @@ public sealed class PlanService
                     request.FundPositionId,
                     now,
                     generationFloor,
-                    fee);
+                    fee,
+                    tradingScope);
             }
 
             var positionNames = new Dictionary<Guid, string>();
@@ -394,6 +399,7 @@ public sealed class PlanService
             && plan.DayOfMonth == request.DayOfMonth
             && plan.DayOfWeek == request.DayOfWeek
             && plan.Time == request.Time
+            && (request.Cycle != AutoPlanCycle.TradingDay || plan.TradingScope == request.TradingScope)
             && plan.IsActive;
     }
 
@@ -449,7 +455,8 @@ public sealed class PlanService
             plan.Version,
             position is null ? null : new FundPlanTarget(position.Name, position.Code, position.ShareClass),
             plan.IsActive ? PlanSchedule.GetDuePeriods(plan, from, from.AddDays(90)).Take(10).Select(period => period.DueDate).ToList() : [],
-            plan.Fee);
+            plan.Fee,
+            plan.TradingScope);
     }
 
     public static PlanOccurrenceDto Map(PlanOccurrence occurrence)

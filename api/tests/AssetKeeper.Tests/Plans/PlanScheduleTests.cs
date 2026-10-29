@@ -56,7 +56,25 @@ public sealed class PlanScheduleTests
         Assert.Equal(expected, PlanSchedule.GetDuePeriods(plan, date, date).Count == 1);
     }
 
-    private static AutoPlan Plan(AutoPlanCycle cycle, int? dayOfMonth = null, int? dayOfWeek = null, DateOnly? startDate = null)
+    [Theory]
+    [InlineData("2026-11-26", true)] // United States only
+    [InlineData("2026-10-19", true)] // Hong Kong only
+    [InlineData("2026-09-25", false)] // China only
+    public void TradingDayPlan_ChinaScope_OnlyUsesChinaCalendar(string dateText, bool expected)
+    {
+        var date = DateOnly.Parse(dateText);
+        var plan = Plan((AutoPlanCycle)2, startDate: new DateOnly(2026, 1, 1), tradingScope: AutoPlanTradingScope.China);
+
+        Assert.Equal(expected, PlanSchedule.IsDueOn(plan, date));
+        Assert.Equal(expected, PlanSchedule.GetDuePeriods(plan, date, date).Count == 1);
+    }
+
+    private static AutoPlan Plan(
+        AutoPlanCycle cycle,
+        int? dayOfMonth = null,
+        int? dayOfWeek = null,
+        DateOnly? startDate = null,
+        AutoPlanTradingScope tradingScope = AutoPlanTradingScope.ThreeMarkets)
     {
         return AutoPlan.Create(
             Guid.NewGuid(),
@@ -69,6 +87,7 @@ public sealed class PlanScheduleTests
             new TimeOnly(9, 0),
             startDate ?? new DateOnly(2026, 1, 1),
             Guid.NewGuid(),
-            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            tradingScope: tradingScope);
     }
 }

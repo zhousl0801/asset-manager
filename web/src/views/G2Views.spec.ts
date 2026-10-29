@@ -221,6 +221,58 @@ test('redemption confirmation submits shares, net value, fee and proceeds', asyn
   view.unmount()
 })
 
+test('redemption confirmation can estimate net proceeds from shares, net value and fee', async () => {
+  const withApplication = structuredClone(overview)
+  withApplication.pendingAmount = 0
+  withApplication.pendingBuys = []
+  withApplication.sellApplications = [{
+    transactionId: 'sa2',
+    positionId: 'p1',
+    positionName: '纳指基金',
+    shares: 10,
+    businessDate: '2026-10-21',
+    note: null
+  }]
+  mocks.overview.mockResolvedValue(withApplication)
+  mocks.confirmSell.mockResolvedValue({
+    position: overview.positions[0],
+    cashBalance: 9700,
+    activity: { id: 'sc2', type: 'sellConfirm', shares: 10, amount: 118, cashEffect: 0, fee: 2 }
+  })
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+  await showActivities(view)
+
+  await view.findAll('button').find((button) => button.text() === '登记实际结果')!.trigger('click')
+  await flushPromises()
+
+  const field = (label: string) => [...document.querySelectorAll('.sheet label')]
+    .find((item) => item.querySelector('span')?.textContent === label)!
+    .querySelector('input')!
+  const setValue = (label: string, value: string) => {
+    const input = field(label)
+    input.value = value
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+  setValue('成交净值', '12')
+  setValue('费用（元）', '2')
+  await flushPromises()
+
+  const estimateButton = [...document.querySelectorAll<HTMLButtonElement>('.sheet button')]
+    .find((button) => button.textContent?.includes('试算净到账'))!
+  estimateButton.click()
+  await flushPromises()
+
+  expect(field('净到账金额（元）').value).toBe('118.00')
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.confirmSell.mock.calls[0]![1]).toMatchObject({ shares: 10, netValue: 12, netAmount: 118, fee: 2 })
+  view.unmount()
+})
+
 test('redemption arrival sends the pending amount to cash', async () => {
   const withArrival = structuredClone(overview)
   withArrival.pendingAmount = 0

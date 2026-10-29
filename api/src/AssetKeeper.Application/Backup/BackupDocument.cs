@@ -231,6 +231,7 @@ public sealed class BackupPlan
     public string Name { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public decimal Fee { get; set; }
+    public string TradingScope { get; set; } = "ThreeMarkets";
     public string Cycle { get; set; } = string.Empty;
     public int? DayOfMonth { get; set; }
     public int? DayOfWeek { get; set; }
