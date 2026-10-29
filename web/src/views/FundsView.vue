@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Decimal from 'decimal.js'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   arriveFundSell,
@@ -29,6 +29,7 @@ import ConfirmSheet from '../components/ConfirmSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
   formatBusinessDate,
+  formatBusinessTime,
   addAmounts,
   formatMoney,
   formatQuantity,
@@ -71,7 +72,7 @@ const metricOptions: { key: FundMetricKey; label: string }[] = [
   { key: 'weight', label: '占比' },
   { key: 'pending', label: '待确认' }
 ]
-const platformPresets = ['直销', '代销', '支付宝', '天天基金', '蛋卷', '且慢', '招商银行']
+const platformOptions = ['券商直销', '支付宝', '天天基金', '银行']
 
 const route = useRoute()
 const router = useRouter()
@@ -98,7 +99,7 @@ const duplicatePrompt = ref<{ position: FundPosition; shares: number; cost: numb
 const activeGroup = ref<GroupScope>('all')
 const activeView = ref<PortfolioView>(normalizeView(route.params.view))
 const expandedFund = ref<string | null>(null)
-const pendingOpen = ref(false)
+const activityListRef = ref<HTMLElement | null>(null)
 const searchText = ref('')
 const metricKeys = ref<FundMetricKey[]>(loadMetricKeys())
 const metricNotice = ref('')
@@ -263,6 +264,262 @@ const scopedActivities = computed(() => {
 
   return trades.filter((item) => scopedPositionIds.value.has(item.positionId))
 })
+
+type ActivityKind = 'buy' | 'sip' | 'sell' | 'redeem' | 'arrival' | 'opening' | 'correction' | 'other'
+type ActivityFilter = 'all' | ActivityKind
+type ActivityStatusFilter = 'all' | 'pending' | 'done'
+type ActivityPendingAction = 'buy' | 'sell' | 'arrival'
+
+interface ActivityRow {
+  key: string
+  kind: ActivityKind
+  label: string
+  fundName: string
+  timestamp: string
+  amountText: string
+  statusText: string
+  statusTone: 'pending' | 'done' | 'reversed'
+  isPending: boolean
+  pendingAction: ActivityPendingAction | null
+  pending: PendingFundBuy | PendingFundSell | PendingFundArrival | null
+}
+
+const activityTypeFilter = ref<ActivityFilter>('all')
+const activityStatusFilter = ref<ActivityStatusFilter>('all')
+
+const activityTypeOptions: { value: ActivityFilter; label: string }[] = [
+  { value: 'all', label: '交易类型' },
+  { value: 'sip', label: '定投' },
+  { value: 'buy', label: '买入' },
+  { value: 'sell', label: '卖出' },
+  { value: 'redeem', label: '赎回' },
+  { value: 'arrival', label: '到账' },
+  { value: 'opening', label: '录入' },
+  { value: 'correction', label: '核对' }
+]
+
+function isSipNote(note: string | null | undefined): boolean {
+  return (note ?? '').includes('定投')
+}
+
+function activityKindOf(type: FundActivity['type'], isSip: boolean): ActivityKind {
+  switch (type) {
+    case 'buy':
+    case 'buyPending':
+    case 'buyConfirmed':
+      return isSip ? 'sip' : 'buy'
+    case 'sell':
+      return 'sell'
+    case 'sellApply':
+    case 'sellConfirm':
+      return 'redeem'
+    case 'sellArrival':
+      return 'arrival'
+    case 'opening':
+      return 'opening'
+    case 'correction':
+      return 'correction'
+    default:
+      return 'other'
+  }
+}
+
+function activityLabelOf(kind: ActivityKind): string {
+  switch (kind) {
+    case 'sip':
+      return '定投'
+    case 'buy':
+      return '买入'
+    case 'sell':
+      return '卖出'
+    case 'redeem':
+      return '赎回'
+    case 'arrival':
+      return '到账'
+    case 'opening':
+      return '录入'
+    case 'correction':
+      return '核对'
+    default:
+      return '其他'
+  }
+}
+
+function moneyText(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : `${formatMoney(value)}元`
+}
+
+function activityAmountTextOf(
+  activity: FundActivity,
+  pendingBuy: PendingFundBuy | undefined
+): string {
+  if (activity.type === 'sellApply') {
+    return activity.shares === null ? '—' : `${formatQuantity(activity.shares)}份`
+  }
+
+  if (activity.type === 'buyPending') {
+    return moneyText(pendingBuy?.amount ?? activity.amount)
+  }
+
+  return moneyText(activity.amount)
+}
+
+function activityStatusOf(type: FundActivity['type']): string {
+  switch (type) {
+    case 'buyPending':
+      return '交易进行中'
+    case 'buyConfirmed':
+      return '已确认'
+    case 'sellApply':
+      return '赎回申请中'
+    case 'sellConfirm':
+      return '待到账'
+    case 'sellArrival':
+      return '已到账'
+    case 'sell':
+      return '已完成'
+    case 'opening':
+      return '已录入'
+    case 'correction':
+      return '已核对'
+    default:
+      return ''
+  }
+}
+
+const activityRows = computed<ActivityRow[]>(() => {
+  const pendingBuyById = new Map(scopedPendingBuys.value.map((item) => [item.transactionId, item]))
+  const sellApplyById = new Map(scopedSellApplications.value.map((item) => [item.transactionId, item]))
+  const arrivalByConfirmId = new Map(scopedPendingArrivals.value.map((item) => [item.transactionId, item]))
+  const noteById = new Map(scopedActivities.value.map((item) => [item.id, item.note]))
+  const rows: ActivityRow[] = []
+  const seen = new Set<string>()
+
+  for (const activity of scopedActivities.value) {
+    seen.add(activity.id)
+    const pendingBuy = pendingBuyById.get(activity.id)
+    const sellApply = sellApplyById.get(activity.id)
+    const arrival = arrivalByConfirmId.get(activity.id)
+    const linkedNote = activity.linkedTransactionId ? noteById.get(activity.linkedTransactionId) : null
+    const kind = activityKindOf(activity.type, isSipNote(activity.note) || isSipNote(linkedNote))
+    const isPending = activity.type === 'buyPending'
+      || activity.type === 'sellApply'
+      || activity.type === 'sellConfirm'
+    const pending = pendingBuy ?? sellApply ?? arrival ?? null
+    const pendingAction: ActivityPendingAction | null = activity.isReversed
+      ? null
+      : activity.type === 'buyPending' && pendingBuy
+        ? 'buy'
+        : activity.type === 'sellApply' && sellApply
+          ? 'sell'
+          : activity.type === 'sellConfirm' && arrival
+            ? 'arrival'
+            : null
+
+    rows.push({
+      key: activity.id,
+      kind,
+      label: activityLabelOf(kind),
+      fundName: activity.positionName,
+      timestamp: [activity.businessDate, formatBusinessTime(activity.createdAt)].filter(Boolean).join(' '),
+      amountText: activityAmountTextOf(activity, pendingBuy),
+      statusText: activity.isReversed ? '已撤销' : activityStatusOf(activity.type),
+      statusTone: activity.isReversed ? 'reversed' : isPending ? 'pending' : 'done',
+      isPending: isPending && !activity.isReversed,
+      pendingAction,
+      pending
+    })
+  }
+
+  for (const pending of scopedPendingBuys.value) {
+    if (seen.has(pending.transactionId)) {
+      continue
+    }
+
+    const kind = isSipNote(pending.note) ? 'sip' : 'buy'
+    rows.push({
+      key: pending.transactionId,
+      kind,
+      label: activityLabelOf(kind),
+      fundName: pending.positionName,
+      timestamp: pending.businessDate,
+      amountText: moneyText(pending.amount),
+      statusText: '交易进行中',
+      statusTone: 'pending',
+      isPending: true,
+      pendingAction: 'buy',
+      pending
+    })
+  }
+
+  for (const application of scopedSellApplications.value) {
+    if (seen.has(application.transactionId)) {
+      continue
+    }
+
+    rows.push({
+      key: application.transactionId,
+      kind: 'redeem',
+      label: activityLabelOf('redeem'),
+      fundName: application.positionName,
+      timestamp: application.businessDate,
+      amountText: `${formatQuantity(application.shares)}份`,
+      statusText: '赎回申请中',
+      statusTone: 'pending',
+      isPending: true,
+      pendingAction: 'sell',
+      pending: application
+    })
+  }
+
+  for (const arrival of scopedPendingArrivals.value) {
+    if (seen.has(arrival.transactionId)) {
+      continue
+    }
+
+    rows.push({
+      key: arrival.transactionId,
+      kind: 'arrival',
+      label: activityLabelOf('arrival'),
+      fundName: arrival.positionName,
+      timestamp: arrival.businessDate,
+      amountText: moneyText(arrival.amount),
+      statusText: '待到账',
+      statusTone: 'pending',
+      isPending: true,
+      pendingAction: 'arrival',
+      pending: arrival
+    })
+  }
+
+  return rows.sort((left, right) => right.timestamp.localeCompare(left.timestamp))
+})
+
+const filteredActivityRows = computed(() => activityRows.value.filter((row) => {
+  if (activityStatusFilter.value === 'pending' && !row.isPending) {
+    return false
+  }
+
+  if (activityStatusFilter.value === 'done' && row.isPending) {
+    return false
+  }
+
+  return activityTypeFilter.value === 'all' || row.kind === activityTypeFilter.value
+}))
+
+function openActivityRow(row: ActivityRow): void {
+  if (!row.pending) {
+    return
+  }
+
+  if (row.pendingAction === 'buy') {
+    openBuyConfirmSheet(row.pending as PendingFundBuy)
+  } else if (row.pendingAction === 'sell') {
+    openSellConfirmSheet(row.pending as PendingFundSell)
+  } else if (row.pendingAction === 'arrival') {
+    openArrivalSheet(row.pending as PendingFundArrival)
+  }
+}
 
 const scope = computed(() => {
   const confirmedValue = sumAmounts(scopedFunds.value.map(fund => fund.value))
@@ -724,8 +981,15 @@ async function setView(view: PortfolioView): Promise<void> {
 }
 
 async function showPending(): Promise<void> {
+  activityTypeFilter.value = 'all'
+  activityStatusFilter.value = 'all'
   await setView('activities')
-  pendingOpen.value = true
+  await nextTick()
+  const target = activityListRef.value?.querySelector<HTMLElement>('.activity-row.is-pending')
+  target?.scrollIntoView?.({
+    block: 'center',
+    behavior: 'smooth'
+  })
 }
 
 async function loadPlans(): Promise<void> {
@@ -897,7 +1161,7 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   form.name = ''
   form.code = ''
   form.shareClass = ''
-  form.platform = '直销'
+  form.platform = '券商直销'
   form.confirmationDelayDays = '1'
   selectedFund.value = null
   fundSearch.value = ''
@@ -1076,10 +1340,15 @@ function normalizePositionKey(value: string | null | undefined): string {
   return (value ?? '').normalize('NFKC').replace(/\s/g, '').toUpperCase()
 }
 
+function normalizePlatformKey(value: string | null | undefined): string {
+  const key = normalizePositionKey(value)
+  return key === '直销' ? '券商直销' : key
+}
+
 function findDuplicatePosition(): FundPosition | null {
   const code = normalizePositionKey(form.code)
   const shareClass = normalizePositionKey(form.shareClass)
-  const platform = normalizePositionKey(form.platform)
+  const platform = normalizePlatformKey(form.platform)
 
   if (!code) {
     return null
@@ -1091,7 +1360,7 @@ function findDuplicatePosition(): FundPosition | null {
       return false
     }
 
-    const existingPlatform = normalizePositionKey(position.platform)
+    const existingPlatform = normalizePlatformKey(position.platform)
 
     return existingPlatform === platform || existingPlatform === '' || platform === ''
   }) ?? null
@@ -1469,124 +1738,15 @@ function clearSelectedFund(): void {
   fundSearchError.value = ''
 }
 
-function fundClassLabel(): string {
-  if (!selectedFund.value) {
-    return '选择基金后自动识别'
-  }
-
-  return form.shareClass ? `${form.shareClass} 类` : '未区分份额类别'
-}
-
-function confirmationLabel(): string {
-  const days = form.confirmationDelayDays === '1' ? 'T+1' : 'T+2'
-  const type = selectedFund.value
-    ? selectedFund.value.isQdii ? 'QDII 基金' : '境内基金'
-    : '按基金类型自动设置'
-  return `${days}（${type}）`
-}
-
 async function cancelPending(transactionId: string): Promise<void> {
   try {
     await cancelFundPending(transactionId, createRequestId())
     notice.value = '待处理基金交易已撤销。'
+    sheet.value = null
     await loadOverview()
   } catch (error) {
     notice.value = getApiErrorMessage(error, '撤销失败，请刷新后重试。')
   }
-}
-
-function activityTitle(activity: FundActivity): string {
-  switch (activity.type) {
-    case 'opening':
-      return '录入持仓'
-    case 'correction':
-      return '份额核对'
-    case 'buy':
-      return '基金买入'
-    case 'buyPending':
-      return '买入待确认'
-    case 'buyConfirmed':
-      return '买入确认'
-    case 'sell':
-      return '基金卖出'
-    case 'sellApply':
-      return '赎回申请'
-    case 'sellConfirm':
-      return '赎回确认'
-    case 'sellArrival':
-      return '赎回到账'
-    case 'quote':
-      return '更新净值'
-    default:
-      return '基金记录'
-  }
-}
-
-function activityNote(activity: FundActivity): string {
-  if (activity.note) {
-    return activity.note
-  }
-
-  switch (activity.type) {
-    case 'opening':
-      return '已有持仓，不扣现金'
-    case 'correction':
-      return '按实际持有份额核对'
-    case 'buy':
-      return '现金 → 基金持仓'
-    case 'buyPending':
-      return '现金 → 买入待确认'
-    case 'buyConfirmed':
-      return '买入待确认 → 基金持仓'
-    case 'sell':
-      return '基金持仓 → 现金'
-    case 'sellApply':
-      return '份额冻结，仍在持仓'
-    case 'sellConfirm':
-      return '基金持仓 → 待到账'
-    case 'sellArrival':
-      return '待到账 → 现金'
-    default:
-      return '仅更新估值'
-  }
-}
-
-function activityAmountText(activity: FundActivity): string {
-  if (activity.type === 'buy' || activity.type === 'buyPending' || activity.type === 'sell'
-    || activity.type === 'sellArrival') {
-    return formatSignedMoney(activity.cashEffect)
-  }
-
-  if (activity.type === 'quote') {
-    return `净值 ${formatQuantity(activity.netValue)}`
-  }
-
-  if (activity.type === 'buyConfirmed' || activity.type === 'sellApply') {
-    return `${formatQuantity(activity.shares)} 份`
-  }
-
-  if (activity.type === 'correction') {
-    return `核对后 ${formatQuantity(activity.shares)} 份`
-  }
-
-  if (activity.type === 'sellConfirm') {
-    return `待到账 ${formatMoney(activity.amount)}`
-  }
-
-  return `成本 ${formatMoney(activity.amount)}`
-}
-
-function activityMeta(activity: FundActivity): string {
-  if (activity.type === 'quote') {
-    return `${activity.positionName} · ${formatBusinessDate(activity.businessDate)}`
-  }
-
-  const shares = activity.shares === null ? '' : `${formatQuantity(activity.shares)} 份`
-  const value = activity.netValue === null ? '' : `净值 ${formatQuantity(activity.netValue)}`
-  const fee = activity.fee > 0 ? ` · 费用 ${formatMoney(activity.fee)}` : ''
-  const details = [shares, value].filter(Boolean).join(' · ')
-
-  return `${activity.positionName}${details ? ` · ${details}` : ''}${fee}`
 }
 
 function goBack(): void {
@@ -1708,86 +1868,6 @@ function goBack(): void {
         </span>
         <span class="pending-shortcut-action">去处理 ›</span>
       </button>
-
-      <details
-        v-if="activeView === 'activities' && pendingCount"
-        class="pending-overview ui-disclosure"
-        :open="pendingOpen"
-        @toggle="pendingOpen = ($event.target as HTMLDetailsElement).open"
-      >
-        <summary><span>待处理交易</span><b>{{ scopedPendingBuys.length + scopedSellApplications.length + scopedPendingArrivals.length }} 笔待核对</b></summary>
-      <template v-if="scopedPendingBuys.length">
-        <div class="section-head">
-          <h2>买入待确认</h2>
-          <span class="meta">{{ scopedPendingBuys.length }} 笔 · ¥{{ formatMoney(scope.pendingBuyAmount) }}</span>
-        </div>
-        <section class="pending-list">
-          <article v-for="pending in scopedPendingBuys" :key="pending.transactionId" class="pending-card">
-            <div class="pending-copy">
-              <strong>{{ pending.positionName }}</strong>
-              <small>
-                下单 {{ formatBusinessDate(pending.businessDate) }} · T 日 {{ formatBusinessDate(pending.tradeDate) }}
-                · 申购费 ¥{{ formatMoney(pending.fee) }}<template v-if="pending.note"> · {{ pending.note }}</template>
-              </small>
-            </div>
-            <div class="pending-side">
-              <b>¥{{ formatMoney(pending.amount) }}</b>
-              <button type="button" class="confirm-button" @click="openBuyConfirmSheet(pending)">登记确认份额</button>
-              <button v-if="pending.canCancel" type="button" class="secondary-button" @click="cancelPending(pending.transactionId)">撤销</button>
-              <small v-else>预计 {{ formatBusinessDate(pending.confirmationDate) }} 按确认净值自动结转</small>
-            </div>
-          </article>
-        </section>
-      </template>
-
-      <template v-if="scopedSellApplications.length">
-        <div class="section-head">
-          <h2>赎回申请</h2>
-          <span class="meta">{{ scopedSellApplications.length }} 笔 · 份额已冻结</span>
-        </div>
-        <section class="pending-list">
-          <article v-for="application in scopedSellApplications" :key="application.transactionId" class="pending-card">
-            <div class="pending-copy">
-              <strong>{{ application.positionName }}</strong>
-              <small>
-                {{ formatBusinessDate(application.businessDate) }} · {{ formatQuantity(application.shares) }} 份
-                <template v-if="application.note"> · {{ application.note }}</template>
-              </small>
-            </div>
-            <div class="pending-side">
-              <button type="button" class="confirm-button" @click="openSellConfirmSheet(application)">登记实际结果</button>
-              <button v-if="application.canCancel" type="button" class="secondary-button" @click="cancelPending(application.transactionId)">撤销申请</button>
-              <small v-else>15:00 后不可撤销</small>
-            </div>
-          </article>
-        </section>
-      </template>
-
-      <template v-if="scopedPendingArrivals.length">
-        <div class="section-head">
-          <h2>赎回待到账</h2>
-          <span class="meta">{{ scopedPendingArrivals.length }} 笔 · ¥{{ formatMoney(scope.pendingArrivalAmount) }}</span>
-        </div>
-        <section class="pending-list">
-          <article v-for="arrival in scopedPendingArrivals" :key="arrival.transactionId" class="pending-card">
-            <div class="pending-copy">
-              <strong>{{ arrival.positionName }}</strong>
-              <small>
-                {{ formatBusinessDate(arrival.businessDate) }} · {{ formatQuantity(arrival.shares) }} 份
-                <template v-if="arrival.note"> · {{ arrival.note }}</template>
-              </small>
-            </div>
-            <div class="pending-side">
-              <b>¥{{ formatMoney(arrival.amount) }}</b>
-              <button type="button" class="confirm-button" @click="openArrivalSheet(arrival)">登记到账</button>
-            </div>
-          </article>
-        </section>
-      </template>
-
-
-
-      </details>
 
       <template v-if="activeView === 'positions' || activeView === 'returns'">
         <FundReturnsPanel
@@ -1920,25 +2000,50 @@ function goBack(): void {
       </template>
 
       <template v-else-if="activeView === 'activities'">
-        <div class="section-head">
-          <h2>交易记录</h2>
-          <span class="meta">{{ scopedActivities.length }} 条 · 最近 200 条</span>
+        <div class="activity-toolbar">
+          <h2>明细</h2>
+          <select v-model="activityStatusFilter" class="activity-status-filter" aria-label="交易状态">
+            <option value="all">全部</option>
+            <option value="pending">进行中</option>
+            <option value="done">已完成</option>
+          </select>
+          <select v-model="activityTypeFilter" class="activity-type-filter" aria-label="交易类型">
+            <option v-for="option in activityTypeOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </div>
 
-        <section v-if="scopedActivities.length" class="activity-card">
-          <div v-for="activity in scopedActivities" :key="activity.id" class="activity-row">
-            <span class="activity-mark">{{ activity.type === 'correction' ? '核' : activity.type === 'buy' ? '买' : activity.type === 'buyPending' ? '待' : activity.type === 'buyConfirmed' ? '确' : activity.type === 'sell' ? '卖' : activity.type === 'sellApply' ? '申' : activity.type === 'sellConfirm' ? '赎' : activity.type === 'sellArrival' ? '到' : activity.type === 'quote' ? '净' : '录' }}</span>
-            <span class="activity-copy">
-              <strong>{{ activity.isReversed ? `已撤销 · ${activityTitle(activity)}` : activityTitle(activity) }}</strong>
-              <small>{{ activityNote(activity) }} · {{ activityMeta(activity) }}</small>
+        <section v-if="filteredActivityRows.length" ref="activityListRef" class="activity-list">
+          <div
+            v-for="row in filteredActivityRows"
+            :key="row.key"
+            class="activity-row"
+            :class="{ 'is-pending': row.isPending, 'is-clickable': row.pendingAction }"
+            :role="row.pendingAction ? 'button' : undefined"
+            :tabindex="row.pendingAction ? 0 : undefined"
+            @click="openActivityRow(row)"
+            @keydown.enter="openActivityRow(row)"
+          >
+            <span class="activity-type" :class="`type-${row.kind}`">{{ row.label }}</span>
+            <span class="activity-main">
+              <strong>基金 | {{ row.fundName }}</strong>
+              <small>{{ row.timestamp }}</small>
             </span>
-            <b class="activity-value" :class="{ income: activity.cashEffect > 0 }">
-              {{ activity.isReversed ? '已撤销' : activityAmountText(activity) }}
-            </b>
+            <span class="activity-side">
+              <b>{{ row.amountText }}</b>
+              <small :class="`status-${row.statusTone}`">{{ row.statusText }}</small>
+            </span>
           </div>
         </section>
 
-        <EmptyState v-else compact icon="ledger" title="还没有交易记录" description="记录买入、赎回等投资变动后，可在这里查看。" />
+        <EmptyState
+          v-else
+          compact
+          icon="ledger"
+          :title="activityRows.length ? '没有符合条件的交易' : '还没有交易记录'"
+          :description="activityRows.length ? '试试其他交易类型或状态。' : '记录买入、赎回等投资变动后，可在这里查看。'"
+        />
       </template>
 
       <template v-else>
@@ -2070,6 +2175,10 @@ function goBack(): void {
           <span>待确认扣款</span>
           <b>¥{{ formatMoney(selectedPendingBuy.amount) }} · 申购费 ¥{{ formatMoney(selectedPendingBuy.fee) }}</b>
         </div>
+        <div v-if="selectedPendingBuy" class="summary-line">
+          <span>交易日</span>
+          <b>T 日 {{ formatBusinessDate(selectedPendingBuy.tradeDate) }} · 预计 {{ formatBusinessDate(selectedPendingBuy.confirmationDate) }} 确认</b>
+        </div>
         <div v-if="selectedSellApplication" class="summary-line">
           <span>申请赎回</span>
           <b>{{ formatQuantity(selectedSellApplication.shares) }} 份</b>
@@ -2124,34 +2233,12 @@ function goBack(): void {
             <small>支持按基金名称或代码模糊搜索，选中后自动识别份额类别和确认周期。</small>
           </label>
 
-          <div class="form-row">
-            <label class="form-field">
-              <span>份额类别</span>
-              <input :value="fundClassLabel()" type="text" readonly />
-            </label>
-            <label class="form-field">
-              <span>平台</span>
-              <input
-                v-model="form.platform"
-                type="text"
-                maxlength="30"
-                list="fund-platform-options"
-                placeholder="如 支付宝、天天基金"
-              />
-              <datalist id="fund-platform-options">
-                <option v-for="platform in platformPresets" :key="platform" :value="platform" />
-              </datalist>
-              <div class="platform-presets" aria-label="常用平台">
-                <button
-                  v-for="platform in platformPresets"
-                  :key="platform"
-                  type="button"
-                  :class="{ active: form.platform === platform }"
-                  @click="form.platform = platform"
-                >{{ platform }}</button>
-              </div>
-            </label>
-          </div>
+          <label class="form-field">
+            <span>平台</span>
+            <select v-model="form.platform">
+              <option v-for="platform in platformOptions" :key="platform" :value="platform">{{ platform }}</option>
+            </select>
+          </label>
 
           <div class="form-row">
             <label class="form-field">
@@ -2168,12 +2255,6 @@ function goBack(): void {
             <span>截至日期</span>
             <input v-model="form.businessDate" type="date" :max="today" />
             <small>这笔持仓在这一天成立；补录历史持仓时请选择实际日期。</small>
-          </label>
-
-          <label class="form-field">
-            <span>确认周期</span>
-            <input :value="confirmationLabel()" type="text" readonly />
-            <small>QDII 基金按 T+2，境内基金按 T+1 自动设置。</small>
           </label>
         </template>
 
@@ -2233,6 +2314,12 @@ function goBack(): void {
           <p class="form-note">
             确认后待确认金额转为持仓成本，不再次扣现金。自动确认会按 T 日净值折算；如平台实际份额或费用不同，请以这里登记的为准。
           </p>
+          <button
+            v-if="selectedPendingBuy?.canCancel"
+            type="button"
+            class="text-button danger-text"
+            @click="cancelPending(selectedPendingBuy.transactionId)"
+          >撤销这笔待确认</button>
         </template>
 
         <template v-else-if="sheet === 'shares'">
@@ -2301,6 +2388,12 @@ function goBack(): void {
             />
           </label>
           <p class="form-note">确认份额不能超过申请份额；净值日期默认取申请日 T 日，可按实际成交调整。</p>
+          <button
+            v-if="selectedSellApplication?.canCancel"
+            type="button"
+            class="text-button danger-text"
+            @click="cancelPending(selectedSellApplication.transactionId)"
+          >撤销赎回申请</button>
         </template>
 
         <template v-else-if="sheet === 'sellArrival'">
@@ -2559,14 +2652,6 @@ function goBack(): void {
   font-size: 0.8125rem;
   text-align: left;
 }
-.pending-overview {
-  container-type: inline-size;
-  margin: 0 0 18px;
-  padding: 0 12px;
-  border-radius: var(--radius-control);
-  background: var(--color-brand-soft);
-}
-
 .pending-shortcut {
   display: flex;
   align-items: center;
@@ -2605,20 +2690,6 @@ function goBack(): void {
   color: var(--color-brand);
   font-size: var(--text-footnote);
   font-weight: 500;
-}
-.pending-overview summary {
-  color: var(--color-brand);
-}
-.pending-overview summary b {
-  margin-left: auto;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.pending-overview[open] {
-  padding-bottom: 12px;
-}
-.pending-overview .section-head {
-  margin-top: 14px;
 }
 .fund-help {
   margin-top: 24px;
@@ -3327,81 +3398,6 @@ function goBack(): void {
   font-size: var(--text-caption);
 }
 
-.pending-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.pending-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 48%);
-  align-items: center;
-  gap: 12px;
-  padding: 13px 14px;
-  border: 1px dashed var(--color-border-default);
-  border-radius: var(--radius-card);
-  background: var(--color-brand-soft);
-}
-
-.pending-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.pending-copy strong {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.pending-copy small {
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pending-side {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
-.pending-side b {
-  flex: 0 0 auto;
-  font-size: 0.875rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.pending-side small {
-  flex: 1 1 120px;
-  min-width: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-  line-height: 1.5;
-  text-align: right;
-  white-space: normal;
-}
-
-@container (max-width: 560px) {
-  .pending-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .pending-side {
-    justify-content: space-between;
-  }
-}
-
 .confirm-button {
   min-height: var(--touch-target);
   padding: 0 10px;
@@ -3514,70 +3510,129 @@ function goBack(): void {
   width: 100%;
 }
 
-.activity-card {
-  overflow: hidden;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-card);
-  background: var(--color-bg-surface);
+.activity-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.activity-toolbar h2 {
+  margin: 0 auto 0 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.activity-status-filter,
+.activity-type-filter {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-tag);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+}
+
+.activity-status-filter {
+  color: var(--color-brand);
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
 }
 
 .activity-row {
   display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 2px;
   border-bottom: 1px solid var(--color-border-subtle);
+  text-align: left;
 }
 
 .activity-row:last-child {
   border-bottom: 0;
 }
 
-.activity-mark {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  flex: 0 0 auto;
-  width: 33px;
-  height: 33px;
-  border-radius: 50%;
+.activity-row.is-clickable {
+  cursor: pointer;
+}
+
+.activity-row.is-clickable:active {
   background: var(--color-brand-soft);
-  color: var(--color-brand);
-  font-size: 0.75rem;
+}
+
+.activity-type {
+  flex: 0 0 34px;
+  padding-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
   font-weight: 500;
 }
 
-.activity-copy {
+.activity-type.type-sip,
+.activity-type.type-buy {
+  color: var(--color-finance-loss);
+}
+
+.activity-main {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
 
-.activity-copy strong {
-  font-size: 0.8125rem;
+.activity-main strong {
+  font-size: 0.875rem;
   font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
-.activity-copy small {
-  overflow: hidden;
+.activity-main small {
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.activity-value {
+.activity-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   flex: 0 0 auto;
-  font-size: 0.8125rem;
+  padding-top: 1px;
+}
+
+.activity-side b {
+  font-size: 0.875rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.income {
-  color: var(--color-finance-income);
+.activity-side small {
+  font-size: var(--text-caption);
+}
+
+.status-pending {
+  color: var(--color-brand);
+}
+
+.status-done {
+  color: var(--color-text-secondary);
+}
+
+.status-reversed {
+  color: var(--color-finance-loss);
+}
+
+.danger-text {
+  align-self: flex-start;
+  color: var(--color-finance-loss);
 }
 
 .summary-note {
@@ -3593,29 +3648,6 @@ function goBack(): void {
   min-height: 32px;
   padding: 0;
   font-size: var(--text-caption);
-}
-
-.platform-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.platform-presets button {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-}
-
-.platform-presets button.active {
-  border-color: var(--color-brand);
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
 }
 
 .duplicate-note {

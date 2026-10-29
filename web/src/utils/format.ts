@@ -50,6 +50,29 @@ export function formatBusinessDate(value: string): string {
   return `${year}年${month}月${day}日`
 }
 
+export function formatBusinessTime(value: string | null | undefined): string {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(date)
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
+
+  return `${get('hour')}:${get('minute')}:${get('second')}`
+}
+
 export function todayInBusinessTimeZone(): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Shanghai',

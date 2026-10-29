@@ -90,11 +90,17 @@ test('pending buy shows trade and automatic confirmation dates and allows manual
   await flushPromises()
   await showActivities(view)
   expect(view.find('.hero-meta').text()).toContain('含待确认 ¥300.00')
-  expect(view.find('.pending-card').text()).toContain('纳指基金')
-  expect(view.find('.pending-card').text()).toContain('T 日 2026年10月21日')
-  expect(view.find('.pending-card').text()).toContain('预计 2026年10月23日 按确认净值自动结转')
-  expect(view.find('.pending-card .confirm-button').text()).toBe('登记确认份额')
-  expect(view.find('.pending-card .secondary-button').exists()).toBe(false)
+  const row = view.find('.activity-row.is-pending')
+  expect(row.text()).toContain('基金 | 纳指基金')
+  expect(row.text()).toContain('交易进行中')
+  expect(row.text()).toContain('300.00元')
+
+  await row.trigger('click')
+  await flushPromises()
+  const sheetText = document.querySelector('.sheet')!.textContent ?? ''
+  expect(sheetText).toContain('T 日 2026年10月21日')
+  expect(sheetText).toContain('预计 2026年10月23日 确认')
+  expect(sheetText).toContain('待确认扣款')
   view.unmount()
 })
 
@@ -106,8 +112,14 @@ test('pending buy before cutoff can be cancelled with an idempotent request', as
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
   await showActivities(view)
-  await view.get('.pending-card .secondary-button').trigger('click')
+  await view.find('.activity-row.is-pending').trigger('click')
   await flushPromises()
+
+  const cancelButton = [...document.querySelectorAll<HTMLButtonElement>('.sheet button')]
+    .find((button) => button.textContent?.includes('撤销这笔待确认'))!
+  cancelButton.click()
+  await flushPromises()
+
   expect(mocks.cancel).toHaveBeenCalledWith('pb1', expect.any(String))
   expect(mocks.overview).toHaveBeenCalledTimes(2)
   view.unmount()
@@ -201,8 +213,9 @@ test('redemption confirmation submits shares, net value, fee and proceeds', asyn
   await flushPromises()
   await showActivities(view)
 
-  const confirmButton = view.findAll('button').find((button) => button.text() === '登记实际结果')!
-  await confirmButton.trigger('click')
+  const confirmRow = view.findAll('.activity-row')
+    .find((row) => row.text().includes('赎回申请中'))!
+  await confirmRow.trigger('click')
   await flushPromises()
 
   const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
@@ -243,7 +256,9 @@ test('redemption confirmation can estimate net proceeds from shares, net value a
   await flushPromises()
   await showActivities(view)
 
-  await view.findAll('button').find((button) => button.text() === '登记实际结果')!.trigger('click')
+  const confirmRow = view.findAll('.activity-row')
+    .find((row) => row.text().includes('赎回申请中'))!
+  await confirmRow.trigger('click')
   await flushPromises()
 
   const field = (label: string) => [...document.querySelectorAll('.sheet label')]
@@ -297,8 +312,9 @@ test('redemption arrival sends the pending amount to cash', async () => {
   await flushPromises()
   await showActivities(view)
 
-  const arrivalButton = view.findAll('button').find((button) => button.text() === '登记到账')!
-  await arrivalButton.trigger('click')
+  const arrivalRow = view.findAll('.activity-row')
+    .find((row) => row.text().includes('待到账'))!
+  await arrivalRow.trigger('click')
   await flushPromises()
 
   document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))

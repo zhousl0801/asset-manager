@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatBusinessDate,
+  formatBusinessTime,
   formatMoney,
   formatQuantity,
   formatSignedMoney,
@@ -11,8 +12,18 @@ import {
   todayInBusinessTimeZone
 } from './format'
 
-describe('formatMoney', () => {
-  it('formats amounts with two decimals', () => {
+describe('formatBusinessTime', () => {
+  it('formats an ISO timestamp in Asia/Shanghai', () => {
+    expect(formatBusinessTime('2026-10-29T04:01:09Z')).toBe('12:01:09')
+  })
+
+  it('returns empty for missing or invalid values', () => {
+    expect(formatBusinessTime(null)).toBe('')
+    expect(formatBusinessTime('not-a-date')).toBe('')
+  })
+})
+
+describe('formatMoney', () => {  it('formats amounts with two decimals', () => {
     expect(formatMoney(23400)).toBe('23,400.00')
   })
 

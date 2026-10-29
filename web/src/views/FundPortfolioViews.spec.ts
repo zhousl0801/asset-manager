@@ -257,8 +257,8 @@ test('pending shortcut opens the transaction tab and expands pending items', asy
   await flushPromises()
 
   expect(view.find('.view-tabs button[aria-selected="true"]').text()).toBe('交易')
-  expect(view.find('.pending-overview').element.hasAttribute('open')).toBe(true)
-  expect(view.findAll('.pending-card')).toHaveLength(1)
+  expect(view.findAll('.activity-row.is-pending')).toHaveLength(1)
+  expect(view.find('.activity-row.is-pending').text()).toContain('交易进行中')
   view.unmount()
 })
 
@@ -282,7 +282,7 @@ test('switching group filters total, funds, pending items and activities consist
 
   await view.findAll('.view-tabs button').find((button) => button.text() === '交易')!.trigger('click')
   await flushPromises()
-  expect(view.findAll('.pending-card')).toHaveLength(0)
+  expect(view.findAll('.activity-row.is-pending')).toHaveLength(0)
   expect(view.findAll('.activity-row')).toHaveLength(1)
   expect(view.find('.activity-row').text()).toContain('纳指基金')
 
@@ -404,9 +404,9 @@ test('opening a position searches by code and fills class and confirmation perio
   result.click()
   await flushPromises()
 
-  const values = [...document.querySelectorAll<HTMLInputElement>('.sheet input')].map((input) => input.value)
-  expect(values).toContain('A 类')
-  expect(values).toContain('T+2（QDII 基金）')
+  const sheetText = document.querySelector('.sheet')!.textContent ?? ''
+  expect(sheetText).toContain('大成纳斯达克100ETF联接(QDII)A')
+  expect(sheetText).toContain('000834')
 
   const shares = document.querySelector<HTMLInputElement>('.sheet input[placeholder="0.0000"]')!
   shares.value = '10'
@@ -423,7 +423,7 @@ test('opening a position searches by code and fills class and confirmation perio
     name: '大成纳斯达克100ETF联接(QDII)',
     code: '000834',
     shareClass: 'A',
-    platform: '直销',
+    platform: '券商直销',
     confirmationDelayDays: 2
   }))
   view.unmount()
@@ -437,7 +437,7 @@ test('opening a duplicate holding asks before updating or adding', async () => {
     name: '大成纳斯达克100ETF联接(QDII)',
     code: '000834',
     shareClass: 'A',
-    platform: '直销',
+    platform: '券商直销',
     shares: 100,
     cost: 1000
   }]
@@ -500,12 +500,10 @@ test('pending buy can be confirmed manually with shares, net value and fee', asy
   await flushPromises()
   await view.findAll('.view-tabs button').find((button) => button.text() === '交易')!.trigger('click')
   await flushPromises()
-  await view.get('.pending-overview summary').trigger('click')
-  await flushPromises()
 
-  const confirmButton = [...view.findAll('.pending-card button')]
-    .find((button) => button.text() === '登记确认份额')!
-  await confirmButton.trigger('click')
+  const pendingRow = view.findAll('.activity-row')
+    .find((row) => row.text().includes('债券基金') && row.text().includes('交易进行中'))!
+  await pendingRow.trigger('click')
   await flushPromises()
 
   const field = (label: string) => [...document.querySelectorAll('.sheet label')]
