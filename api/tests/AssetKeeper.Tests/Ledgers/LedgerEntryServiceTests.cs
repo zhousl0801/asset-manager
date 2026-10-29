@@ -62,15 +62,16 @@ public sealed class LedgerEntryServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WithDateBeforeLedgerStart_ReturnsInvalid()
+    public async Task CreateAsync_WithDateBeforeLedgerStart_IsAllowed()
     {
         var (service, _) = await CreateServiceAsync();
         var result = await service.CreateAsync(
             CreateRequest(LedgerEntryKind.Expense, "餐饮", 10m, businessDate: BusinessToday.AddDays(-1)),
             CancellationToken.None);
 
-        Assert.Equal(EntryOperationStatus.Invalid, result.Status);
-        Assert.Contains("业务日期不能早于账本起始日期。", result.Errors);
+        Assert.Equal(EntryOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(990m, result.Result.CashBalance);
     }
 
     [Fact]

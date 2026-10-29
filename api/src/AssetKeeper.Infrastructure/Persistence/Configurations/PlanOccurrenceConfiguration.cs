@@ -48,6 +48,12 @@ internal sealed class PlanOccurrenceConfiguration : IEntityTypeConfiguration<Pla
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(occurrence => occurrence.Fee)
+            .HasColumnName("fee")
+            .HasPrecision(18, 2)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
         builder.Property(occurrence => occurrence.PlanVersion)
             .HasColumnName("plan_version")
             .IsRequired();

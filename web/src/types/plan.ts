@@ -9,6 +9,7 @@ export interface AutoPlan {
   type: PlanType
   name: string
   amount: number
+  fee?: number
   cycle: PlanCycle
   dayOfMonth: number | null
   dayOfWeek: number | null
@@ -30,6 +31,7 @@ export interface PlanOccurrence {
   planName: string
   type: PlanType
   amount: number
+  fee: number
   dueDate: string
   dueTime: string
   status: OccurrenceStatus
@@ -43,11 +45,17 @@ export interface PlanOccurrence {
 export interface PlanOverview {
   plans: AutoPlan[]
   pendingOccurrences: PlanOccurrence[]
-  recentOccurrences: PlanOccurrence[]
   activeCount: number
   nextDueDate: string | null
   cashBalance: number
   providentBalance: number
+}
+
+export interface PlanOccurrencePage {
+  items: PlanOccurrence[]
+  page: number
+  pageSize: number
+  totalCount: number
 }
 
 export interface PlanCalendar {
@@ -61,6 +69,7 @@ export interface SavePlanInput {
   type: PlanType
   name: string
   amount: number
+  fee?: number
   cycle: PlanCycle
   dayOfMonth: number | null
   dayOfWeek: number | null

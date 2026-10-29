@@ -1,5 +1,6 @@
 using AssetKeeper.Application.Mutations;
 using AssetKeeper.Application.History;
+using AssetKeeper.Domain.Cash;
 using AssetKeeper.Domain.Ledgers;
 
 namespace AssetKeeper.Application.Ledgers;
@@ -84,7 +85,6 @@ public sealed class LedgerEntryService
             request.Category,
             request.Amount,
             request.BusinessDate,
-            ledger.StartDate,
             businessToday,
             request.Note);
 
@@ -110,6 +110,8 @@ public sealed class LedgerEntryService
             return EntryOperationResult.Invalid([categoryError]);
         }
 
+        EnsureCashCovers(ledger.CashAccount, request.BusinessDate);
+
         var now = _businessDateProvider.UtcNow;
         var entry = LedgerEntry.Create(
             ledger.Id,
@@ -117,7 +119,6 @@ public sealed class LedgerEntryService
             request.Category,
             request.Amount,
             request.BusinessDate,
-            ledger.StartDate,
             businessToday,
             request.Note,
             LedgerEntrySource.Manual,
@@ -180,7 +181,6 @@ public sealed class LedgerEntryService
             request.Category,
             request.Amount,
             request.BusinessDate,
-            ledger.StartDate,
             businessToday,
             request.Note);
 
@@ -196,12 +196,15 @@ public sealed class LedgerEntryService
             request.Kind,
             request.Category,
             allowInactive: keepsCategory,
+            allowMissing: keepsCategory,
             cancellationToken);
 
         if (categoryError is not null)
         {
             return EntryOperationResult.Invalid([categoryError]);
         }
+
+        EnsureCashCovers(ledger.CashAccount, request.BusinessDate);
 
         var now = _businessDateProvider.UtcNow;
 
@@ -210,7 +213,6 @@ public sealed class LedgerEntryService
             request.Category,
             request.Amount,
             request.BusinessDate,
-            ledger.StartDate,
             businessToday,
             request.Note,
             now);
@@ -285,6 +287,17 @@ public sealed class LedgerEntryService
         bool allowInactive,
         CancellationToken cancellationToken)
     {
+        return await ValidateCategoryAsync(ledgerId, kind, name, allowInactive, false, cancellationToken);
+    }
+
+    private async Task<string?> ValidateCategoryAsync(
+        Guid ledgerId,
+        LedgerEntryKind kind,
+        string name,
+        bool allowInactive,
+        bool allowMissing,
+        CancellationToken cancellationToken)
+    {
         EntryCategory? category;
 
         try
@@ -298,10 +311,20 @@ public sealed class LedgerEntryService
 
         if (category is null)
         {
-            return "请选择有效分类。";
+            return allowMissing ? null : "请选择有效分类。";
         }
 
         return !allowInactive && !category.IsActive ? "该分类已停用，请重新选择。" : null;
+    }
+
+    private static void EnsureCashCovers(CashAccount cashAccount, DateOnly businessDate)
+    {
+        if (cashAccount.OpeningDate is DateOnly openingDate && businessDate < openingDate)
+        {
+            cashAccount.SetOpening(
+                cashAccount.OpeningBalance ?? cashAccount.Balance,
+                businessDate);
+        }
     }
 
     private static LedgerEntryDto Map(LedgerEntry entry)

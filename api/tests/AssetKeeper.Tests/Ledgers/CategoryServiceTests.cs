@@ -116,6 +116,44 @@ public sealed class CategoryServiceTests
     }
 
     [Fact]
+    public async Task Delete_RemovesCategoryAndKeepsHistoricalEntriesEditable()
+    {
+        var context = await CreateAsync();
+        var entry = await context.Entries.CreateAsync(
+            new CreateLedgerEntryRequest(LedgerEntryKind.Expense, "餐饮", 35.60m, Today, "午餐", Guid.NewGuid()),
+            CancellationToken.None);
+        var category = (await context.Categories.GetAsync(CancellationToken.None))!
+            .Single(item => item.Kind == LedgerEntryKind.Expense && item.Name == "餐饮");
+
+        var deleted = await context.Categories.DeleteAsync(category.Id, CancellationToken.None);
+
+        Assert.Equal(CategoryOperationStatus.Success, deleted.Status);
+        var remaining = (await context.Categories.GetAsync(CancellationToken.None))!;
+        Assert.DoesNotContain(remaining, item => item.Id == category.Id);
+
+        var updated = await context.Entries.UpdateAsync(
+            entry.Result!.Entry.Id,
+            new UpdateLedgerEntryRequest(LedgerEntryKind.Expense, "餐饮", 50m, Today, "晚餐", Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(EntryOperationStatus.Success, updated.Status);
+        Assert.Equal("餐饮", updated.Result!.Entry.Category);
+    }
+
+    [Fact]
+    public async Task SalaryCategory_CannotBeDeleted()
+    {
+        var context = await CreateAsync();
+        var salary = (await context.Categories.GetAsync(CancellationToken.None))!
+            .Single(item => item.SystemKey == "salary");
+
+        var result = await context.Categories.DeleteAsync(salary.Id, CancellationToken.None);
+
+        Assert.Equal(CategoryOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("不能删除"));
+    }
+
+    [Fact]
     public async Task Reorder_UpdatesSortOrderForAllCategoriesOfKind()
     {
         var context = await CreateAsync();

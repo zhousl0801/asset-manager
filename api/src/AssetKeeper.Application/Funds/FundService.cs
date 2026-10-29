@@ -56,6 +56,10 @@ public sealed class FundService
             .ToList();
 
         var replayData = await _ledgerRepository.GetReplayDataAsync(ledger.Id, cancellationToken);
+        var activeTransactionIds = replayData.Transactions
+            .Where(transaction => !transaction.IsReversed)
+            .Select(transaction => transaction.Id)
+            .ToHashSet();
         var replay = new LedgerReplayCalculator().Calculate(replayData, BusinessFact.From(replayData), _businessDateProvider.Today, currentDate: _businessDateProvider.Today);
         var confirmedPendingIds = replayData.Transactions
             .Where(transaction => !transaction.IsReversed && transaction.Kind == AssetTransactionKind.FundBuyConfirm
@@ -123,9 +127,11 @@ public sealed class FundService
         var replayStates = replay.Funds
             .Where(item => item.PositionId is not null)
             .ToDictionary(item => item.PositionId!.Value);
+        var dailyProfits = CalculateDailyProfits(replayData, positions, _businessDateProvider.Today, activeTransactionIds);
         var mappedPositions = positions.Select(position =>
         {
             var state = replayStates[position.Id];
+            var daily = dailyProfits.GetValueOrDefault(position.Id);
             return Map(position) with
             {
                 HistoryConfirmed = state.CanRebuild,
@@ -133,10 +139,12 @@ public sealed class FundService
                 GroupId = position.FundGroupId,
                 GroupName = position.FundGroupId is null
                     ? null
-                    : groupNames.GetValueOrDefault(position.FundGroupId.Value)
+                    : groupNames.GetValueOrDefault(position.FundGroupId.Value),
+                DailyProfit = daily.Profit,
+                DailyProfitRate = daily.Rate
             };
         }).ToList();
-        var funds = BuildFundSummaries(positions, pendingBuys, pendingArrivals, replayStates, groupNames);
+        var funds = BuildFundSummaries(positions, pendingBuys, pendingArrivals, replayStates, groupNames, dailyProfits);
         var groupSummaries = BuildGroupSummaries(groups, positions, funds);
 
         return new FundOverviewDto(
@@ -158,12 +166,80 @@ public sealed class FundService
             funds);
     }
 
+    public async Task<IReadOnlyList<FundSearchResultDto>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        if (_quoteProvider is null || string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        var results = await _quoteProvider.SearchAsync(query, cancellationToken);
+
+        return results
+            .Select(item => new FundSearchResultDto(
+                item.Code,
+                item.Name,
+                item.BaseName,
+                item.ShareClass,
+                item.FundType,
+                item.IsQdii,
+                item.ConfirmationDelayDays))
+            .ToList();
+    }
+
+    private static Dictionary<Guid, (decimal Profit, decimal? Rate)> CalculateDailyProfits(
+        LedgerReplayData replayData,
+        IReadOnlyList<FundPosition> positions,
+        DateOnly today,
+        IReadOnlySet<Guid> activeTransactionIds)
+    {
+        var result = new Dictionary<Guid, (decimal Profit, decimal? Rate)>();
+
+        foreach (var position in positions)
+        {
+            var observations = replayData.Prices
+                .Where(price => !price.IsSuperseded
+                    && price.AssetType == AssetType.Fund
+                    && price.FundPositionId == position.Id
+                    && price.EffectiveDate <= today
+                    && (price.SourceTransactionId is null || activeTransactionIds.Contains(price.SourceTransactionId.Value)))
+                .GroupBy(price => price.EffectiveDate)
+                .Select(group => group.OrderByDescending(price => price.RevisionOrder).First())
+                .OrderByDescending(price => price.EffectiveDate)
+                .Take(2)
+                .ToList();
+
+            if (observations.Count < 2)
+            {
+                continue;
+            }
+
+            var latest = observations[0];
+            var previous = observations[1];
+            var profit = decimal.Round((latest.Price - previous.Price) * position.Shares, 2);
+            var rate = previous.Price > 0
+                ? decimal.Round((latest.Price - previous.Price) / previous.Price * 100m, 2)
+                : (decimal?)null;
+
+            result[position.Id] = (profit, rate);
+        }
+
+        return result;
+    }
+
+    private static decimal? DailyProfitRate(decimal profit, decimal value)
+    {
+        var baseline = value - profit;
+        return baseline > 0 ? decimal.Round(profit / baseline * 100m, 2) : null;
+    }
+
     private static IReadOnlyList<FundSummaryDto> BuildFundSummaries(
         IReadOnlyList<FundPosition> positions,
         IReadOnlyList<PendingFundBuyDto> pendingBuys,
         IReadOnlyList<PendingFundArrivalDto> pendingArrivals,
         IReadOnlyDictionary<Guid, HoldingReplay> replayStates,
-        IReadOnlyDictionary<Guid, string> groupNames)
+        IReadOnlyDictionary<Guid, string> groupNames,
+        IReadOnlyDictionary<Guid, (decimal Profit, decimal? Rate)> dailyProfits)
     {
         var pendingBuyAmounts = pendingBuys
             .GroupBy(item => item.PositionId)
@@ -190,12 +266,14 @@ public sealed class FundService
                             .ToList();
                         var netValues = classMembers.Select(position => position.NetValue).Distinct().ToList();
                         var netValueDates = classMembers.Select(position => position.NetValueDate).Distinct().ToList();
+                        var classValue = decimal.Round(classMembers.Sum(position => position.Value), 2);
+                        var classDailyProfit = decimal.Round(classMembers.Sum(position => dailyProfits.GetValueOrDefault(position.Id).Profit), 2);
 
                         return new FundShareClassDto(
                             string.IsNullOrWhiteSpace(classMembers[0].ShareClass) ? null : FundIdentity.Normalize(classMembers[0].ShareClass),
                             decimal.Round(classMembers.Sum(position => position.Shares), 4),
                             decimal.Round(classMembers.Sum(position => position.Cost), 2),
-                            decimal.Round(classMembers.Sum(position => position.Value), 2),
+                            classValue,
                             decimal.Round(classMembers.Sum(position => position.HoldingProfit), 2),
                             decimal.Round(classMembers.Sum(position => position.RealizedProfit), 2),
                             netValues.Count == 1 ? netValues[0] : null,
@@ -214,16 +292,21 @@ public sealed class FundService
                                 position.HoldingProfit,
                                 position.RealizedProfit,
                                 replayStates[position.Id].Value is not null,
-                                position.ConfirmationDelayDays)).ToList(),
+                                position.ConfirmationDelayDays,
+                                dailyProfits.GetValueOrDefault(position.Id).Profit,
+                                dailyProfits.GetValueOrDefault(position.Id).Rate)).ToList(),
                             classGroup.Key,
                             classMembers[0].Code,
-                            string.IsNullOrWhiteSpace(classMembers[0].Code) ? "按规范化基金名称和类别匹配" : "按基金代码和类别匹配");
+                            string.IsNullOrWhiteSpace(classMembers[0].Code) ? "按规范化基金名称和类别匹配" : "按基金代码和类别匹配",
+                            classDailyProfit,
+                            DailyProfitRate(classDailyProfit, classValue));
                     })
                     .OrderBy(fundClass => fundClass.ShareClass, StringComparer.Ordinal)
                     .ToList();
                 var pendingBuyAmount = members.Sum(position => pendingBuyAmounts.GetValueOrDefault(position.Id));
                 var pendingArrivalAmount = members.Sum(position => pendingArrivalAmounts.GetValueOrDefault(position.Id));
                 var value = decimal.Round(members.Sum(position => position.Value), 2);
+                var dailyProfit = decimal.Round(members.Sum(position => dailyProfits.GetValueOrDefault(position.Id).Profit), 2);
                 var groupId = effectiveGroupIds[members[0].Id];
                 var platformCount = members
                     .Select(position => position.Platform)
@@ -247,7 +330,9 @@ public sealed class FundService
                     members.Max(position => position.NetValueDate),
                     members.All(position => replayStates[position.Id].CanRebuild),
                     members.All(position => replayStates[position.Id].Value is not null),
-                    classes);
+                    classes,
+                    dailyProfit,
+                    DailyProfitRate(dailyProfit, value));
             })
             .OrderBy(fund => fund.Name, StringComparer.Ordinal)
             .ToList();
@@ -556,9 +641,9 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "该记录不是有效的买入待确认。" });
         }
 
-        if (request.Fee != pending.Fee)
+        if (request.Fee < 0m || request.Fee >= pending.Amount)
         {
-            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "确认费用必须沿用待确认交易中记录的实际申购费。" });
+            return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "确认申购费不能为负，且必须小于扣款金额。" });
         }
 
         if (request.BusinessDate < pending.BusinessDate)
@@ -1287,6 +1372,13 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.NotFound("基金持仓不存在。");
         }
 
+        var cost = request.Shares == 0m ? 0m : request.Cost ?? position.Cost;
+
+        if (cost < 0m || decimal.Round(cost, 2) != cost)
+        {
+            return AssetOperationResult<FundMutationResultDto>.Invalid(["持仓成本不能为负，最多两位小数。"]);
+        }
+
         try
         {
             var transaction = AssetTransaction.CreateSnapshot(
@@ -1295,7 +1387,7 @@ public sealed class FundService
                 AssetType.Fund,
                 AssetTransactionKind.FundCorrection,
                 request.Shares,
-                request.Shares == 0m ? 0m : position.Cost,
+                cost,
                 null,
                 _businessDateProvider.Today,
                 null,

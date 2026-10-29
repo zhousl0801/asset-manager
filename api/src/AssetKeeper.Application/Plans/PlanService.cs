@@ -34,7 +34,6 @@ public sealed class PlanService
 
         var plans = await _planRepository.GetPlansAsync(ledger.Id, cancellationToken);
         var pending = await _planRepository.GetActionableOccurrencesAsync(ledger.Id, cancellationToken);
-        var recent = await _planRepository.GetOccurrencesAsync(ledger.Id, null, null, 100, cancellationToken);
         var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
         var positionNames = positions.ToDictionary(position => position.Id, position => position.DisplayName);
         var provident = await _ledgerRepository.GetProvidentFundAccountAsync(ledger.Id, cancellationToken);
@@ -47,11 +46,31 @@ public sealed class PlanService
         return new PlanOverviewDto(
             mappedPlans,
             pending.Select(Map).ToList(),
-            recent.Select(Map).ToList(),
             mappedPlans.Count(plan => plan.IsActive),
             nextDue,
             ledger.CashAccount?.Balance ?? 0m,
             provident?.Balance ?? 0m);
+    }
+
+    public async Task<PlanOccurrencePageDto?> GetOccurrencePageAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetAsync(cancellationToken);
+
+        if (ledger is null)
+        {
+            return null;
+        }
+
+        var (items, total) = await _planRepository.GetOccurrencePageAsync(
+            ledger.Id,
+            page > int.MaxValue / pageSize ? int.MaxValue : (page - 1) * pageSize,
+            pageSize,
+            cancellationToken);
+
+        return new PlanOccurrencePageDto(items.Select(Map).ToList(), page, pageSize, total);
     }
 
     public PlanCalendarDto GetCalendar(int year, int month)
@@ -114,6 +133,20 @@ public sealed class PlanService
 
         var positions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
         string? positionName = null;
+        var fee = request.Type == AutoPlanType.FundSip ? request.Fee : 0m;
+
+        if (request.Type == AutoPlanType.FundSip)
+        {
+            if (fee < 0 || decimal.Round(fee, 2) != fee)
+            {
+                return AssetOperationResult<PlanDto>.Invalid(["申购费不能为负，最多两位小数。"]);
+            }
+
+            if (fee >= request.Amount)
+            {
+                return AssetOperationResult<PlanDto>.Invalid(["申购费必须小于每期金额。"]);
+            }
+        }
 
         if (request.Type == AutoPlanType.FundSip)
         {
@@ -167,7 +200,8 @@ public sealed class PlanService
                     request.Time,
                     request.StartDate,
                     request.FundPositionId,
-                    now);
+                    now,
+                    fee);
                 await _planRepository.AddPlanAsync(plan, cancellationToken);
             }
             else
@@ -185,7 +219,8 @@ public sealed class PlanService
                     request.StartDate,
                     request.FundPositionId,
                     now,
-                    generationFloor);
+                    generationFloor,
+                    fee);
             }
 
             var positionNames = new Dictionary<Guid, string>();
@@ -413,7 +448,8 @@ public sealed class PlanService
             next?.DueDate,
             plan.Version,
             position is null ? null : new FundPlanTarget(position.Name, position.Code, position.ShareClass),
-            plan.IsActive ? PlanSchedule.GetDuePeriods(plan, from, from.AddDays(90)).Take(10).Select(period => period.DueDate).ToList() : []);
+            plan.IsActive ? PlanSchedule.GetDuePeriods(plan, from, from.AddDays(90)).Take(10).Select(period => period.DueDate).ToList() : [],
+            plan.Fee);
     }
 
     public static PlanOccurrenceDto Map(PlanOccurrence occurrence)
@@ -431,6 +467,7 @@ public sealed class PlanService
             occurrence.ErrorMessage,
             occurrence.ExecutedAt,
             occurrence.PeriodKey,
-            occurrence.PlanVersion);
+            occurrence.PlanVersion,
+            occurrence.Fee);
     }
 }

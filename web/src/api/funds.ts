@@ -1,5 +1,6 @@
 import type {
   BuyFundInput,
+  ConfirmFundBuyInput,
   ConfirmFundSellInput,
   CreateFundPositionInput,
   FundGroup,
@@ -7,6 +8,7 @@ import type {
   FundOverview,
   FundQuoteRefreshResult,
   FundSellArrivalInput,
+  FundSearchResult,
   SellFundInput,
   CorrectFundSharesInput
 } from '../types/fund'
@@ -20,6 +22,10 @@ export function fetchFundOverview(): Promise<FundOverview> {
 
 export function fetchFundGroups(): Promise<FundGroup[]> {
   return apiRequest<FundGroup[]>('/api/ledger/fund-groups')
+}
+
+export function searchFunds(query: string): Promise<FundSearchResult[]> {
+  return apiRequest<FundSearchResult[]>(`/api/ledger/funds/search?query=${encodeURIComponent(query)}`)
 }
 
 export function createFundGroup(name: string): Promise<FundGroup> {
@@ -90,6 +96,13 @@ export function createFundPosition(input: CreateFundPositionInput): Promise<Fund
 
 export function buyFund(input: BuyFundInput): Promise<FundMutationResult> {
   return apiRequest<FundMutationResult>('/api/ledger/funds/buys', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  })
+}
+
+export function confirmFundBuy(transactionId: string, input: ConfirmFundBuyInput): Promise<FundMutationResult> {
+  return apiRequest<FundMutationResult>(`/api/ledger/funds/buys/${encodeURIComponent(transactionId)}/confirm`, {
     method: 'POST',
     body: JSON.stringify(input)
   })

@@ -60,7 +60,6 @@ public sealed class LedgerEntry
         string category,
         decimal amount,
         DateOnly businessDate,
-        DateOnly ledgerStartDate,
         DateOnly businessToday,
         string? note,
         LedgerEntrySource source,
@@ -77,7 +76,7 @@ public sealed class LedgerEntry
             throw new ArgumentException("请求标识无效。", nameof(requestId));
         }
 
-        var errors = Validate(kind, category, amount, businessDate, ledgerStartDate, businessToday, note);
+        var errors = Validate(kind, category, amount, businessDate, businessToday, note);
 
         if (errors.Count > 0)
         {
@@ -107,7 +106,6 @@ public sealed class LedgerEntry
         string category,
         decimal amount,
         DateOnly businessDate,
-        DateOnly ledgerStartDate,
         DateOnly businessToday,
         string? note,
         DateTimeOffset now)
@@ -117,7 +115,7 @@ public sealed class LedgerEntry
             throw new InvalidOperationException("该记录已撤销，不能修改。");
         }
 
-        var errors = Validate(kind, category, amount, businessDate, ledgerStartDate, businessToday, note);
+        var errors = Validate(kind, category, amount, businessDate, businessToday, note);
 
         if (errors.Count > 0)
         {
@@ -162,7 +160,6 @@ public sealed class LedgerEntry
         string category,
         decimal amount,
         DateOnly businessDate,
-        DateOnly ledgerStartDate,
         DateOnly businessToday,
         string? note)
     {
@@ -198,10 +195,6 @@ public sealed class LedgerEntry
         if (businessDate == default)
         {
             errors.Add("业务日期无效。");
-        }
-        else if (businessDate < ledgerStartDate)
-        {
-            errors.Add("业务日期不能早于账本起始日期。");
         }
         else if (businessDate > businessToday)
         {

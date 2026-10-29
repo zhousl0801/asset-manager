@@ -19,6 +19,8 @@ public sealed class AutoPlan
 
     public decimal Amount { get; private set; }
 
+    public decimal Fee { get; private set; }
+
     public AutoPlanCycle Cycle { get; private set; }
 
     public int? DayOfMonth { get; private set; }
@@ -52,7 +54,8 @@ public sealed class AutoPlan
         TimeOnly time,
         DateOnly startDate,
         Guid? fundPositionId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        decimal fee = 0m)
     {
         var plan = new AutoPlan
         {
@@ -61,7 +64,7 @@ public sealed class AutoPlan
             IsActive = true,
             CreatedAt = now
         };
-        plan.SetValues(type, name, amount, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
+        plan.SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
 
         return plan;
     }
@@ -77,14 +80,15 @@ public sealed class AutoPlan
         DateOnly startDate,
         Guid? fundPositionId,
         DateTimeOffset now,
-        DateOnly generationFloor)
+        DateOnly generationFloor,
+        decimal fee = 0m)
     {
         if (type != Type)
         {
             throw new ArgumentException("计划类型不能修改，请新建对应计划。");
         }
 
-        SetValues(type, name, amount, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
+        SetValues(type, name, amount, fee, cycle, dayOfMonth, dayOfWeek, time, startDate, fundPositionId, now);
         GenerateFrom = GenerateFrom > startDate ? GenerateFrom : startDate;
         if (cycle == AutoPlanCycle.TradingDay && GenerateFrom < generationFloor)
         {
@@ -130,6 +134,7 @@ public sealed class AutoPlan
         AutoPlanType type,
         string name,
         decimal amount,
+        decimal fee,
         AutoPlanCycle cycle,
         int? dayOfMonth,
         int? dayOfWeek,
@@ -151,6 +156,21 @@ public sealed class AutoPlan
         if (amount <= 0 || amount > MaximumAmount || decimal.Round(amount, 2) != amount)
         {
             throw new ArgumentException("计划金额必须大于 0，最多两位小数。", nameof(amount));
+        }
+
+        if (fee < 0 || fee > MaximumAmount || decimal.Round(fee, 2) != fee)
+        {
+            throw new ArgumentException("申购费不能为负，最多两位小数。", nameof(fee));
+        }
+
+        if (fee >= amount)
+        {
+            throw new ArgumentException("申购费必须小于每期金额。", nameof(fee));
+        }
+
+        if (type != AutoPlanType.FundSip && fee != 0m)
+        {
+            throw new ArgumentException("只有基金定投可以设置申购费。", nameof(fee));
         }
 
         if (startDate == default)
@@ -200,6 +220,7 @@ public sealed class AutoPlan
         Type = type;
         Name = name.Trim();
         Amount = amount;
+        Fee = fee;
         Cycle = cycle;
         DayOfMonth = dayOfMonth;
         DayOfWeek = dayOfWeek;

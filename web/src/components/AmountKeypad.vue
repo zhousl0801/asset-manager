@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue'
 import { applyAmountKey, type AmountKey } from '../utils/amount'
 
 const props = defineProps<{
@@ -45,7 +46,8 @@ function pickDate(): void {
     <button type="button" :disabled="disabled" @click="press('8')">8</button>
     <button type="button" :disabled="disabled" @click="press('9')">9</button>
     <button type="button" class="key-date" :disabled="disabled" @click="pickDate">
-      {{ dateLabel }}
+      <AppIcon name="calendar" class="key-date-icon" />
+      <span>{{ dateLabel }}</span>
     </button>
 
     <button type="button" :disabled="disabled" @click="press('4')">4</button>
@@ -76,19 +78,22 @@ function pickDate(): void {
 .keypad {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
-  background: var(--color-bg-surface);
+  gap: 1px;
+  background: var(--color-border-subtle);
   border-top: 1px solid var(--color-border-subtle);
 }
 
 .keypad button {
-  min-height: 52px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  min-height: 56px;
   border: 0;
-  border-radius: var(--radius-card);
-  background: transparent;
+  border-radius: 0;
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: 1.375rem;
+  font-size: 1.5rem;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
@@ -102,10 +107,14 @@ function pickDate(): void {
 }
 
 .keypad .key-date {
-  background: var(--color-brand-soft);
   color: var(--color-brand);
-  font-size: var(--text-footnote);
+  font-size: var(--text-subhead);
   font-weight: 500;
+}
+
+.keypad .key-date-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .keypad .key-done {
@@ -124,7 +133,13 @@ function pickDate(): void {
 }
 
 .keypad button:disabled {
-  background: transparent;
+  background: var(--color-bg-surface);
   color: var(--color-text-disabled);
+}
+
+.keypad .key-done:disabled {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  opacity: 0.45;
 }
 </style>

@@ -373,6 +373,7 @@ onMounted(loadLedger)
         :changes="monthChange?.assetChanges"
         :comparable="monthChange?.hasComparableData ?? false"
         manage-to="/assets"
+        hide-fund-count
       />
 
       <div class="section-head">

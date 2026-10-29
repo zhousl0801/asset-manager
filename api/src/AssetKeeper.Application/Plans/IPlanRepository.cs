@@ -17,6 +17,12 @@ public interface IPlanRepository
         int take,
         CancellationToken cancellationToken);
 
+    Task<(IReadOnlyList<PlanOccurrence> Items, int Total)> GetOccurrencePageAsync(
+        Guid ledgerId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<PlanOccurrence>> GetPendingOccurrencesAsync(Guid ledgerId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<PlanOccurrence>> GetActionableOccurrencesAsync(Guid ledgerId, CancellationToken cancellationToken);

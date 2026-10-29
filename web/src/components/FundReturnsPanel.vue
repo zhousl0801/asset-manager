@@ -121,7 +121,24 @@ function dayText(point: FundReturnPoint | null): string {
     return '—'
   }
 
-  return formatSignedMoney(point.dailyProfit)
+  return formatCalendarProfit(point.dailyProfit)
+}
+
+function formatCalendarProfit(value: number): string {
+  const amount = Math.abs(value)
+
+  if (amount >= 10000) {
+    const tenThousands = (amount / 10000).toFixed(1).replace(/\.0$/, '')
+    return `${value > 0 ? '+' : '−'}${tenThousands}万`
+  }
+
+  const rounded = Math.round(amount)
+
+  if (rounded === 0) {
+    return '0'
+  }
+
+  return `${value > 0 ? '+' : '−'}${rounded.toLocaleString('zh-CN')}`
 }
 
 async function openDay(date: string): Promise<void> {
@@ -244,11 +261,14 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
           >
             <template v-if="cell.date">
               <span>{{ cell.day }}</span>
-              <small v-if="cell.inRange">{{ dayText(cell.point) }}</small>
+              <small
+                v-if="cell.inRange"
+                :title="cell.point?.dailyProfit != null ? formatSignedMoney(cell.point.dailyProfit) : undefined"
+              >{{ dayText(cell.point) }}</small>
             </template>
           </button>
         </div>
-        <p class="calendar-note">“—”表示当天没有新净值披露或依据不足，不代表收益为 0。点击日期查看各基金明细。</p>
+        <p class="calendar-note">“—”表示当天没有新净值披露或依据不足，不代表收益为 0；日历金额按元取整，点击日期查看精确明细。</p>
       </div>
 
       <ul v-if="data.notes.length" class="return-notes">
@@ -452,7 +472,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
 }
 
 .calendar-weekdays {
@@ -472,8 +492,9 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   justify-content: center;
   align-items: center;
   gap: 2px;
-  min-height: 42px;
-  padding: 2px 1px;
+  min-height: 44px;
+  padding: 3px 1px;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: var(--radius-tag);
   background: transparent;
@@ -485,8 +506,14 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
 }
 
 .calendar-day small {
-  font-size: var(--text-caption);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.65625rem;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-day.profit {

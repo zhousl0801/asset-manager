@@ -20,4 +20,6 @@ public sealed record FundPositionDto(
     string? LastQuoteError = null,
     Guid? GroupId = null,
     string? GroupName = null,
-    int ConfirmationDelayDays = 2);
+    int ConfirmationDelayDays = 2,
+    decimal DailyProfit = 0m,
+    decimal? DailyProfitRate = null);

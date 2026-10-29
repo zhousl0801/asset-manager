@@ -12,22 +12,29 @@ vi.mock('../api/entries', () => ({
   createEntry: mocks.create, fetchEntry: vi.fn(), reverseEntry: vi.fn(), updateEntry: vi.fn()
 }))
 
-test('Enter on more options or a history link does not submit an entered amount', async () => {
-  const view = mount(EntryView, { attachTo: document.body, global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+test('Enter on a focused control does not submit an entered amount', async () => {
+  const view = mount(EntryView, { attachTo: document.body })
   await flushPromises()
   await view.get('.keypad button').trigger('click')
   expect(view.get('output[aria-label="输入金额"]').text()).toBe('7')
 
-  const optionsEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-  view.get('.entry-options summary').element.dispatchEvent(optionsEvent)
+  const categoryEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+  view.get('.category-tile').element.dispatchEvent(categoryEvent)
   await flushPromises()
   expect(mocks.create).not.toHaveBeenCalled()
-  expect(optionsEvent.defaultPrevented).toBe(false)
+  expect(categoryEvent.defaultPrevented).toBe(false)
+  view.unmount()
+})
 
-  const historyEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
-  view.get('.entry-options .back-link').element.dispatchEvent(historyEvent)
+test('switching to income selects an income category and keeps four-per-row layout', async () => {
+  const view = mount(EntryView, { attachTo: document.body })
   await flushPromises()
-  expect(mocks.create).not.toHaveBeenCalled()
-  expect(historyEvent.defaultPrevented).toBe(false)
+
+  await view.findAll('.kind-tabs button')[1]!.trigger('click')
+
+  const tiles = view.findAll('.category-tile')
+  expect(tiles).toHaveLength(3)
+  expect(tiles[0]!.text()).toBe('工资')
+  expect(tiles[0]!.classes()).toContain('active')
   view.unmount()
 })

@@ -105,6 +105,42 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task ConfirmBuyAsync_WithFeeDifferentFromPending_UsesConfirmedFee()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+        var pending = await BuyPendingAsync(context, position.Id, 130m);
+
+        var result = await context.Funds.ConfirmBuyAsync(
+            pending.Id,
+            ConfirmRequest(10m, 12.8m, 2m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(1130m, result.Result.Position.Cost);
+        Assert.Equal(2m, result.Result.Activity.Fee);
+    }
+
+    [Fact]
+    public async Task CorrectSharesAsync_WithCost_UpdatesSharesAndCost()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+
+        var result = await context.Funds.CorrectSharesAsync(
+            new CorrectFundSharesRequest(position.Id, 120m, "核对持仓", Guid.NewGuid(), Cost: 900m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(120m, result.Result.Position.Shares);
+        Assert.Equal(900m, result.Result.Position.Cost);
+        Assert.Equal(120m, context.Repository.FundPositions[0].Shares);
+        Assert.Equal(900m, context.Repository.FundPositions[0].Cost);
+    }
+
+    [Fact]
     public async Task ConfirmBuyAsync_WithDuplicateRequestId_DoesNotConfirmTwice()
     {
         var context = await CreateContextAsync();

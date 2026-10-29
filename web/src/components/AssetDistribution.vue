@@ -24,6 +24,7 @@ const props = defineProps<{
   comparable?: boolean
   editable?: boolean
   manageTo?: string
+  hideFundCount?: boolean
 }>()
 
 const emit = defineEmits<{ toggleNotHeld: [key: AssetKey, notHeld: boolean] }>()
@@ -72,7 +73,7 @@ const rows = computed<DistributionRow[]>(() => {
       amount: ledger.fund.amount,
       configured: ledger.fund.isConfigured,
       notHeld: ledger.fund.notHeld,
-      note: ledger.fund.note ?? '尚未录入',
+      note: fundNote(ledger.fund.note ?? '尚未录入'),
       change: changeByKey.get('fund') ?? null,
       percent: percentOf(ledger.fund.amount)
     },
@@ -104,6 +105,16 @@ const barLabel = computed(() => {
 
   return parts.length ? `资产占比：${parts.join('、')}` : '暂无可计算资产占比'
 })
+
+function fundNote(note: string): string {
+  if (!props.hideFundCount) {
+    return note
+  }
+
+  const withoutCount = note.replace(/^持有\s*\d+\s*只基金\s*(?:·\s*)?/, '').trim()
+
+  return withoutCount || '按最新净值估值'
+}
 
 function amountLabel(row: DistributionRow): string {
   if (row.notHeld) {
@@ -365,10 +376,22 @@ function changeLabel(row: DistributionRow): string {
 }
 
 .asset-percent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.asset-percent .row-chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-secondary);
 }
 
 .muted-text {

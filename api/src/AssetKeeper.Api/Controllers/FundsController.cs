@@ -1,4 +1,5 @@
 using AssetKeeper.Application.Funds;
+using AssetKeeper.Application.Quotes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
@@ -25,6 +26,37 @@ public sealed class FundsController : AssetOperationsControllerBase
         return overview is null ? LedgerNotFound() : Ok(overview);
     }
 
+    [HttpGet("search")]
+    [ProducesResponseType<IReadOnlyList<FundSearchResultDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> Search(
+        [FromQuery] string? query,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return Ok(Array.Empty<FundSearchResultDto>());
+        }
+
+        try
+        {
+            var results = await _fundService.SearchAsync(query.Trim(), cancellationToken);
+            return Ok(results);
+        }
+        catch (QuoteUnavailableException exception)
+        {
+            return Problem(statusCode: StatusCodes.Status502BadGateway, title: "基金搜索暂不可用", detail: exception.Message);
+        }
+        catch (HttpRequestException)
+        {
+            return Problem(statusCode: StatusCodes.Status502BadGateway, title: "基金搜索暂不可用", detail: "基金数据源连接失败，请稍后重试。");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Problem(statusCode: StatusCodes.Status502BadGateway, title: "基金搜索暂不可用", detail: "基金数据源请求超时，请稍后重试。");
+        }
+    }
+
     [HttpPost("positions")]
     [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -49,6 +81,21 @@ public sealed class FundsController : AssetOperationsControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _fundService.BuyAsync(request, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
+    [HttpPost("buys/{transactionId:guid}/confirm")]
+    [ProducesResponseType<FundMutationResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmBuy(
+        Guid transactionId,
+        [FromBody] ConfirmFundBuyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.ConfirmBuyAsync(transactionId, request, cancellationToken);
 
         return ToActionResult(result);
     }

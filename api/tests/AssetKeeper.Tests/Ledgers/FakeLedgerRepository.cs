@@ -254,6 +254,11 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         return Task.CompletedTask;
     }
 
+    public void RemoveCategory(EntryCategory category)
+    {
+        _categories.Remove(category);
+    }
+
     public Task RenameEntryCategoryAsync(
         Guid ledgerId,
         LedgerEntryKind kind,

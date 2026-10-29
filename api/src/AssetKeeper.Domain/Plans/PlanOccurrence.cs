@@ -25,6 +25,8 @@ public sealed class PlanOccurrence
 
     public decimal Amount { get; private set; }
 
+    public decimal Fee { get; private set; }
+
     public int PlanVersion { get; private set; }
 
     public DateOnly DueDate { get; private set; }
@@ -77,6 +79,7 @@ public sealed class PlanOccurrence
             PlanName = plan.Name,
             FundPositionId = plan.FundPositionId,
             Amount = plan.Amount,
+            Fee = plan.Fee,
             PlanVersion = plan.Version,
             DueDate = dueDate,
             DueTime = dueTime,

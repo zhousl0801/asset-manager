@@ -78,10 +78,6 @@ function cellClass(day: TradingDay | null): Record<string, boolean> {
   }
 }
 
-function closureLabel(market: MarketDay): string {
-  return market.market === 'US' ? '美' : '港'
-}
-
 function closureTitle(market: MarketDay): string {
   return `${market.name}休市`
 }
@@ -101,12 +97,12 @@ function closureTitle(market: MarketDay): string {
       </div>
     </header>
 
-    <p class="calendar-note">按中国日期展示；浅色为中国休市，美/港标记为海外休市，基金定投会顺延到下一个三地交易日。</p>
+    <p class="calendar-note">按中国日期展示；浅色为中国休市，美/港彩色圆点标记为海外休市，基金定投会顺延到下一个三地交易日。</p>
 
     <div class="calendar-legend">
       <span><i class="legend-dot china" />中国休市</span>
-      <span><i class="legend-dot us">美</i>美股休市</span>
-      <span><i class="legend-dot hk">港</i>港股休市</span>
+      <span><i class="legend-dot us" />美股休市</span>
+      <span><i class="legend-dot hk" />港股休市</span>
     </div>
 
     <div v-if="loading" class="calendar-state">正在读取日历…</div>
@@ -127,14 +123,16 @@ function closureTitle(market: MarketDay): string {
         >
           <template v-if="day">
             <span class="day-number">{{ dayNumber(day) }}</span>
-            <span v-if="overseasClosed(day).length" class="closure-tags">
+            <span v-if="overseasClosed(day).length" class="closure-dots">
               <span
                 v-for="market in overseasClosed(day)"
                 :key="market.market"
-                class="closure-tag"
+                class="closure-dot"
                 :class="market.market.toLowerCase()"
+                role="img"
+                :aria-label="closureTitle(market)"
                 :title="closureTitle(market)"
-              >{{ closureLabel(market) }}</span>
+              />
             </span>
           </template>
         </div>
@@ -256,28 +254,22 @@ function closureTitle(market: MarketDay): string {
 }
 
 .legend-dot {
-  display: inline-grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-tag);
-  font-size: var(--text-caption);
-  font-style: normal;
-  font-weight: 600;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .legend-dot.china {
-  background: var(--color-bg-subtle);
+  background: var(--color-border-subtle);
 }
 
 .legend-dot.us {
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
+  background: var(--color-warning);
 }
 
 .legend-dot.hk {
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
+  background: var(--color-brand);
 }
 
 .calendar-state {
@@ -341,11 +333,6 @@ function closureTitle(market: MarketDay): string {
   color: var(--color-text-disabled);
 }
 
-.calendar-cell.has-overseas-closure {
-  border-color: color-mix(in srgb, var(--color-warning) 16%, transparent);
-  background: color-mix(in srgb, var(--color-warning-bg) 55%, var(--color-bg-surface));
-}
-
 .calendar-cell.today {
   border-color: var(--color-brand);
   background: var(--color-brand-soft);
@@ -363,29 +350,25 @@ function closureTitle(market: MarketDay): string {
   font-weight: 600;
 }
 
-.closure-tags {
+.closure-dots {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+  min-height: 5px;
 }
 
-.closure-tag {
-  display: inline-grid;
-  place-items: center;
-  min-width: 13px;
-  height: 13px;
-  padding: 0 2px;
-  border-radius: var(--radius-tag);
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-  font-size: var(--text-caption);
-  font-weight: 600;
-  line-height: 1;
+.closure-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
 }
 
-.closure-tag.hk {
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
+.closure-dot.us {
+  background: var(--color-warning);
+}
+
+.closure-dot.hk {
+  background: var(--color-brand);
 }
 
 .calendar-summary {

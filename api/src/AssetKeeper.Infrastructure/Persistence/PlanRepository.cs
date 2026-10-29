@@ -62,6 +62,28 @@ public sealed class PlanRepository : IPlanRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<PlanOccurrence> Items, int Total)> GetOccurrencePageAsync(
+        Guid ledgerId,
+        int skip,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        var query = _dbContext.PlanOccurrences
+            .AsNoTracking()
+            .Where(occurrence => occurrence.LedgerId == ledgerId);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(occurrence => occurrence.DueDate)
+            .ThenByDescending(occurrence => occurrence.DueTime)
+            .ThenBy(occurrence => occurrence.PlanId)
+            .ThenBy(occurrence => occurrence.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public async Task<IReadOnlyList<PlanOccurrence>> GetPendingOccurrencesAsync(Guid ledgerId, CancellationToken cancellationToken)
     {
         return await _dbContext.PlanOccurrences

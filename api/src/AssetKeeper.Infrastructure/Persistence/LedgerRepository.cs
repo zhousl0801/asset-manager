@@ -254,6 +254,11 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.EntryCategories.AddRangeAsync(categories, cancellationToken);
     }
 
+    public void RemoveCategory(EntryCategory category)
+    {
+        _dbContext.EntryCategories.Remove(category);
+    }
+
     public async Task RenameEntryCategoryAsync(
         Guid ledgerId,
         LedgerEntryKind kind,

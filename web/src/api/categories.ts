@@ -29,3 +29,9 @@ export function reorderCategories(kind: EntryKind, ids: string[]): Promise<void>
     body: JSON.stringify({ kind, ids })
   })
 }
+
+export function deleteCategory(categoryId: string): Promise<void> {
+  return apiRequest<void>(`/api/ledger/categories/${encodeURIComponent(categoryId)}`, {
+    method: 'DELETE'
+  })
+}

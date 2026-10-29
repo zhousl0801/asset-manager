@@ -14,4 +14,9 @@ public interface IFundQuoteProvider
 
         return latest;
     }
+
+    Task<IReadOnlyList<ExternalFundSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<ExternalFundSearchResult>>([]);
+    }
 }

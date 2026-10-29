@@ -4,8 +4,11 @@ import PlanView from './PlanView.vue'
 
 const mocks = vi.hoisted(() => ({
   overview: vi.fn(),
+  occurrences: vi.fn(),
   calendar: vi.fn(),
   funds: vi.fn(),
+  search: vi.fn(),
+  createPosition: vi.fn(),
   save: vi.fn(),
   pause: vi.fn(),
   resume: vi.fn(),
@@ -17,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('../api/plans', () => ({
   fetchPlanOverview: mocks.overview,
+  fetchPlanOccurrences: mocks.occurrences,
   fetchPlanCalendar: mocks.calendar,
   savePlan: mocks.save,
   pausePlan: mocks.pause,
@@ -25,7 +29,11 @@ vi.mock('../api/plans', () => ({
   retryOccurrence: mocks.retry,
   skipOccurrence: mocks.skip
 }))
-vi.mock('../api/funds', () => ({ fetchFundOverview: mocks.funds }))
+vi.mock('../api/funds', () => ({
+  fetchFundOverview: mocks.funds,
+  searchFunds: mocks.search,
+  createFundPosition: mocks.createPosition
+}))
 
 const overview = {
   plans: [{
@@ -46,7 +54,6 @@ const overview = {
     version: 0
   }],
   pendingOccurrences: [] as unknown[],
-  recentOccurrences: [] as unknown[],
   activeCount: 1,
   nextDueDate: '2026-11-15',
   cashBalance: 10000,
@@ -56,6 +63,7 @@ const overview = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.overview.mockResolvedValue(structuredClone(overview))
+  mocks.occurrences.mockResolvedValue({ items: [], page: 1, pageSize: 10, totalCount: 0 })
   mocks.calendar.mockResolvedValue({
     year: 2026,
     month: 10,
@@ -167,12 +175,60 @@ test('plans are grouped by type and share classes of the same fund merge into on
   expect(view.findAll('.fund-plan-card')).toHaveLength(1)
   expect(view.findAll('.fund-plan-row')).toHaveLength(2)
   expect(view.find('.fund-plan-card').text()).toContain('A 类 / C 类')
+  expect(view.find('.fund-plan-card').text()).toContain('000834 / 008971')
   expect(view.find('.fund-plan-card').text()).toContain('¥200.00')
   expect(view.find('.group-provident').text()).toContain('公积金缴存')
   expect(view.find('.group-income').text()).toContain('工资到账')
   view.unmount()
 })
 
+
+test('execution records paginate ten per page', async () => {
+  const makeOccurrence = (page: number, index: number) => ({
+    id: `occurrence-${page}-${index}`,
+    planId: 'plan-1',
+    planName: `第 ${page} 页记录 ${index + 1}`,
+    type: 'salaryIncome',
+    amount: 100,
+    dueDate: '2026-11-15',
+    dueTime: '09:00:00',
+    status: 'completed',
+    relatedRecordId: null,
+    errorMessage: null,
+    executedAt: null,
+    periodKey: 'M2026-11-15',
+    planVersion: 0
+  })
+  mocks.occurrences.mockImplementation(async (page: number) => ({
+    items: Array.from({ length: 10 }, (_, index) => makeOccurrence(page, index)),
+    page,
+    pageSize: 10,
+    totalCount: 23
+  }))
+
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(view.text()).toContain('共 23 条')
+  expect(view.text()).toContain('第 1 / 3 页')
+  expect(view.findAll('.occurrence-card')).toHaveLength(10)
+
+  await view.findAll('button').find(button => button.text() === '下一页')!.trigger('click')
+  await flushPromises()
+
+  expect(mocks.occurrences).toHaveBeenLastCalledWith(2, 10)
+  expect(view.text()).toContain('第 2 / 3 页')
+  expect(view.text()).toContain('第 2 页记录 1')
+
+  const previous = view.findAll('button').find(button => button.text() === '上一页')!
+  expect(previous.attributes('disabled')).toBeUndefined()
+  await previous.trigger('click')
+  await flushPromises()
+
+  expect(mocks.occurrences).toHaveBeenLastCalledWith(1, 10)
+  expect(view.text()).toContain('第 1 / 3 页')
+  view.unmount()
+})
 
 test('trading-day SIP selects one share class across channels and sends a business target', async () => {
   const position = { id: 'source-1', name: '测试基金', code: '000001', shareClass: 'C', platform: '渠道甲' }
@@ -210,6 +266,71 @@ test('trading-day SIP selects one share class across channels and sends a busine
   view.unmount()
 })
 
+test('searching a new fund creates a zero-share position before saving the SIP', async () => {
+  mocks.funds.mockResolvedValue({ positions: [] })
+  mocks.search.mockResolvedValue([{
+    code: '000834',
+    name: '大成纳斯达克100ETF联接(QDII)A',
+    baseName: '大成纳斯达克100ETF联接(QDII)',
+    shareClass: 'A',
+    fundType: '指数型-海外股票',
+    isQdii: true,
+    confirmationDelayDays: 2
+  }])
+  mocks.createPosition.mockResolvedValue({})
+  mocks.save.mockResolvedValue({})
+
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+  await view.findAll('button').find(button => button.attributes('aria-label') === '新增基金定投')!.trigger('click')
+  await flushPromises()
+
+  const search = document.querySelector<HTMLInputElement>('.sheet input[type="search"]')!
+  search.value = '000834'
+  search.dispatchEvent(new Event('input', { bubbles: true }))
+  await new Promise(resolve => setTimeout(resolve, 350))
+  await flushPromises()
+
+  expect(mocks.search).toHaveBeenCalledWith('000834')
+  document.querySelector<HTMLButtonElement>('.sheet .fund-search-result')!.click()
+  await flushPromises()
+
+  const setValue = (label: string, value: string) => {
+    const input = [...document.querySelectorAll('.sheet label')]
+      .find((item) => item.querySelector('span')?.textContent === label)!
+      .querySelector('input')!
+    input.value = value
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+  setValue('每期金额（元）', '500')
+  setValue('每期申购费（元）', '2')
+  await flushPromises()
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.createPosition).toHaveBeenCalledWith(expect.objectContaining({
+    name: '大成纳斯达克100ETF联接(QDII)',
+    code: '000834',
+    shareClass: 'A',
+    shares: 0,
+    cost: 0,
+    confirmationDelayDays: 2
+  }))
+  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'fundSip',
+    amount: 500,
+    fee: 2,
+    fundTarget: {
+      name: '大成纳斯达克100ETF联接(QDII)',
+      code: '000834',
+      shareClass: 'A'
+    }
+  }))
+  view.unmount()
+})
+
 test('calendar shows official coverage, missing-year fallback and overseas closures', async () => {
   const markets = [
     { name: '中国', market: 'CN', year: 2027, isOpen: true, isHalfDay: false, usesWeekdayFallback: true, sourceUrl: null },
@@ -225,7 +346,7 @@ test('calendar shows official coverage, missing-year fallback and overseas closu
   expect(view.text()).toContain('中国 2027 · 工作日回退')
   expect(view.text()).toContain('美国 2027 · 官方日历')
   expect(view.text()).toContain('本月有 1 天因海外休市')
-  expect(view.find('.closure-tag').text()).toBe('美')
+  expect(view.find('.closure-dot.us').exists()).toBe(true)
   view.unmount()
 })
 

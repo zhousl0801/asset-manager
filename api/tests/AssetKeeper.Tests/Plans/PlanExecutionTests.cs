@@ -20,6 +20,35 @@ public sealed class PlanExecutionTests
     private static readonly DateTimeOffset Now = new(2026, 10, 21, 2, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task GetOccurrencePage_ReturnsTenMostRecentAndTotal()
+    {
+        await using var context = await CreateAsync(1000m);
+        var plan = AutoPlan.Create(context.LedgerId, AutoPlanType.SalaryIncome, "工资到账", 100m,
+            AutoPlanCycle.Monthly, 15, null, new TimeOnly(9, 0), Today, null, Now);
+        await context.PlanRepo.AddPlanAsync(plan, CancellationToken.None);
+
+        for (var index = 0; index < 25; index++)
+        {
+            var occurrence = PlanOccurrence.Create(plan, $"M2026-{index + 1:D2}", Today.AddDays(index),
+                new TimeOnly(9, 0), Now);
+            await context.PlanRepo.AddOccurrenceAsync(occurrence, CancellationToken.None);
+        }
+
+        await context.PlanRepo.SaveChangesAsync(CancellationToken.None);
+
+        var first = await context.Plans.GetOccurrencePageAsync(1, 10, CancellationToken.None);
+        var third = await context.Plans.GetOccurrencePageAsync(3, 10, CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Equal(25, first.TotalCount);
+        Assert.Equal(10, first.Items.Count);
+        Assert.Equal(Today.AddDays(24), first.Items[0].DueDate);
+        Assert.NotNull(third);
+        Assert.Equal(5, third.Items.Count);
+        Assert.Equal(Today, third.Items[^1].DueDate);
+    }
+
+    [Fact]
     public async Task RunDue_ExecutesAllFourPlanTypesAndDoesNotDuplicate()
     {
         await using var context = await CreateAsync(10000m);
@@ -51,6 +80,38 @@ public sealed class PlanExecutionTests
             await context.Repository.GetAssetTransactionsAsync(
                 context.LedgerId, AssetType.Fund, null, null, 100, CancellationToken.None),
             transaction => transaction.Kind == AssetTransactionKind.FundBuyPending);
+    }
+
+    [Fact]
+    public async Task SavePlan_WithFeeNotLessThanAmount_ReturnsInvalid()
+    {
+        await using var context = await CreateAsync(10000m);
+        var position = await CreatePositionAsync(context);
+
+        var result = await context.Plans.SaveAsync(
+            Request(AutoPlanType.FundSip, 300m, position, AutoPlanCycle.Monthly, new TimeOnly(9, 0), Today, fee: 300m),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("申购费"));
+    }
+
+    [Fact]
+    public async Task RunDue_FundSipWithFee_RecordsPendingBuyWithPlanFee()
+    {
+        await using var context = await CreateAsync(10000m);
+        var position = await CreatePositionAsync(context);
+
+        await SavePlanAsync(context, AutoPlanType.FundSip, 300m, position, AutoPlanCycle.Monthly, new TimeOnly(9, 0), Today, fee: 2m);
+
+        var result = await context.Execution.RunDueAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Completed);
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(9700m, (await context.Ledger.GetOverviewAsync(CancellationToken.None))!.Cash.Amount);
+        Assert.Single(overview.PendingBuys);
+        Assert.Equal(2m, overview.PendingBuys[0]!.Fee);
     }
 
     [Fact]
@@ -329,7 +390,8 @@ public sealed class PlanExecutionTests
         Guid? positionId,
         AutoPlanCycle cycle,
         TimeOnly time,
-        DateOnly startDate)
+        DateOnly startDate,
+        decimal fee = 0m)
     {
         return new SavePlanRequest(
             null,
@@ -343,7 +405,8 @@ public sealed class PlanExecutionTests
             startDate,
             positionId,
             Guid.NewGuid(),
-            null);
+            null,
+            Fee: fee);
     }
 
     private static async Task<PlanDto> SavePlanAsync(
@@ -353,10 +416,11 @@ public sealed class PlanExecutionTests
         Guid? positionId,
         AutoPlanCycle? cycle,
         TimeOnly time,
-        DateOnly startDate)
+        DateOnly startDate,
+        decimal fee = 0m)
     {
         var result = await context.Plans.SaveAsync(
-            Request(type, amount, positionId, cycle ?? AutoPlanCycle.Monthly, time, startDate),
+            Request(type, amount, positionId, cycle ?? AutoPlanCycle.Monthly, time, startDate, fee),
             CancellationToken.None);
 
         Assert.Equal(AssetOperationStatus.Created, result.Status);

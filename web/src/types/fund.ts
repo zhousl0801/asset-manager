@@ -31,6 +31,18 @@ export interface FundPosition {
   groupId: string | null
   groupName: string | null
   confirmationDelayDays?: number
+  dailyProfit: number
+  dailyProfitRate: number | null
+}
+
+export interface FundSearchResult {
+  code: string
+  name: string
+  baseName: string
+  shareClass: string | null
+  fundType: string
+  isQdii: boolean
+  confirmationDelayDays: number
 }
 
 export interface FundGroup {
@@ -57,6 +69,8 @@ export interface FundPlatformHolding {
   realizedProfit: number
   hasEffectiveQuote: boolean
   confirmationDelayDays?: number
+  dailyProfit: number
+  dailyProfitRate: number | null
 }
 
 export interface FundShareClass {
@@ -72,6 +86,8 @@ export interface FundShareClass {
   netValue: number | null
   netValueDate: string | null
   platforms: FundPlatformHolding[]
+  dailyProfit: number
+  dailyProfitRate: number | null
 }
 
 export interface FundSummary {
@@ -91,6 +107,8 @@ export interface FundSummary {
   historyConfirmed: boolean
   hasEffectiveQuotes: boolean
   classes: FundShareClass[]
+  dailyProfit: number
+  dailyProfitRate: number | null
 }
 
 export interface FundQuoteRefreshResult {
@@ -229,6 +247,17 @@ export interface FundSellArrivalInput {
 export interface CorrectFundSharesInput {
   positionId: string
   shares: number
+  note: string
+  requestId: string
+  cost?: number
+}
+
+export interface ConfirmFundBuyInput {
+  shares: number
+  netValue: number
+  netValueDate: string
+  fee: number
+  businessDate: string
   note: string
   requestId: string
 }

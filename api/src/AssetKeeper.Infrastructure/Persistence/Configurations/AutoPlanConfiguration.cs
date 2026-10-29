@@ -36,6 +36,12 @@ internal sealed class AutoPlanConfiguration : IEntityTypeConfiguration<AutoPlan>
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(plan => plan.Fee)
+            .HasColumnName("fee")
+            .HasPrecision(18, 2)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
         builder.Property(plan => plan.Cycle)
             .HasColumnName("cycle")
             .HasConversion<string>()

@@ -150,6 +150,43 @@ public sealed class CategoryService
         return CategoryOperationResult.Success(Map(category));
     }
 
+    public async Task<CategoryOperationResult> DeleteAsync(
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetAsync(cancellationToken);
+
+        if (ledger is null)
+        {
+            return CategoryOperationResult.NotFound("账本尚未初始化。");
+        }
+
+        var category = await _ledgerRepository.GetCategoryForUpdateAsync(ledger.Id, categoryId, cancellationToken);
+
+        if (category is null)
+        {
+            return CategoryOperationResult.NotFound("分类不存在。");
+        }
+
+        if (category.SystemKey == SalaryCategoryKey)
+        {
+            return CategoryOperationResult.Invalid(["工资分类由自动记账使用，不能删除。"]);
+        }
+
+        _ledgerRepository.RemoveCategory(category);
+
+        try
+        {
+            await _ledgerRepository.SaveChangesAsync(cancellationToken);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return CategoryOperationResult.Conflict("分类已变化，请刷新后重试。");
+        }
+
+        return CategoryOperationResult.Success();
+    }
+
     public async Task<CategoryOperationResult> ReorderAsync(
         ReorderCategoriesRequest request,
         CancellationToken cancellationToken)

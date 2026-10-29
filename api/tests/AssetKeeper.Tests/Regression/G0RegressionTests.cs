@@ -100,7 +100,7 @@ public sealed class G0RegressionTests
     {
         await using var context = await CreateContextAsync();
         var ledger = (await context.Repository.GetAsync(CancellationToken.None))!;
-        context.Db.LedgerEntries.AddRange(Enumerable.Range(0, 5001).Select(_ => LedgerEntry.Create(ledger.Id, LedgerEntryKind.Income, "工资", 1m, Today, ledger.StartDate, Today, null, LedgerEntrySource.Manual, Guid.NewGuid(), Now)));
+        context.Db.LedgerEntries.AddRange(Enumerable.Range(0, 5001).Select(_ => LedgerEntry.Create(ledger.Id, LedgerEntryKind.Income, "工资", 1m, Today, Today, null, LedgerEntrySource.Manual, Guid.NewGuid(), Now)));
         await context.Db.SaveChangesAsync();
 
         var result = await new LedgerEntryService(context.Repository, context.Dates).GetPeriodAsync(EntryPeriod.Year, Today, null, null, null, CancellationToken.None);
@@ -230,7 +230,7 @@ public sealed class G0RegressionTests
     {
         await using var context = await CreateContextAsync();
         var ledger = (await context.Repository.GetAsync(CancellationToken.None))!;
-        context.Db.LedgerEntries.AddRange(Enumerable.Range(0, 501).Select(_ => LedgerEntry.Create(ledger.Id, LedgerEntryKind.Income, "工资", 1m, Today, ledger.StartDate, Today, null, LedgerEntrySource.Manual, Guid.NewGuid(), Now)));
+        context.Db.LedgerEntries.AddRange(Enumerable.Range(0, 501).Select(_ => LedgerEntry.Create(ledger.Id, LedgerEntryKind.Income, "工资", 1m, Today, Today, null, LedgerEntrySource.Manual, Guid.NewGuid(), Now)));
         await context.Db.SaveChangesAsync();
         var service = new LedgerEntryService(context.Repository, context.Dates);
         var ids = new List<Guid>();

@@ -230,6 +230,7 @@ public sealed class BackupPlan
     public string Type { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+    public decimal Fee { get; set; }
     public string Cycle { get; set; } = string.Empty;
     public int? DayOfMonth { get; set; }
     public int? DayOfWeek { get; set; }
@@ -253,6 +254,7 @@ public sealed class BackupPlanOccurrence
     public string PlanName { get; set; } = string.Empty;
     public Guid? FundPositionId { get; set; }
     public decimal Amount { get; set; }
+    public decimal Fee { get; set; }
     public int PlanVersion { get; set; }
     public DateOnly DueDate { get; set; }
     public TimeOnly DueTime { get; set; }

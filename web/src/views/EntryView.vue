@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import CashAdjustmentLink from '../components/CashAdjustmentLink.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createEntry, fetchEntry, reverseEntry, updateEntry } from '../api/entries'
-import { fetchCategories } from '../api/categories'
+import { createCategory, deleteCategory, fetchCategories } from '../api/categories'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AmountKeypad from '../components/AmountKeypad.vue'
 import AppIcon from '../components/AppIcon.vue'
-import BackButton from '../components/BackButton.vue'
+import BottomSheet from '../components/BottomSheet.vue'
 import { categoriesFor } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
 import { applyAmountKey, evaluateAmountExpression, type AmountKey } from '../utils/amount'
 import { todayInBusinessTimeZone } from '../utils/format'
 import { createRequestId } from '../utils/request'
 import type { EntryKind, EntryStatus, LedgerEntry } from '../types/entry'
+
+interface CategoryOption {
+  id: string
+  name: string
+  deletable: boolean
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -41,21 +46,44 @@ const loadError = ref('')
 const formError = ref('')
 const showReverse = ref(false)
 const reverseReason = ref('')
+const categoryEditMode = ref(false)
+const categorySheet = ref<'add' | 'delete' | null>(null)
+const pendingDeleteCategory = ref<CategoryOption | null>(null)
+const newCategoryName = ref('')
+const categorySheetError = ref('')
+const isCategorySaving = ref(false)
+const categoriesLoaded = ref(false)
 
 const categoryItems = ref<EntryCategory[]>([])
-const categories = computed(() => {
+const categoryOptions = computed<CategoryOption[]>(() => {
   const active = categoryItems.value
     .filter((category) => category.kind === form.kind && category.isActive)
     .sort((first, second) => first.sortOrder - second.sortOrder || first.name.localeCompare(second.name))
-    .map((category) => category.name)
-  const names = active.length ? active : categoriesFor(form.kind)
 
-  if (form.category && !names.includes(form.category)) {
-    return [form.category, ...names]
+  if (active.length) {
+    const options: CategoryOption[] = active.map((category) => ({
+      id: category.id,
+      name: category.name,
+      deletable: category.systemKey !== 'salary'
+    }))
+
+    if (form.category && !options.some((option) => option.name === form.category)) {
+      options.unshift({ id: `missing:${form.category}`, name: form.category, deletable: false })
+    }
+
+    return options
   }
 
-  return names
+  return categoriesFor(form.kind).map((name) => ({
+    id: `fallback:${name}`,
+    name,
+    deletable: false
+  }))
 })
+const canManageCategories = computed(() => categoriesLoaded.value && canEdit.value)
+const hasEntryExtras = computed(() =>
+  (isEditing.value && canEdit.value) || entrySource.value === 'automatic')
+const categorySheetTitle = computed(() => categorySheet.value === 'add' ? '新增分类' : '删除分类')
 const amount = computed(() => evaluateAmountExpression(form.expression))
 const canEdit = computed(() => entryStatus.value === 'active')
 const canSubmit = computed(() => amount.value !== null && !isSaving.value && canEdit.value)
@@ -66,6 +94,11 @@ const dateLabel = computed(() => {
 
   return form.businessDate === today ? '今天' : form.businessDate.slice(5).replace('-', '/')
 })
+
+let longPressTimer: ReturnType<typeof setTimeout> | undefined
+let suppressClickTimer: ReturnType<typeof setTimeout> | undefined
+let longPressTriggered = false
+let suppressNextCategoryClick = false
 
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
@@ -81,8 +114,10 @@ onMounted(async () => {
 async function loadCategories(): Promise<void> {
   try {
     categoryItems.value = await fetchCategories()
+    categoriesLoaded.value = true
   } catch {
     categoryItems.value = []
+    categoriesLoaded.value = false
   }
 }
 
@@ -92,7 +127,23 @@ function defaultCategory(kind: EntryKind): string {
   return first?.name ?? categoriesFor(kind)[0] ?? ''
 }
 
+function categoryExists(kind: EntryKind, name: string): boolean {
+  if (!categoriesLoaded.value) {
+    return categoriesFor(kind).includes(name)
+  }
+
+  return categoryItems.value.some(
+    (category) => category.kind === kind && category.isActive && category.name === name
+  )
+}
+
 onBeforeUnmount(() => {
+  clearLongPressTimer()
+
+  if (suppressClickTimer !== undefined) {
+    clearTimeout(suppressClickTimer)
+  }
+
   document.removeEventListener('keydown', handleKeydown)
 })
 
@@ -143,8 +194,11 @@ function setKind(kind: EntryKind): void {
   }
 
   form.kind = kind
+  categoryEditMode.value = false
+  categorySheet.value = null
+  pendingDeleteCategory.value = null
 
-  if (!categories.value.includes(form.category)) {
+  if (!categoryExists(kind, form.category)) {
     form.category = defaultCategory(kind)
   }
 }
@@ -155,6 +209,165 @@ function chooseCategory(category: string): void {
   }
 
   form.category = category
+}
+
+function clearLongPressTimer(): void {
+  if (longPressTimer !== undefined) {
+    clearTimeout(longPressTimer)
+    longPressTimer = undefined
+  }
+}
+
+function startCategoryPress(option: CategoryOption): void {
+  clearLongPressTimer()
+
+  if (!canManageCategories.value || option.id.startsWith('fallback:') || option.id.startsWith('missing:')) {
+    return
+  }
+
+  longPressTriggered = false
+  longPressTimer = setTimeout(() => {
+    longPressTimer = undefined
+    longPressTriggered = true
+    categoryEditMode.value = true
+
+    if (typeof navigator.vibrate === 'function') {
+      navigator.vibrate(10)
+    }
+  }, 450)
+}
+
+function cancelCategoryPress(): void {
+  clearLongPressTimer()
+
+  if (!longPressTriggered) {
+    return
+  }
+
+  longPressTriggered = false
+  suppressNextCategoryClick = true
+
+  if (suppressClickTimer !== undefined) {
+    clearTimeout(suppressClickTimer)
+  }
+
+  suppressClickTimer = setTimeout(() => {
+    suppressClickTimer = undefined
+    suppressNextCategoryClick = false
+  }, 600)
+}
+
+function handleCategoryClick(option: CategoryOption): void {
+  if (suppressNextCategoryClick) {
+    suppressNextCategoryClick = false
+
+    if (suppressClickTimer !== undefined) {
+      clearTimeout(suppressClickTimer)
+      suppressClickTimer = undefined
+    }
+
+    return
+  }
+
+  if (categoryEditMode.value) {
+    if (option.deletable) {
+      openDeleteCategory(option)
+    }
+
+    return
+  }
+
+  chooseCategory(option.name)
+}
+
+function openAddCategory(): void {
+  clearLongPressTimer()
+  newCategoryName.value = ''
+  categorySheetError.value = ''
+  categorySheet.value = 'add'
+}
+
+function openDeleteCategory(option: CategoryOption): void {
+  clearLongPressTimer()
+  pendingDeleteCategory.value = option
+  categorySheetError.value = ''
+  categorySheet.value = 'delete'
+}
+
+function closeCategorySheet(): void {
+  if (isCategorySaving.value) {
+    return
+  }
+
+  categorySheet.value = null
+  pendingDeleteCategory.value = null
+}
+
+function exitCategoryEdit(): void {
+  categoryEditMode.value = false
+}
+
+async function saveCategory(): Promise<void> {
+  const name = newCategoryName.value.trim()
+
+  if (!name) {
+    categorySheetError.value = '请输入分类名称。'
+    return
+  }
+
+  if (name.length > 20) {
+    categorySheetError.value = '分类名称不能超过 20 个字符。'
+    return
+  }
+
+  isCategorySaving.value = true
+  categorySheetError.value = ''
+
+  try {
+    const created = await createCategory({ kind: form.kind, name })
+    await loadCategories()
+    form.category = created.name
+    categorySheet.value = null
+    categoryEditMode.value = false
+  } catch (error) {
+    categorySheetError.value = error instanceof ApiError && error.status === 409
+      ? '同类型下已存在同名分类。'
+      : getApiErrorMessage(error, '新增分类失败，请重试。')
+  } finally {
+    isCategorySaving.value = false
+  }
+}
+
+async function confirmDeleteCategory(): Promise<void> {
+  const target = pendingDeleteCategory.value
+
+  if (!target || isCategorySaving.value) {
+    return
+  }
+
+  if (categoryItems.value.filter((category) => category.kind === form.kind && category.isActive).length <= 1) {
+    categorySheetError.value = '至少保留一个分类。'
+    return
+  }
+
+  isCategorySaving.value = true
+  categorySheetError.value = ''
+
+  try {
+    await deleteCategory(target.id)
+    await loadCategories()
+
+    if (form.category === target.name) {
+      form.category = defaultCategory(form.kind)
+    }
+
+    categorySheet.value = null
+    pendingDeleteCategory.value = null
+  } catch (error) {
+    categorySheetError.value = getApiErrorMessage(error, '删除分类失败，请重试。')
+  } finally {
+    isCategorySaving.value = false
+  }
 }
 
 function pickDate(): void {
@@ -257,6 +470,15 @@ function goBack(): void {
   void router.push(returnRoute.value)
 }
 
+function handleHeaderAction(): void {
+  if (categoryEditMode.value) {
+    exitCategoryEdit()
+    return
+  }
+
+  goBack()
+}
+
 function handleKeydown(event: KeyboardEvent): void {
   if (event.metaKey || event.ctrlKey || event.altKey) {
     return
@@ -311,12 +533,6 @@ function handleKeydown(event: KeyboardEvent): void {
 <template>
   <main class="entry-screen">
     <header class="entry-header">
-      <BackButton @back="goBack" />
-      <h1>记一笔</h1>
-      <span class="header-spacer"></span>
-    </header>
-
-    <div class="entry-kind-row">
       <div class="kind-tabs" role="tablist" aria-label="收支方向">
         <button
           type="button"
@@ -339,11 +555,10 @@ function handleKeydown(event: KeyboardEvent): void {
           收入
         </button>
       </div>
-    </div>
-
-    <RouterLink v-if="form.kind === 'income' && !isEditing" class="automatic-income-link" :to="{ name: 'plans', query: { new: 'salaryIncome' } }">
-      设置自动收入（工资、奖金等） ›
-    </RouterLink>
+      <button type="button" class="header-cancel" @click="handleHeaderAction">
+        {{ categoryEditMode ? '完成' : '取消' }}
+      </button>
+    </header>
 
     <p v-if="isLoading" class="state entry-state">正在读取记录…</p>
 
@@ -353,98 +568,127 @@ function handleKeydown(event: KeyboardEvent): void {
     </section>
 
     <template v-else>
-      <div class="entry-body">
-        <div v-if="entryStatus === 'reversed'" class="reversed-banner">
-          该记录已撤销，不能修改。
-        </div>
+      <div class="category-area">
+        <div class="category-scroll">
+          <div v-if="entryStatus === 'reversed'" class="reversed-banner">
+            该记录已撤销，不能修改。
+          </div>
 
-        <section class="amount-hero">
-          <span class="amount-category">{{ form.category || '未选择分类' }}</span>
-          <output class="amount-expression" aria-label="输入金额">{{ form.expression || '0' }}</output>
-        </section>
-
-        <div class="category-strip" role="group" aria-label="选择分类">
-          <button
-            v-for="category in categories"
-            :key="category"
-            type="button"
-            class="category-tile"
-            :class="{ active: form.category === category }"
-            :disabled="!canEdit"
-            :aria-pressed="form.category === category"
-            @click="chooseCategory(category)"
-          >
-            <span class="category-mark"><AppIcon :name="category" /></span>
-            <span>{{ category }}</span>
-          </button>
-        </div>
-
-        <div class="entry-fields">
-          <label class="field">
-            <span>日期</span>
-            <input
-              id="entry-date"
-              ref="dateInput"
-              v-model="form.businessDate"
-              type="date"
-              :max="today"
-              :disabled="!canEdit"
-            />
-          </label>
-          <label class="field">
-            <span>备注</span>
-            <input
-              v-model="form.note"
-              type="text"
-              maxlength="200"
-              placeholder="选填，记录用途细节"
-              :disabled="!canEdit"
-            />
-          </label>
-        </div>
-
-        <details class="entry-options ui-disclosure" :open="!!form.relatedCashAdjustmentId">
-          <summary>更多选项</summary>
-        <CashAdjustmentLink v-model="form.relatedCashAdjustmentId" :business-date="form.businessDate" :cash-effect="form.kind === 'income' ? (amount ?? 0) : -(amount ?? 0)" :disabled="isSaving || !canEdit" />
-        </details>
-        <button
-          v-if="isEditing && canEdit"
-          type="button"
-          class="reverse-link"
-          @click="showReverse = true"
-        >
-          撤销这笔记录
-        </button>
-
-        <section v-if="showReverse" class="reverse-panel">
-          <p>撤销会恢复这笔记录对现金的影响，并保留原始记录。</p>
-          <label class="field">
-            <span>撤销原因</span>
-            <input v-model="reverseReason" type="text" maxlength="200" placeholder="选填" />
-          </label>
-          <div class="reverse-actions">
+          <div class="category-grid" role="group" aria-label="选择分类">
             <button
+              v-for="option in categoryOptions"
+              :key="option.id"
               type="button"
-              class="secondary-button"
-              :disabled="isReversing"
-              @click="showReverse = false"
+              class="category-tile"
+              :class="{
+                active: !categoryEditMode && form.category === option.name,
+                editing: categoryEditMode
+              }"
+              :disabled="!canEdit"
+              :aria-pressed="form.category === option.name"
+              @pointerdown="startCategoryPress(option)"
+              @pointerup="cancelCategoryPress"
+              @pointerleave="cancelCategoryPress"
+              @pointercancel="cancelCategoryPress"
+              @click="handleCategoryClick(option)"
+              @contextmenu.prevent
             >
-              取消
+              <span class="category-mark-wrap">
+                <span class="category-mark"><AppIcon :name="option.name" /></span>
+                <span
+                  v-if="categoryEditMode && option.deletable"
+                  class="category-remove"
+                  aria-hidden="true"
+                >×</span>
+              </span>
+              <span class="category-name">{{ option.name }}</span>
             </button>
             <button
+              v-if="categoryEditMode && canManageCategories"
               type="button"
-              class="danger-button"
-              :disabled="isReversing"
-              @click="confirmReverse"
+              class="category-tile category-add"
+              @click="openAddCategory"
             >
-              {{ isReversing ? '撤销中…' : '确认撤销' }}
+              <span class="category-mark-wrap">
+                <span class="category-mark"><AppIcon name="plus" /></span>
+              </span>
+              <span class="category-name">添加</span>
             </button>
           </div>
-        </section>
+          <p v-if="categoryEditMode && canManageCategories" class="category-hint">
+            点分类可删除
+          </p>
 
-        <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
-        <p v-if="entrySource === 'automatic'" class="source-note">自动记账记录</p>
+          <div v-if="hasEntryExtras" class="category-extras">
+            <button
+              v-if="isEditing && canEdit"
+              type="button"
+              class="reverse-link"
+              @click="showReverse = true"
+            >
+              撤销这笔记录
+            </button>
+
+            <section v-if="showReverse" class="reverse-panel">
+              <p>撤销会恢复这笔记录对现金的影响，并保留原始记录。</p>
+              <label class="field">
+                <span>撤销原因</span>
+                <input v-model="reverseReason" type="text" maxlength="200" placeholder="选填" />
+              </label>
+              <div class="reverse-actions">
+                <button
+                  type="button"
+                  class="secondary-button"
+                  :disabled="isReversing"
+                  @click="showReverse = false"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  class="danger-button"
+                  :disabled="isReversing"
+                  @click="confirmReverse"
+                >
+                  {{ isReversing ? '撤销中…' : '确认撤销' }}
+                </button>
+              </div>
+            </section>
+
+            <p v-if="entrySource === 'automatic'" class="source-note">自动记账记录</p>
+          </div>
+        </div>
+        <div class="category-fade" aria-hidden="true" />
       </div>
+
+      <section class="amount-panel">
+        <output class="amount-expression" aria-label="输入金额">{{ form.expression || '0.00' }}</output>
+      </section>
+
+      <p v-if="formError" class="form-error entry-error" role="alert">{{ formError }}</p>
+
+      <label class="note-bar">
+        <input
+          v-model="form.note"
+          type="text"
+          maxlength="200"
+          placeholder="备注：点击填写备注"
+          :disabled="!canEdit"
+          aria-label="备注"
+        />
+      </label>
+
+      <input
+        id="entry-date"
+        ref="dateInput"
+        v-model="form.businessDate"
+        class="date-proxy"
+        type="date"
+        :max="today"
+        :disabled="!canEdit"
+        tabindex="-1"
+        aria-label="业务日期"
+      />
 
       <footer class="entry-footer">
         <AmountKeypad
@@ -456,6 +700,41 @@ function handleKeydown(event: KeyboardEvent): void {
           @pick-date="pickDate"
         />
       </footer>
+
+      <BottomSheet
+        :open="categorySheet !== null"
+        :title="categorySheetTitle"
+        :subtitle="categorySheet === 'add' ? `新增后立即选中，只影响「${form.kind === 'income' ? '收入' : '支出'}」分类` : '历史记录仍会保留该分类名称'"
+        :close-disabled="isCategorySaving"
+        @close="closeCategorySheet"
+      >
+        <form v-if="categorySheet === 'add'" class="form-stack" @submit.prevent="saveCategory">
+          <label class="form-field">
+            <span>分类名称</span>
+            <input v-model="newCategoryName" maxlength="20" placeholder="例如：咖啡" />
+          </label>
+          <p v-if="categorySheetError" class="form-error">{{ categorySheetError }}</p>
+          <div class="form-actions">
+            <button type="button" class="secondary-button" :disabled="isCategorySaving" @click="closeCategorySheet">取消</button>
+            <button type="submit" class="primary-button" :disabled="isCategorySaving || !newCategoryName.trim()">
+              {{ isCategorySaving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </form>
+
+        <template v-else-if="categorySheet === 'delete' && pendingDeleteCategory">
+          <p class="category-delete-note">
+            删除「{{ pendingDeleteCategory.name }}」后，新记账不再显示该分类；已有记录仍保留原分类名称。
+          </p>
+          <p v-if="categorySheetError" class="form-error">{{ categorySheetError }}</p>
+          <div class="form-actions">
+            <button type="button" class="secondary-button" :disabled="isCategorySaving" @click="closeCategorySheet">取消</button>
+            <button type="button" class="danger-button" :disabled="isCategorySaving" @click="confirmDeleteCategory">
+              {{ isCategorySaving ? '删除中…' : '确认删除' }}
+            </button>
+          </div>
+        </template>
+      </BottomSheet>
     </template>
   </main>
 </template>
@@ -468,134 +747,132 @@ function handleKeydown(event: KeyboardEvent): void {
   width: min(100%, 430px);
   height: 100dvh;
   margin: 0 auto;
-  background: var(--color-bg-page);
+  overflow: hidden;
+  background: var(--color-bg-surface);
 }
 
 .entry-header {
-  display: grid;
-  grid-template-columns: var(--touch-target) 1fr var(--touch-target);
+  position: relative;
+  display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  padding: max(12px, env(safe-area-inset-top)) 16px 10px;
-  background: var(--color-bg-surface);
-}
-
-.entry-header h1 {
-  margin: 0;
-  font-size: var(--text-headline);
-  font-weight: 600;
-  text-align: center;
-}
-
-.entry-kind-row {
-  padding: 0 16px 12px;
-  background: var(--color-bg-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+  min-height: calc(56px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 72px 0;
+  background: var(--color-brand);
+  color: var(--color-on-brand);
 }
 
 .kind-tabs {
   display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: var(--radius-control);
-  background: var(--color-bg-subtle);
+  align-items: center;
+  gap: 32px;
+  height: 56px;
 }
 
 .kind-tabs button {
-  flex: 1;
+  position: relative;
   min-height: var(--touch-target);
-  padding: 0 16px;
+  padding: 0 6px;
   border: 0;
-  border-radius: var(--radius-tag);
   background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
+  color: var(--color-on-brand);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  opacity: 0.66;
 }
 
 .kind-tabs button.active {
-  background: var(--color-bg-surface);
-  color: var(--color-brand);
   font-weight: 600;
-  box-shadow: 0 1px 3px var(--color-shadow);
+  opacity: 1;
+}
+
+.kind-tabs button.active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
 }
 
 .kind-tabs button:disabled {
+  opacity: 0.35;
+}
+
+.header-cancel {
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  min-height: 56px;
+  padding: 0 4px;
+  border: 0;
   background: transparent;
-  color: var(--color-text-disabled);
+  color: var(--color-on-brand);
+  font-size: var(--text-body);
+  font-weight: 500;
 }
 
-.header-spacer {
-  width: var(--touch-target);
+.category-area {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
-.entry-body {
+.category-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 16px 20px;
-}
-
-.amount-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  padding: 20px 4px 8px;
-}
-
-.amount-category {
-  color: var(--color-text-secondary);
-  font-size: var(--text-subhead);
-}
-
-.amount-expression {
-  max-width: 68%;
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: clamp(2rem, 9vw, 2.5rem);
-  font-weight: 600;
-  letter-spacing: -1px;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.category-strip {
-  display: flex;
-  gap: 8px;
-  margin: 0 -16px;
-  padding: 8px 16px 14px;
-  overflow-x: auto;
+  padding: 10px 16px 24px;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
-.category-strip::-webkit-scrollbar {
+.category-scroll::-webkit-scrollbar {
   display: none;
 }
 
+.category-fade {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--color-bg-surface));
+  pointer-events: none;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: 16px;
+  column-gap: 4px;
+  padding: 6px 0 0;
+}
+
 .category-tile {
-  display: inline-flex;
-  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  min-height: var(--touch-target);
-  padding: 0 12px 0 7px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  font-size: var(--text-footnote);
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
-.category-tile:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-}
-
-.category-tile.active {
-  border-color: var(--color-brand);
-  background: var(--color-brand);
-  color: var(--color-on-brand);
+.category-mark-wrap {
+  position: relative;
+  display: inline-flex;
 }
 
 .category-mark {
@@ -603,38 +880,156 @@ function handleKeydown(event: KeyboardEvent): void {
   justify-content: center;
   align-items: center;
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  background: var(--color-brand-soft);
+  background: var(--color-bg-subtle);
+  color: var(--color-icon-default);
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.category-mark :deep(.app-icon) {
+  width: 26px;
+  height: 26px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .category-tile:hover:not(:disabled) .category-mark {
+    background: var(--color-brand-soft);
+    color: var(--color-brand);
+  }
+}
+
+.category-tile.active .category-mark,
+.category-tile.active:hover .category-mark,
+.category-tile.active:active .category-mark {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.category-name {
+  max-width: 100%;
+  overflow: hidden;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-tile.active .category-name {
   color: var(--color-brand);
+  font-weight: 600;
+}
+
+.category-tile:disabled {
+  opacity: 0.5;
+}
+
+.category-remove {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  color: var(--color-on-danger);
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 1px 3px var(--color-shadow);
 }
 
-.category-tile.active .category-mark {
-  background: var(--color-on-brand);
+.category-add .category-mark {
+  border: 1px dashed var(--color-border-control);
+  background: transparent;
   color: var(--color-brand);
 }
 
-.category-tile:disabled .category-mark {
-  background: var(--color-bg-disabled);
-  color: var(--color-text-disabled);
+.category-add .category-name {
+  color: var(--color-brand);
 }
 
-.entry-options {
-  margin-top: 8px;
+.category-hint {
+  margin: 12px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  text-align: center;
+}
+
+.category-extras {
+  margin-top: 20px;
+  padding-top: 14px;
   border-top: 1px solid var(--color-border-subtle);
 }
-.entry-options .back-link {
-  font-size: 0.75rem;
+
+.category-delete-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+  line-height: 1.7;
 }
 
-.entry-fields {
+.amount-panel {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 10px 20px 4px;
+  background: var(--color-bg-surface);
+}
+
+.amount-expression {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: clamp(2.75rem, 12vw, 3.25rem);
+  font-weight: 500;
+  letter-spacing: -1.4px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-bar {
+  display: block;
+  flex-shrink: 0;
+  margin: 4px 16px 12px;
+}
+
+.note-bar input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.note-bar input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.note-bar input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.date-proxy {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .field {
@@ -671,7 +1066,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .reverse-link {
-  margin-top: 20px;
+  margin-top: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -734,18 +1129,21 @@ function handleKeydown(event: KeyboardEvent): void {
   line-height: 1.7;
 }
 
+.entry-error {
+  margin: 0 16px 8px;
+}
+
 .source-note {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
 }
 
 .entry-footer {
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--color-bg-surface);
-  border-top: 1px solid var(--color-border-subtle);
 }
-
-
 
 .entry-state {
   padding: 24px 18px;

@@ -18,6 +18,7 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ params: {}, path: '/funds' }),
 vi.mock('../api/funds', () => ({
   fetchFundOverview: mocks.overview,
   buyFund: mocks.buy,
+  confirmFundBuy: vi.fn(),
   cancelFundPending: mocks.cancel,
   createFundPosition: mocks.createPosition,
   sellFund: mocks.sell,
@@ -84,7 +85,7 @@ async function showActivities(view: ReturnType<typeof mount>): Promise<void> {
   await flushPromises()
 }
 
-test('pending buy shows trade and automatic confirmation dates without manual confirmation', async () => {
+test('pending buy shows trade and automatic confirmation dates and allows manual confirmation', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
   await showActivities(view)
@@ -92,7 +93,8 @@ test('pending buy shows trade and automatic confirmation dates without manual co
   expect(view.find('.pending-card').text()).toContain('纳指基金')
   expect(view.find('.pending-card').text()).toContain('T 日 2026年10月21日')
   expect(view.find('.pending-card').text()).toContain('预计 2026年10月23日 按确认净值自动结转')
-  expect(view.find('.pending-card button').exists()).toBe(false)
+  expect(view.find('.pending-card .confirm-button').text()).toBe('登记确认份额')
+  expect(view.find('.pending-card .secondary-button').exists()).toBe(false)
   view.unmount()
 })
 
@@ -104,7 +106,7 @@ test('pending buy before cutoff can be cancelled with an idempotent request', as
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
   await showActivities(view)
-  await view.get('.pending-card .confirm-button').trigger('click')
+  await view.get('.pending-card .secondary-button').trigger('click')
   await flushPromises()
   expect(mocks.cancel).toHaveBeenCalledWith('pb1', expect.any(String))
   expect(mocks.overview).toHaveBeenCalledTimes(2)
@@ -138,26 +140,15 @@ test('buy only records the paid amount and defers shares to confirmation', async
   view.unmount()
 })
 
-test('quote sheet can fetch the latest fund nav from the provider', async () => {
-  mocks.refresh.mockResolvedValue({
-    position: overview.positions[0],
-    updated: true,
-    source: 'eastmoney',
-    netValue: 13,
-    effectiveDate: '2026-10-21',
-    obtainedAt: '2026-10-21T02:00:00Z',
-    lastAttemptAt: '2026-10-21T02:00:00Z'
-  })
+test('expanded fund no longer exposes a manual quote refresh action', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
   await view.get('.fund-card > header').trigger('click')
-  const quoteButton = view.findAll('button').find((button) => button.text() === '刷新净值')!
-  await quoteButton.trigger('click')
   await flushPromises()
 
-  expect(mocks.refresh).toHaveBeenCalledWith('p1')
-  expect(view.find('.notice').text()).toContain('已获取最新净值 13.00')
+  expect(view.findAll('.fund-card')[0]!.text()).not.toContain('刷新净值')
+  expect(mocks.refresh).not.toHaveBeenCalled()
   view.unmount()
 })
 

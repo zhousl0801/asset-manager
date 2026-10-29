@@ -153,7 +153,7 @@ public sealed class HistoryService
                     }
                     else
                     {
-                        entry.Update(change.EntryKind!.Value, change.Category!, change.Amount, change.Date, ledger.StartDate, _dates.Today, change.Note, _dates.UtcNow);
+                        entry.Update(change.EntryKind!.Value, change.Category!, change.Amount, change.Date, _dates.Today, change.Note, _dates.UtcNow);
                         entry.SetHistoryMetadata(change.Sequence, change.RelatedCashAdjustmentId);
                     }
 
@@ -287,7 +287,7 @@ public sealed class HistoryService
         if (original.Source == "entry")
         {
             errors = Domain.Ledgers.LedgerEntry.Validate(request.EntryKind ?? 0, request.Category ?? string.Empty, request.Amount,
-                request.Date, data.Ledger.StartDate, _dates.Today, request.Note);
+                request.Date, _dates.Today, request.Note);
 
             if (errors.Count > 0)
             {

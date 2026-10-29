@@ -71,6 +71,26 @@ public sealed class CategoriesController : ControllerBase
         };
     }
 
+    [HttpDelete("{categoryId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(
+        Guid categoryId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _categoryService.DeleteAsync(categoryId, cancellationToken);
+
+        return result.Status switch
+        {
+            CategoryOperationStatus.Success => NoContent(),
+            CategoryOperationStatus.NotFound => NotFoundProblem("分类不存在", result.Errors.FirstOrDefault() ?? "分类不存在。"),
+            CategoryOperationStatus.Conflict => ConflictProblem(result.Errors),
+            _ => ValidationProblem(result.Errors)
+        };
+    }
+
     [HttpPut("order")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

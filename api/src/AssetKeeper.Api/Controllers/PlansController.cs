@@ -41,6 +41,35 @@ public sealed class PlansController : AssetOperationsControllerBase
         return Ok(_planService.GetCalendar(year, month));
     }
 
+    [HttpGet("occurrences")]
+    [ProducesResponseType<PlanOccurrencePageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Occurrences(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1)
+        {
+            ModelState.AddModelError("page", "页码需从 1 开始。");
+        }
+
+        if (pageSize is < 1 or > 50)
+        {
+            ModelState.AddModelError("pageSize", "每页数量需在 1 至 50 之间。");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var result = await _planService.GetOccurrencePageAsync(page, pageSize, cancellationToken);
+
+        return result is null ? LedgerNotFound() : Ok(result);
+    }
+
     [HttpPost]
     [ProducesResponseType<PlanDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

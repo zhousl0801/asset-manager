@@ -20,6 +20,77 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
         return await GetQuoteAsync(code, null, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ExternalFundSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={Uri.EscapeDataString(query.Trim())}");
+        request.Headers.Referrer = new Uri("https://fund.eastmoney.com/");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new QuoteUnavailableException($"基金搜索服务返回 {(int)response.StatusCode}。");
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("Datas", out var data) || data.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var results = new List<ExternalFundSearchResult>();
+
+            foreach (var item in data.EnumerateArray())
+            {
+                var code = item.TryGetProperty("CODE", out var codeElement) ? codeElement.GetString()?.Trim() : null;
+                var name = item.TryGetProperty("NAME", out var nameElement) ? nameElement.GetString()?.Trim() : null;
+
+                if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                var fundType = item.TryGetProperty("FundBaseInfo", out var baseInfo)
+                    && baseInfo.ValueKind == JsonValueKind.Object
+                    && baseInfo.TryGetProperty("FTYPE", out var typeElement)
+                    ? typeElement.GetString()?.Trim() ?? string.Empty
+                    : string.Empty;
+                var shareClass = FundProfileRules.DetectShareClass(name);
+                var isQdii = FundProfileRules.IsQdii(name, fundType);
+                results.Add(new ExternalFundSearchResult(
+                    code,
+                    name,
+                    FundProfileRules.BaseName(name, shareClass),
+                    shareClass,
+                    fundType,
+                    isQdii,
+                    FundProfileRules.ConfirmationDelayDays(isQdii)));
+
+                if (results.Count >= 20)
+                {
+                    break;
+                }
+            }
+
+            return results;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException)
+        {
+            throw new QuoteUnavailableException("基金搜索服务返回的数据无法解析。", exception);
+        }
+    }
+
     public async Task<ExternalFundQuote> GetForDateAsync(string code, DateOnly date, CancellationToken cancellationToken)
     {
         return await GetQuoteAsync(code, date, cancellationToken);

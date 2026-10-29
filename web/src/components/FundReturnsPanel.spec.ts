@@ -126,6 +126,28 @@ test('calendar day shows undisclosed rows with a dash instead of zero', async ()
   view.unmount()
 })
 
+test('calendar rounds large daily profit so values do not overlap', async () => {
+  const large = structuredClone(returns)
+  large.points = [{
+    date: '2026-10-20', fundValue: 3300, dailyProfit: 2136.82, cumulativeProfit: 2136.82,
+    disclosedFunds: 1, totalFunds: 1, coveredPositions: 1, totalPositions: 1,
+    hasDisclosure: true, isComplete: true, status: 'complete'
+  }]
+  mocks.returns.mockResolvedValue(large)
+
+  const view = mount(FundReturnsPanel, {
+    props: { groupId: null, ungrouped: false },
+    global: { stubs: { FundReturnChart: true } }
+  })
+  await flushPromises()
+
+  const dayButton = view.findAll('.calendar-day')
+    .find((button) => button.text().startsWith('20'))!
+  expect(dayButton.text()).toContain('+2,137')
+  expect(dayButton.text()).not.toContain('2,136.82')
+  view.unmount()
+})
+
 test('group changes refetch returns with the new scope', async () => {
   const view = mount(FundReturnsPanel, {
     props: { groupId: null, ungrouped: false },

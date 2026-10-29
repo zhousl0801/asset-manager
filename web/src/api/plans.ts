@@ -1,6 +1,7 @@
 import type {
   PlanCalendar,
   PlanOccurrence,
+  PlanOccurrencePage,
   PlanOverview,
   PlanRunResult,
   SavePlanInput
@@ -9,6 +10,10 @@ import { apiRequest } from './client'
 
 export function fetchPlanOverview(): Promise<PlanOverview> {
   return apiRequest<PlanOverview>('/api/ledger/plans')
+}
+
+export function fetchPlanOccurrences(page: number, pageSize = 10): Promise<PlanOccurrencePage> {
+  return apiRequest<PlanOccurrencePage>(`/api/ledger/plans/occurrences?page=${page}&pageSize=${pageSize}`)
 }
 
 export function fetchPlanCalendar(year: number, month: number): Promise<PlanCalendar> {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   fetchPlanCalendar,
+  fetchPlanOccurrences,
   fetchPlanOverview,
   pausePlan,
   recordOccurrence,
@@ -12,7 +13,7 @@ import {
   savePlan,
   skipOccurrence
 } from '../api/plans'
-import { fetchFundOverview } from '../api/funds'
+import { createFundPosition, fetchFundOverview, searchFunds } from '../api/funds'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppIcon from '../components/AppIcon.vue'
 import AppNav from '../components/AppNav.vue'
@@ -27,11 +28,12 @@ import {
   sumAmounts,
   todayInBusinessTimeZone
 } from '../utils/format'
-import type { FundPosition } from '../types/fund'
+import type { FundPosition, FundSearchResult } from '../types/fund'
 import type {
   AutoPlan,
   OccurrenceStatus,
   PlanCycle,
+  PlanOccurrence,
   PlanOverview,
   PlanType,
   SavePlanInput,
@@ -60,11 +62,20 @@ const calendarLoading = ref(false)
 const calendarError = ref('')
 const calendarCache = new Map<string, TradingDay[]>()
 let calendarSequence = 0
+const occurrencePageSize = 10
+const occurrencePage = ref(1)
+const occurrenceItems = ref<PlanOccurrence[]>([])
+const occurrenceTotal = ref(0)
+const occurrenceLoading = ref(false)
+const occurrenceError = ref('')
+const occurrenceSection = ref<HTMLElement | null>(null)
+let occurrenceSequence = 0
 
 const form = reactive({
   type: 'salaryIncome' as PlanType,
   name: '',
   amount: '',
+  fee: '0',
   cycle: 'monthly' as PlanCycle,
   dayOfMonth: '15',
   dayOfWeek: '1',
@@ -72,6 +83,12 @@ const form = reactive({
   startDate: today,
   fundPositionId: ''
 })
+const fundSearch = ref('')
+const fundSearchResults = ref<FundSearchResult[]>([])
+const fundSearching = ref(false)
+const fundSearchError = ref('')
+const selectedFundTarget = ref<FundSearchResult | null>(null)
+let fundSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 const fundChoices = computed(() => {
   const choices = new Map<string, FundPosition & { sourceIds: string[] }>()
@@ -109,6 +126,7 @@ interface FundPlanGroup {
   name: string
   plans: AutoPlan[]
   single: AutoPlan | null
+  codes: string[]
   shareClasses: string[]
   activeCount: number
   activeAmount: number
@@ -165,6 +183,7 @@ const fundPlanGroups = computed<FundPlanGroup[]>(() => {
         name: fundDisplayName(plan),
         plans: [plan],
         single: null,
+        codes: [],
         shareClasses: [],
         activeCount: 0,
         activeAmount: 0,
@@ -187,6 +206,7 @@ const fundPlanGroups = computed<FundPlanGroup[]>(() => {
         ...group,
         plans: sortedPlans,
         single: sortedPlans.length === 1 ? sortedPlans[0]! : null,
+        codes: [...new Set(sortedPlans.map(fundCode).filter((code): code is string => code !== null))],
         shareClasses: [...new Set(sortedPlans.map(shareClassLabel))],
         activeCount: activePlans.length,
         activeAmount: sumAmounts(activePlans.map(plan => plan.amount)),
@@ -202,13 +222,25 @@ const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
 const sheetTitle = computed(() => editingPlan.value ? '编辑自动计划' : '新建自动计划')
 const actionable = computed(() => overview.value?.pendingOccurrences ?? [])
+const occurrenceTotalPages = computed(() =>
+  Math.max(1, Math.ceil(occurrenceTotal.value / occurrencePageSize)))
 const canSubmit = computed(() => {
-  if (isSaving.value || (parseAmount(form.amount) ?? 0) <= 0) {
+  const amount = parseAmount(form.amount) ?? 0
+
+  if (isSaving.value || amount <= 0) {
     return false
   }
 
-  if (form.type === 'fundSip' && !fundChoices.value.some(item => item.id === form.fundPositionId)) {
-    return false
+  if (form.type === 'fundSip') {
+    const fee = parseAmount(form.fee)
+
+    if (fee === null || fee < 0 || fee >= amount) {
+      return false
+    }
+
+    if (!selectedFundTarget.value && !fundChoices.value.some(item => item.id === form.fundPositionId)) {
+      return false
+    }
   }
 
   return form.time !== '' && form.startDate !== ''
@@ -219,9 +251,31 @@ watch(
   (type) => {
     if (type === 'fundSip') {
       void loadPositions()
+    } else {
+      resetFundSearch()
     }
   }
 )
+
+watch(fundSearch, (value) => {
+  fundSearchError.value = ''
+
+  if (fundSearchTimer) {
+    clearTimeout(fundSearchTimer)
+    fundSearchTimer = null
+  }
+
+  const query = value.trim()
+
+  if (!query) {
+    fundSearchResults.value = []
+    return
+  }
+
+  fundSearchTimer = setTimeout(() => {
+    void runFundSearch(query)
+  }, 300)
+})
 
 onMounted(() => {
   if (route.query.new === 'providentDeposit' || route.query.new === 'salaryIncome') {
@@ -231,12 +285,20 @@ onMounted(() => {
   void loadCalendar()
 })
 
+onBeforeUnmount(() => {
+  if (fundSearchTimer) {
+    clearTimeout(fundSearchTimer)
+    fundSearchTimer = null
+  }
+})
+
 async function load(): Promise<void> {
   isLoading.value = true
   errorMessage.value = ''
 
   try {
     overview.value = await fetchPlanOverview()
+    await loadOccurrences()
   } catch (error) {
     overview.value = null
 
@@ -266,18 +328,72 @@ async function loadPositions(): Promise<void> {
   }
 }
 
+async function loadOccurrences(page = occurrencePage.value): Promise<void> {
+  const target = Math.max(1, page)
+  const sequence = ++occurrenceSequence
+  occurrenceLoading.value = true
+  occurrenceError.value = ''
+
+  try {
+    const result = await fetchPlanOccurrences(target, occurrencePageSize)
+
+    if (sequence !== occurrenceSequence) {
+      return
+    }
+
+    const totalPages = Math.max(1, Math.ceil(result.totalCount / occurrencePageSize))
+
+    if (target > totalPages) {
+      void loadOccurrences(totalPages)
+      return
+    }
+
+    occurrencePage.value = target
+    occurrenceItems.value = result.items
+    occurrenceTotal.value = result.totalCount
+  } catch (error) {
+    if (sequence !== occurrenceSequence) {
+      return
+    }
+
+    occurrenceItems.value = []
+    occurrenceTotal.value = 0
+    occurrenceError.value = getApiErrorMessage(error, '执行记录加载失败，请重试。')
+  } finally {
+    if (sequence === occurrenceSequence) {
+      occurrenceLoading.value = false
+    }
+  }
+}
+
+function goOccurrencePage(page: number): void {
+  if (occurrenceLoading.value) {
+    return
+  }
+
+  const target = Math.min(Math.max(1, page), occurrenceTotalPages.value)
+
+  if (target !== occurrencePage.value) {
+    void loadOccurrences(target).then(() => {
+      occurrenceSection.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    })
+  }
+}
+
 function openNew(type: PlanType = 'salaryIncome'): void {
   editingPlan.value = null
   formError.value = ''
   form.type = type
   form.name = ''
   form.amount = ''
+  form.fee = '0'
   form.cycle = 'monthly'
   form.dayOfMonth = '15'
   form.dayOfWeek = '1'
   form.time = '09:00'
   form.startDate = today
   form.fundPositionId = ''
+  resetFundSearch()
   sheetOpen.value = true
 
   if (type === 'fundSip') {
@@ -291,12 +407,14 @@ function openEdit(plan: AutoPlan): void {
   form.type = plan.type
   form.name = plan.name
   form.amount = String(plan.amount)
+  form.fee = String(plan.fee ?? 0)
   form.cycle = plan.cycle
   form.dayOfMonth = plan.dayOfMonth ? String(plan.dayOfMonth) : '15'
   form.dayOfWeek = plan.dayOfWeek ? String(plan.dayOfWeek) : '1'
   form.time = plan.time.slice(0, 5)
   form.startDate = plan.startDate
   form.fundPositionId = plan.fundPositionId ?? ''
+  resetFundSearch()
   sheetOpen.value = true
 
   if (plan.type === 'fundSip') {
@@ -318,26 +436,42 @@ async function submit(): Promise<void> {
     return
   }
 
-  const target = fundChoices.value.find(item => item.id === form.fundPositionId)
+  const selectedChoice = fundChoices.value.find(item => item.id === form.fundPositionId)
+  const target = selectedFundTarget.value
+  const isFundSip = form.type === 'fundSip'
+  const fee = isFundSip ? parseAmount(form.fee) ?? 0 : 0
 
-  if (form.type === 'fundSip' && !target) {
-    formError.value = positionsError.value || '请选择基金及份额类别。'
+  if (isFundSip && !target && !selectedChoice) {
+    formError.value = positionsError.value || '请选择基金及份额类别，或搜索基金直接建立定投。'
     return
   }
+
+  if (isFundSip && (fee < 0 || fee >= amount)) {
+    formError.value = '每期申购费不能为负，且必须小于每期金额。'
+    return
+  }
+
+  const fundTarget = isFundSip
+    ? target
+      ? { name: target.baseName, code: target.code, shareClass: target.shareClass }
+      : selectedChoice
+        ? { name: selectedChoice.name, code: selectedChoice.code, shareClass: selectedChoice.shareClass }
+        : null
+    : null
 
   const input: SavePlanInput = {
     id: editingPlan.value?.id ?? null,
     type: form.type,
     name: form.name.trim(),
     amount,
-    cycle: form.type === 'fundSip' ? form.cycle : 'monthly',
-    dayOfMonth: (form.type === 'fundSip' && form.cycle !== 'monthly') ? null : Number(form.dayOfMonth),
-    dayOfWeek: (form.type === 'fundSip' && form.cycle === 'weekly') ? Number(form.dayOfWeek) : null,
+    fee,
+    cycle: isFundSip ? form.cycle : 'monthly',
+    dayOfMonth: (isFundSip && form.cycle !== 'monthly') ? null : Number(form.dayOfMonth),
+    dayOfWeek: (isFundSip && form.cycle === 'weekly') ? Number(form.dayOfWeek) : null,
     time: form.time.length === 5 ? `${form.time}:00` : form.time,
     startDate: form.startDate,
     fundPositionId: null,
-    fundTarget: form.type === 'fundSip' && target
-      ? { name: target.name, code: target.code, shareClass: target.shareClass } : null,
+    fundTarget,
     requestId: createRequestId(),
     expectedVersion: editingPlan.value?.version ?? null
   }
@@ -346,6 +480,10 @@ async function submit(): Promise<void> {
   formError.value = ''
 
   try {
+    if (isFundSip && target) {
+      await ensurePositionForTarget(target)
+    }
+
     await savePlan(input)
     notice.value = editingPlan.value ? '计划已更新，后续期次按新配置生成。' : '计划已保存。'
     sheetOpen.value = false
@@ -355,6 +493,84 @@ async function submit(): Promise<void> {
   } finally {
     isSaving.value = false
   }
+}
+
+function resetFundSearch(): void {
+  if (fundSearchTimer) {
+    clearTimeout(fundSearchTimer)
+    fundSearchTimer = null
+  }
+
+  fundSearch.value = ''
+  fundSearchResults.value = []
+  fundSearchError.value = ''
+  fundSearching.value = false
+  selectedFundTarget.value = null
+}
+
+function chooseFundTarget(result: FundSearchResult): void {
+  selectedFundTarget.value = result
+  form.fundPositionId = ''
+  fundSearch.value = ''
+  fundSearchResults.value = []
+  fundSearchError.value = ''
+}
+
+function clearFundTarget(): void {
+  selectedFundTarget.value = null
+  fundSearch.value = ''
+  fundSearchResults.value = []
+  fundSearchError.value = ''
+}
+
+function normalizeIdentity(value: string | null | undefined): string {
+  return (value ?? '').normalize('NFKC').replace(/\s/g, '').toUpperCase()
+}
+
+async function runFundSearch(query: string): Promise<void> {
+  fundSearching.value = true
+
+  try {
+    const results = await searchFunds(query)
+
+    if (fundSearch.value.trim() === query) {
+      fundSearchResults.value = results
+      fundSearchError.value = results.length ? '' : '没有找到匹配的基金，请换一个名称或代码。'
+    }
+  } catch (error) {
+    if (fundSearch.value.trim() === query) {
+      fundSearchResults.value = []
+      fundSearchError.value = getApiErrorMessage(error, '基金搜索暂时不可用，请稍后重试。')
+    }
+  } finally {
+    fundSearching.value = false
+  }
+}
+
+async function ensurePositionForTarget(target: FundSearchResult): Promise<void> {
+  const code = normalizeIdentity(target.code)
+  const shareClass = normalizeIdentity(target.shareClass)
+  const existing = positions.value.find((position) =>
+    normalizeIdentity(position.code) === code && normalizeIdentity(position.shareClass) === shareClass)
+
+  if (existing) {
+    return
+  }
+
+  await createFundPosition({
+    name: target.baseName,
+    code: target.code,
+    shareClass: target.shareClass ?? '',
+    platform: '',
+    shares: 0,
+    cost: 0,
+    note: '定投计划自动建立',
+    requestId: createRequestId(),
+    holdingDate: today,
+    confirmationDelayDays: target.confirmationDelayDays
+  })
+
+  await loadPositions()
 }
 
 async function togglePlan(plan: AutoPlan): Promise<void> {
@@ -527,6 +743,25 @@ function fundDisplayName(plan: AutoPlan): string {
   return name.replace(/\s*[·•]\s*(交易日定投|定投)$/, '').trim()
 }
 
+function fundCode(plan: AutoPlan): string | null {
+  const code = plan.fundTarget?.code?.trim()
+  return code ? code : null
+}
+
+function fundMetaLine(plan: AutoPlan): string {
+  return [fundCode(plan), shareClassLabel(plan), scheduleText(plan)]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ')
+}
+
+function fundGroupMetaLine(group: FundPlanGroup): string {
+  return [
+    group.codes.join(' / '),
+    group.shareClasses.join(' / '),
+    `${group.plans.length} 个计划`
+  ].filter(Boolean).join(' · ')
+}
+
 function shareClassLabel(plan: AutoPlan): string {
   const shareClass = plan.fundTarget?.shareClass?.trim()
 
@@ -667,7 +902,7 @@ function goBack(): void {
                   <span class="fund-summary-copy">
                     <strong>{{ fund.name }}</strong>
                     <small>
-                      {{ fund.shareClasses.join(' / ') }} · {{ fund.plans.length }} 个计划
+                      {{ fundGroupMetaLine(fund) }}
                       <template v-if="fund.plans.length - fund.activeCount"> · {{ fund.plans.length - fund.activeCount }} 个暂停</template>
                     </small>
                   </span>
@@ -687,21 +922,26 @@ function goBack(): void {
                     :class="{ paused: !plan.isActive }"
                   >
                     <span class="share-badge">{{ shareClassLabel(plan) }}</span>
-                    <span class="fund-row-copy">
-                      <b>¥{{ formatMoney(plan.amount) }}</b>
-                      <small>{{ scheduleText(plan) }} · {{ nextDueText(plan) }}</small>
-                      <small v-if="plan.fundTarget?.code" class="fund-code">{{ plan.fundTarget.code }}</small>
-                    </span>
-                    <span v-if="!plan.isActive" class="paused-tag">已暂停</span>
-                    <span class="fund-row-actions">
-                      <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
-                      <button
-                        type="button"
-                        class="small-button"
-                        :disabled="busyAction === plan.id"
-                        @click="togglePlan(plan)"
-                      >{{ plan.isActive ? '暂停' : '恢复' }}</button>
-                    </span>
+                    <div class="fund-row-main">
+                      <div class="fund-row-head">
+                        <b>¥{{ formatMoney(plan.amount) }}</b>
+                        <span class="fund-row-actions">
+                          <button type="button" class="link-button" @click="openEdit(plan)">编辑</button>
+                          <span class="action-sep" aria-hidden="true" />
+                          <button
+                            type="button"
+                            class="link-button"
+                            :disabled="busyAction === plan.id"
+                            @click="togglePlan(plan)"
+                          >{{ plan.isActive ? '暂停' : '恢复' }}</button>
+                        </span>
+                      </div>
+                      <small>
+                        <template v-if="fundCode(plan)">{{ fundCode(plan) }} · </template>
+                        {{ scheduleText(plan) }} · {{ nextDueText(plan) }}
+                        <template v-if="(plan.fee ?? 0) > 0"> · 含申购费 ¥{{ formatMoney(plan.fee ?? 0) }}</template>
+                      </small>
+                    </div>
                   </div>
                 </div>
               </details>
@@ -710,22 +950,26 @@ function goBack(): void {
                 <header>
                   <div>
                     <strong>{{ fund.name }}</strong>
-                    <small>{{ shareClassLabel(fund.single) }} · {{ scheduleText(fund.single) }}</small>
+                    <small>{{ fundMetaLine(fund.single) }}</small>
                   </div>
                   <span class="plan-amount">¥{{ formatMoney(fund.single.amount) }}</span>
                 </header>
                 <p class="plan-meta">
-                  开始 {{ formatBusinessDate(fund.single.startDate) }} · {{ nextDueText(fund.single) }}
-                  <template v-if="fund.single.fundTarget?.code"> · {{ fund.single.fundTarget.code }}</template>
+                  开始 {{ formatBusinessDate(fund.single.startDate) }}
+                  <template v-if="(fund.single.fee ?? 0) > 0"> · 含申购费 ¥{{ formatMoney(fund.single.fee ?? 0) }}</template>
                 </p>
-                <footer>
-                  <button type="button" class="small-button" @click="openEdit(fund.single)">编辑</button>
-                  <button
-                    type="button"
-                    class="small-button"
-                    :disabled="busyAction === fund.single.id"
-                    @click="togglePlan(fund.single)"
-                  >{{ fund.single.isActive ? '暂停' : '恢复' }}</button>
+                <footer class="plan-card-foot">
+                  <span class="plan-foot-note">{{ nextDueText(fund.single) }}</span>
+                  <span class="plan-foot-actions">
+                    <button type="button" class="link-button" @click="openEdit(fund.single)">编辑</button>
+                    <span class="action-sep" aria-hidden="true" />
+                    <button
+                      type="button"
+                      class="link-button"
+                      :disabled="busyAction === fund.single.id"
+                      @click="togglePlan(fund.single)"
+                    >{{ fund.single.isActive ? '暂停' : '恢复' }}</button>
+                  </span>
                 </footer>
               </template>
             </article>
@@ -746,17 +990,21 @@ function goBack(): void {
               <span class="plan-amount">¥{{ formatMoney(plan.amount) }}</span>
             </header>
             <p class="plan-meta">
-              开始 {{ formatBusinessDate(plan.startDate) }} · {{ nextDueText(plan) }}
+              开始 {{ formatBusinessDate(plan.startDate) }}
             </p>
             <p v-if="plan.type === 'providentWithdrawal'" class="plan-meta">提取后等额转入现金，不计入生活收入。</p>
-            <footer>
-              <button type="button" class="small-button" @click="openEdit(plan)">编辑</button>
-              <button
-                type="button"
-                class="small-button"
-                :disabled="busyAction === plan.id"
-                @click="togglePlan(plan)"
-              >{{ plan.isActive ? '暂停' : '恢复' }}</button>
+            <footer class="plan-card-foot">
+              <span class="plan-foot-note">{{ nextDueText(plan) }}</span>
+              <span class="plan-foot-actions">
+                <button type="button" class="link-button" @click="openEdit(plan)">编辑</button>
+                <span class="action-sep" aria-hidden="true" />
+                <button
+                  type="button"
+                  class="link-button"
+                  :disabled="busyAction === plan.id"
+                  @click="togglePlan(plan)"
+                >{{ plan.isActive ? '暂停' : '恢复' }}</button>
+              </span>
             </footer>
           </article>
           <p v-if="!group.plans.length" class="group-empty">
@@ -822,23 +1070,49 @@ function goBack(): void {
         @retry="loadCalendar()"
       />
 
-      <div class="section-head">
+      <div ref="occurrenceSection" class="section-head occurrence-head">
         <h2>执行记录</h2>
-        <span class="meta">最近 100 条</span>
+        <span class="meta">共 {{ occurrenceTotal }} 条</span>
       </div>
-      <section v-if="overview.recentOccurrences.length" class="occurrence-list">
-        <article v-for="occurrence in overview.recentOccurrences" :key="occurrence.id" class="occurrence-card">
-          <div>
-            <strong>{{ occurrence.planName }}</strong>
-            <small>
-              {{ occurrence.dueDate }} {{ occurrence.dueTime.slice(0, 5) }} · ¥{{ formatMoney(occurrence.amount) }} ·
-              <span :class="statusClass(occurrence.status)">{{ statusLabel(occurrence.status) }}</span>
-            </small>
-            <small v-if="occurrence.errorMessage" class="occurrence-error">{{ occurrence.errorMessage }}</small>
-          </div>
-        </article>
-      </section>
-      <p v-else class="summary-note">还没有执行记录。</p>
+      <div v-if="occurrenceError" class="occurrence-state">
+        <span>{{ occurrenceError }}</span>
+        <button type="button" class="text-button" @click="loadOccurrences()">重试</button>
+      </div>
+      <template v-else>
+        <section
+          v-if="occurrenceItems.length"
+          class="occurrence-list"
+          :class="{ 'is-loading': occurrenceLoading }"
+        >
+          <article v-for="occurrence in occurrenceItems" :key="occurrence.id" class="occurrence-card">
+            <div>
+              <strong>{{ occurrence.planName }}</strong>
+              <small>
+                {{ occurrence.dueDate }} {{ occurrence.dueTime.slice(0, 5) }} · ¥{{ formatMoney(occurrence.amount) }} ·
+                <span :class="statusClass(occurrence.status)">{{ statusLabel(occurrence.status) }}</span>
+              </small>
+              <small v-if="occurrence.errorMessage" class="occurrence-error">{{ occurrence.errorMessage }}</small>
+            </div>
+          </article>
+        </section>
+        <p v-else-if="occurrenceLoading" class="occurrence-state">正在读取执行记录…</p>
+        <p v-else class="summary-note">还没有执行记录。</p>
+        <nav v-if="occurrenceTotal > occurrencePageSize" class="occurrence-pagination" aria-label="执行记录分页">
+          <button
+            type="button"
+            class="pagination-button"
+            :disabled="occurrencePage <= 1 || occurrenceLoading"
+            @click="goOccurrencePage(occurrencePage - 1)"
+          >上一页</button>
+          <span class="pagination-status">第 {{ occurrencePage }} / {{ occurrenceTotalPages }} 页</span>
+          <button
+            type="button"
+            class="pagination-button"
+            :disabled="occurrencePage >= occurrenceTotalPages || occurrenceLoading"
+            @click="goOccurrencePage(occurrencePage + 1)"
+          >下一页</button>
+        </nav>
+      </template>
 
       <p class="summary-note">
         计划只生成账本记录，不验证银行或平台的实际资金操作；余额不足时整笔待处理，不部分扣款。
@@ -870,12 +1144,65 @@ function goBack(): void {
 
         <label v-if="form.type === 'fundSip'" class="form-field">
           <span>基金及份额类别</span>
-          <select v-model="form.fundPositionId" :disabled="positionsLoading">
-            <option value="">请选择</option>
+          <select
+            v-model="form.fundPositionId"
+            :disabled="positionsLoading || selectedFundTarget !== null"
+            @change="selectedFundTarget = null"
+          >
+            <option value="">请选择已持有的基金</option>
             <option v-for="position in fundChoices" :key="position.id" :value="position.id">
               {{ position.name }} · {{ position.shareClass || '未标类别' }} · {{ position.code || '按名称匹配' }}
             </option>
           </select>
+          <small v-if="!fundChoices.length">还没有基金持仓，可在下面搜索基金直接建立定投。</small>
+        </label>
+
+        <label v-if="form.type === 'fundSip'" class="form-field">
+          <span>搜索基金（未持有也可直接定投）</span>
+          <div v-if="selectedFundTarget" class="fund-selected">
+            <div>
+              <strong>{{ selectedFundTarget.name }}</strong>
+              <small>
+                {{ selectedFundTarget.code }} · {{ selectedFundTarget.shareClass ? `${selectedFundTarget.shareClass} 类` : '未区分类别' }}
+                · {{ selectedFundTarget.isQdii ? 'QDII T+2' : '境内 T+1' }}
+              </small>
+            </div>
+            <button type="button" class="text-button" @click="clearFundTarget">更换</button>
+          </div>
+          <template v-else>
+            <input
+              v-model="fundSearch"
+              type="search"
+              autocomplete="off"
+              placeholder="输入名称或代码，如 000834、纳斯达克"
+              aria-label="搜索基金名称或代码"
+            />
+            <p v-if="fundSearching" class="form-note">正在搜索基金…</p>
+            <p v-else-if="fundSearchError" class="form-note" role="status">{{ fundSearchError }}</p>
+            <div v-if="fundSearchResults.length" class="fund-search-results" role="listbox" aria-label="基金搜索结果">
+              <button
+                v-for="result in fundSearchResults"
+                :key="result.code"
+                type="button"
+                role="option"
+                class="fund-search-result"
+                @click="chooseFundTarget(result)"
+              >
+                <span>
+                  <strong>{{ result.name }}</strong>
+                  <small>{{ result.code }} · {{ result.fundType || '基金' }}</small>
+                </span>
+                <em v-if="result.isQdii">QDII</em>
+              </button>
+            </div>
+            <small>选中后会在保存计划时自动建立 0 份额持仓，首期扣款后按确认份额入账。</small>
+          </template>
+        </label>
+
+        <label v-if="form.type === 'fundSip'" class="form-field">
+          <span>每期申购费（元）</span>
+          <input v-model="form.fee" type="text" inputmode="decimal" placeholder="0.00" />
+          <small>按平台实际扣费填写，份额按（扣款金额 − 申购费）÷ 确认净值折算；不确定可先留 0，之后在交易页登记确认份额时补录。</small>
         </label>
 
         <p v-if="form.type === 'fundSip' && positionsError" class="form-error" role="alert">
@@ -1032,6 +1359,10 @@ function goBack(): void {
   font-weight: 600;
 }
 
+.occurrence-head {
+  scroll-margin-top: 12px;
+}
+
 .meta {
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
@@ -1160,6 +1491,10 @@ function goBack(): void {
   gap: 12px;
 }
 
+.plan-card header > div {
+  min-width: 0;
+}
+
 .plan-card header strong {
   display: block;
   font-size: 0.8125rem;
@@ -1188,8 +1523,50 @@ function goBack(): void {
 
 .plan-card footer {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: 11px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.plan-foot-note {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-foot-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.action-sep {
+  width: 1px;
+  height: 11px;
+  background: var(--color-border-subtle);
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.link-button:disabled {
+  color: var(--color-text-disabled);
 }
 
 .small-button {
@@ -1200,6 +1577,7 @@ function goBack(): void {
   background: var(--color-bg-surface);
   color: var(--color-brand);
   font-size: var(--text-caption);
+  white-space: nowrap;
 }
 
 .fund-details > summary {
@@ -1278,7 +1656,7 @@ function goBack(): void {
 
 .fund-plan-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   padding: 10px 0;
@@ -1315,45 +1693,89 @@ function goBack(): void {
   color: var(--color-chart-investment);
 }
 
-.fund-row-copy {
+.fund-row-main {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
 
-.fund-row-copy b {
+.fund-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fund-row-head b {
   font-size: 0.75rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.fund-row-copy small {
+.fund-row-main small {
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
   line-height: 1.5;
 }
 
-.fund-row-copy .fund-code {
-  color: var(--color-text-disabled);
-}
-
 .fund-row-actions {
   display: flex;
   flex: 0 0 auto;
-  gap: 5px;
-}
-
-.fund-row-actions .small-button {
-  min-height: var(--touch-target);
-  padding: 0 8px;
-  font-size: var(--text-caption);
+  align-items: center;
+  gap: 9px;
 }
 
 .occurrence-list {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  transition: opacity .15s ease;
+}
+
+.occurrence-list.is-loading {
+  opacity: .55;
+}
+
+.occurrence-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 0 18px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+}
+
+.occurrence-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.pagination-button {
+  min-width: 76px;
+  min-height: var(--touch-target);
+  padding: 0 14px;
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-brand);
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+
+.pagination-button:disabled {
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-disabled);
+}
+
+.pagination-status {
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 .occurrence-card {
@@ -1406,5 +1828,94 @@ function goBack(): void {
   font-size: var(--text-caption);
   line-height: 1.7;
   text-align: center;
+}
+
+.fund-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: var(--touch-target);
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+}
+
+.fund-selected strong {
+  display: block;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.fund-selected small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.fund-search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  margin-top: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+}
+
+.fund-search-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--touch-target);
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.fund-search-result:last-child {
+  border-bottom: 0;
+}
+
+.fund-search-result:active {
+  background: var(--color-brand-soft);
+}
+
+.fund-search-result span {
+  min-width: 0;
+}
+
+.fund-search-result strong {
+  display: block;
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.fund-search-result small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.fund-search-result em {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border-radius: var(--radius-tag);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-size: var(--text-caption);
+  font-style: normal;
 }
 </style>

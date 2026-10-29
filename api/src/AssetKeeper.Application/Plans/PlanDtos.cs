@@ -19,7 +19,8 @@ public sealed record PlanDto(
     DateOnly? NextDueDate,
     int Version,
     FundPlanTarget? FundTarget = null,
-    IReadOnlyList<DateOnly>? UpcomingDates = null);
+    IReadOnlyList<DateOnly>? UpcomingDates = null,
+    decimal Fee = 0m);
 
 public sealed record PlanOccurrenceDto(
     Guid Id,
@@ -34,16 +35,22 @@ public sealed record PlanOccurrenceDto(
     string? ErrorMessage,
     DateTimeOffset? ExecutedAt,
     string PeriodKey,
-    int PlanVersion);
+    int PlanVersion,
+    decimal Fee = 0m);
 
 public sealed record PlanOverviewDto(
     IReadOnlyList<PlanDto> Plans,
     IReadOnlyList<PlanOccurrenceDto> PendingOccurrences,
-    IReadOnlyList<PlanOccurrenceDto> RecentOccurrences,
     int ActiveCount,
     DateOnly? NextDueDate,
     decimal CashBalance,
     decimal ProvidentBalance);
+
+public sealed record PlanOccurrencePageDto(
+    IReadOnlyList<PlanOccurrenceDto> Items,
+    int Page,
+    int PageSize,
+    int TotalCount);
 
 public sealed record PlanCalendarDto(
     int Year,
@@ -63,7 +70,8 @@ public sealed record SavePlanRequest(
     Guid? FundPositionId,
     Guid RequestId,
     int? ExpectedVersion,
-    FundPlanTarget? FundTarget = null);
+    FundPlanTarget? FundTarget = null,
+    decimal Fee = 0m);
 
 public sealed record PlanActionRequest(Guid RequestId);
 

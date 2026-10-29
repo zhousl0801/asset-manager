@@ -76,6 +76,8 @@ public interface ILedgerRepository
 
     Task AddCategoriesAsync(IReadOnlyList<EntryCategory> categories, CancellationToken cancellationToken);
 
+    void RemoveCategory(EntryCategory category);
+
     Task RenameEntryCategoryAsync(
         Guid ledgerId,
         LedgerEntryKind kind,

@@ -878,6 +878,13 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("day_of_week");
 
+                    b.Property<decimal>("Fee")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("fee");
+
                     b.Property<Guid?>("FundPositionId")
                         .HasColumnType("uuid")
                         .HasColumnName("fund_position_id");
@@ -965,6 +972,13 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ExecutedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("executed_at");
+
+                    b.Property<decimal>("Fee")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("fee");
 
                     b.Property<Guid?>("FundPositionId")
                         .HasColumnType("uuid")

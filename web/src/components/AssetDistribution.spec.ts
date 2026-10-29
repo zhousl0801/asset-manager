@@ -66,3 +66,31 @@ test('editable mode offers add and not-held actions for missing assets', async (
   expect(view.emitted('toggleNotHeld')?.[0]).toEqual(['fund', true])
   view.unmount()
 })
+
+test('hideFundCount removes the fund count but keeps pending amounts', () => {
+  const fundOverview: LedgerOverview = {
+    ...overview,
+    fund: {
+      isConfigured: true,
+      amount: 283154.45,
+      note: '持有 24 只基金 · 待确认 1,800.00',
+      notHeld: false
+    }
+  }
+
+  const withCount = mount(AssetDistribution, {
+    props: { overview: fundOverview, comparable: false },
+    global: { stubs }
+  })
+  expect(withCount.text()).toContain('持有 24 只基金 · 待确认 1,800.00')
+  withCount.unmount()
+
+  const withoutCount = mount(AssetDistribution, {
+    props: { overview: fundOverview, comparable: false, hideFundCount: true },
+    global: { stubs }
+  })
+  const fundRow = withoutCount.findAll('.asset-row')[2]!
+  expect(fundRow.text()).toContain('待确认 1,800.00')
+  expect(fundRow.text()).not.toContain('持有 24 只基金')
+  withoutCount.unmount()
+})
