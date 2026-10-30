@@ -148,11 +148,10 @@ test('buying an existing position sends market code and computed amount fields',
   inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
   inputs[1]!.value = '10'
   inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
-  inputs[2]!.value = '1'
-  inputs[2]!.dispatchEvent(new Event('input', { bubbles: true }))
   await flushPromises()
 
-  expect(document.querySelector('.sheet')!.textContent).toContain('实际扣款 ¥101.00')
+  expect(document.querySelector('.sheet')!.textContent).toContain('成交金额 ¥100.00')
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('费用')
   document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   await flushPromises()
 
@@ -161,9 +160,9 @@ test('buying an existing position sends market code and computed amount fields',
     market: 'shanghai',
     code: '600519',
     shares: 10,
-    price: 10,
-    fee: 1
+    price: 10
   })
+  expect(mocks.buy.mock.calls[0]![0]).not.toHaveProperty('fee')
   expect(view.find('.notice').text()).toContain('当前现金 ¥7,999.00')
   view.unmount()
 })

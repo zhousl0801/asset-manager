@@ -107,7 +107,6 @@ export interface BuyStockInput {
   name: string
   shares: number
   price: number
-  fee: number
   businessDate: string
   note: string
   requestId: string
@@ -117,7 +116,6 @@ export interface SellStockInput {
   positionId: string
   shares: number
   price: number
-  fee: number
   businessDate: string
   note: string
   requestId: string

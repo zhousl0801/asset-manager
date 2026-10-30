@@ -52,7 +52,6 @@ const expectedVersion = ref(0)
 const form = reactive({
   shares: '',
   price: '',
-  fee: '',
   cost: '',
   businessDate: today,
   priceDate: today,
@@ -149,36 +148,19 @@ const totalTodayPercent = computed(() => {
 
 const shareMax = computed(() => selectedPosition.value?.shares ?? 0)
 
-const buyPreview = computed(() => {
+// 买卖共用：成交金额即现金变动金额，不再单独录入费用。
+const tradeGross = computed(() => {
   const shares = parseQuantity(form.shares)
   const price = parsePrice(form.price)
-  const fee = parseAmount(form.fee) ?? 0
 
-  if (shares === null || price === null || fee < 0) {
+  if (shares === null || price === null) {
     return null
   }
 
-  const gross = new Decimal(shares).times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-
-  return { gross, cash: gross.plus(fee) }
+  return new Decimal(shares).times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
 })
 
-const sellPreview = computed(() => {
-  const shares = parseQuantity(form.shares)
-  const price = parsePrice(form.price)
-  const fee = parseAmount(form.fee) ?? 0
-
-  if (shares === null || price === null || fee < 0) {
-    return null
-  }
-
-  const gross = new Decimal(shares).times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-  const cash = gross.minus(fee)
-
-  return cash.isPositive() ? { gross, cash } : null
-})
-
-// 券商习惯：买入前先看还能买多少，按输入价粗略估算（未含佣金）。
+// 券商习惯：买入前先看还能买多少，按输入价粗略估算。
 const buyMaxShares = computed(() => {
   const data = overview.value
   const price = parsePrice(form.price)
@@ -192,12 +174,16 @@ const buyMaxShares = computed(() => {
   return shares.isNegative() ? 0 : shares.toNumber()
 })
 
+// 不足一手时不显示满手数，避免「满手约 0 手」这类无用提示。
+const buyMaxLots = computed(() =>
+  buyMaxShares.value === null ? 0 : Math.floor(buyMaxShares.value / 100))
+
 const sellEstimatedProfit = computed(() => {
   const position = selectedPosition.value
-  const preview = sellPreview.value
+  const gross = tradeGross.value
   const shares = parseQuantity(form.shares)
 
-  if (!position || !preview || shares === null || position.shares <= 0 || shares > position.shares) {
+  if (!position || !gross || shares === null || position.shares <= 0 || shares > position.shares) {
     return null
   }
 
@@ -206,7 +192,7 @@ const sellEstimatedProfit = computed(() => {
     .div(position.shares)
     .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
 
-  return preview.cash.minus(reducedCost).toNumber()
+  return gross.minus(reducedCost).toNumber()
 })
 
 const sheetTitle = computed(() => {
@@ -229,7 +215,7 @@ const sheetSubtitle = computed(() => {
     case 'buy':
       return '从统一现金扣款，成交后增加持股与成本'
     case 'sell':
-      return '减少持股，净到账转入统一现金'
+      return '减少持股，成交金额转入统一现金'
     case 'holding':
       return '用于录入已有持仓或修正数量与成本，不改变现金'
     case 'detail':
@@ -245,23 +231,16 @@ const canSubmit = computed(() => {
   }
 
   switch (sheet.value) {
-    case 'buy': {
-      const fee = parseAmount(form.fee)
+    case 'buy':
       return selectedStock.value !== null
         && parseQuantity(form.shares) !== null
         && parsePrice(form.price) !== null
-        && fee !== null
-        && fee >= 0
-    }
     case 'sell': {
       const shares = parseQuantity(form.shares)
-      const fee = parseAmount(form.fee)
       return selectedPosition.value !== null
         && shares !== null
         && shares <= shareMax.value
         && parsePrice(form.price) !== null
-        && fee !== null
-        && fee >= 0
     }
     case 'holding':
       return selectedStock.value !== null
@@ -357,7 +336,6 @@ function openSheet(kind: SheetKind, position: StockPosition | null = null): void
   searched.value = false
   form.shares = ''
   form.price = position ? String(position.price) : ''
-  form.fee = ''
   form.cost = position ? String(position.cost) : ''
   form.businessDate = today
   form.priceDate = position?.priceDate ?? today
@@ -455,17 +433,9 @@ async function submitBuy(): Promise<void> {
   const stock = selectedStock.value
   const shares = parseQuantity(form.shares)
   const price = parsePrice(form.price)
-  const fee = parseAmount(form.fee) ?? 0
 
-  if (!stock || shares === null || price === null || fee < 0) {
+  if (!stock || shares === null || price === null) {
     formError.value = '请填写有效的股票、数量和成交价。'
-    return
-  }
-
-  const gross = new Decimal(shares).times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-
-  if (fee >= gross.toNumber()) {
-    formError.value = '费用必须小于成交金额。'
     return
   }
 
@@ -476,7 +446,6 @@ async function submitBuy(): Promise<void> {
     name: stock.name,
     shares,
     price,
-    fee,
     businessDate: form.businessDate,
     note: form.note.trim(),
     requestId: requestId.value
@@ -498,9 +467,8 @@ async function submitSell(): Promise<void> {
   const position = selectedPosition.value
   const shares = parseQuantity(form.shares)
   const price = parsePrice(form.price)
-  const fee = parseAmount(form.fee) ?? 0
 
-  if (!position || shares === null || price === null || fee < 0) {
+  if (!position || shares === null || price === null) {
     formError.value = '请填写有效的卖出数量和成交价。'
     return
   }
@@ -510,19 +478,11 @@ async function submitSell(): Promise<void> {
     return
   }
 
-  const gross = new Decimal(shares).times(price).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-
-  if (fee >= gross.toNumber()) {
-    formError.value = '费用必须小于成交金额。'
-    return
-  }
-
   isSaving.value = true
   const result = await sellStock({
     positionId: position.id,
     shares,
     price,
-    fee,
     businessDate: form.businessDate,
     note: form.note.trim(),
     requestId: requestId.value
@@ -988,19 +948,14 @@ function goBack(): void {
             <input v-model="form.price" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
           </label>
           <label class="form-field">
-            <span>费用（元）</span>
-            <input v-model="form.fee" type="text" inputmode="decimal" autocomplete="off" placeholder="佣金、过户费等" @input="formError = ''" />
-          </label>
-          <label class="form-field">
             <span>业务日期</span>
             <input v-model="form.businessDate" type="date" @input="formError = ''" />
           </label>
           <p v-if="buyMaxShares !== null" class="form-note">
-            按当前成交价，可用现金最多可买 <b>{{ formatShares(buyMaxShares) }}</b> 股（未计入费用），满手约 {{ Math.floor(buyMaxShares / 100) }} 手。
+            按当前成交价，可用现金最多可买 <b>{{ formatShares(buyMaxShares) }}</b> 股<template v-if="buyMaxLots > 0">，约 {{ buyMaxLots }} 手</template>。
           </p>
-          <p v-if="buyPreview" class="form-note preview-line">
-            成交金额 <b>¥{{ formatMoney(buyPreview.gross) }}</b>
-            <span>实际扣款 ¥{{ formatMoney(buyPreview.cash) }}</span>
+          <p v-if="tradeGross" class="form-note preview-line">
+            成交金额 <b>¥{{ formatMoney(tradeGross) }}</b>
           </p>
         </template>
 
@@ -1014,19 +969,14 @@ function goBack(): void {
             <input v-model="form.price" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
           </label>
           <label class="form-field">
-            <span>费用（元）</span>
-            <input v-model="form.fee" type="text" inputmode="decimal" autocomplete="off" placeholder="佣金、印花税等" @input="formError = ''" />
-          </label>
-          <label class="form-field">
             <span>业务日期</span>
             <input v-model="form.businessDate" type="date" @input="formError = ''" />
           </label>
-          <p v-if="sellPreview" class="form-note preview-line">
-            成交金额 <b>¥{{ formatMoney(sellPreview.gross) }}</b>
-            <span>净到账 ¥{{ formatMoney(sellPreview.cash) }}</span>
+          <p v-if="tradeGross" class="form-note preview-line">
+            成交金额 <b>¥{{ formatMoney(tradeGross) }}</b>
           </p>
           <p v-if="sellEstimatedProfit !== null" class="form-note">
-            预计收益 <b :class="amountTone(sellEstimatedProfit)">{{ formatSignedMoney(sellEstimatedProfit) }}</b>（净到账 − 按比例结转成本）
+            预计收益 <b :class="amountTone(sellEstimatedProfit)">{{ formatSignedMoney(sellEstimatedProfit) }}</b>（成交金额 − 按比例结转成本）
           </p>
         </template>
 
@@ -1059,7 +1009,7 @@ function goBack(): void {
         </label>
 
         <p class="form-note">
-          {{ sheet === 'buy' ? '按成交金额加费用扣减现金，买入费用计入持仓成本。' : sheet === 'sell' ? '按成交金额减费用增加现金，卖出费用冲减净到账。' : '录入或核对持仓不改变现金；数量为 0 时成本也应为 0。' }}
+          {{ sheet === 'buy' ? '按成交金额扣除现金，并计入持仓成本。' : sheet === 'sell' ? '按成交金额增加现金，并按比例结转成本。' : '录入或核对持仓不改变现金；数量为 0 时成本也应为 0。' }}
         </p>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
