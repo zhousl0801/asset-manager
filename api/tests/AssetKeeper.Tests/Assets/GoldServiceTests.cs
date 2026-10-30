@@ -316,6 +316,41 @@ public sealed class GoldServiceTests
     }
 
     [Fact]
+    public async Task GetOverviewAsync_WithQuoteButNoHoldingFacts_UsesQuoteForValuation()
+    {
+        var context = await CreateContextAsync();
+        var ledgerId = context.Repository.Ledger!.Id;
+
+        await context.Repository.AddGoldHoldingAsync(
+            GoldHolding.Create(ledgerId, 0m, 0m, 854.65m, BusinessToday, Now), CancellationToken.None);
+        await context.Repository.AddPriceObservationAsync(
+            PriceObservation.Create(ledgerId, AssetType.Gold, null, null, 854.65m, BusinessToday, Now, 1, "icbc"),
+            CancellationToken.None);
+
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+
+        Assert.NotNull(overview);
+        Assert.True(overview.HasEffectiveQuote);
+        Assert.Equal(854.65m, overview.Quote);
+        Assert.Equal(BusinessToday, overview.QuoteDate);
+        Assert.Equal(0m, overview.Value);
+    }
+
+    [Fact]
+    public async Task GetOverviewAsync_WithoutAnyQuote_ReportsMissingQuote()
+    {
+        var context = await CreateContextAsync();
+
+        await context.Repository.AddGoldHoldingAsync(
+            GoldHolding.Create(context.Repository.Ledger!.Id, 0m, 0m, 854.65m, BusinessToday, Now), CancellationToken.None);
+
+        var overview = await context.Gold.GetOverviewAsync(CancellationToken.None);
+
+        Assert.NotNull(overview);
+        Assert.False(overview.HasEffectiveQuote);
+    }
+
+    [Fact]
     public async Task GetOverviewAsync_WithoutLedger_ReturnsNull()
     {
         var repository = new FakeLedgerRepository();

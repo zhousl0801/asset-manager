@@ -130,7 +130,8 @@ public sealed class LedgerReplayCalculator
             var quote = Latest(observations, AssetType.Gold, null);
             gold = new HoldingReplay(null, unknownGold ? data.Gold.Grams : goldState.Quantity, unknownGold ? data.Gold.Cost : goldState.Cost,
                 unknownGold ? data.Gold.RealizedProfit : goldState.Realized, unknownGold ? null : goldState.CoverageFrom, !unknownGold,
-                (unknownGold ? asOfDate != currentDate : goldState.CoverageFrom is null) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
+                // 还没有任何积存金持仓记录时，快照克数（通常为 0）即为准绳，报价仍可用于估值和录入首笔持仓。
+                (unknownGold && asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
                 PendingArrivalAmount: unknownGold ? 0m : goldState.PendingArrivalAmount);
         }
 
