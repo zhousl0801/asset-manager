@@ -141,7 +141,7 @@ public sealed class G0PostgresTests
         Assert.Equal(1234.56m, (await context.CashAccounts.SingleAsync()).Balance);
         Assert.Equal(1, (await context.Ledgers.SingleAsync()).SingletonSlot);
         Assert.Empty(await context.MutationReceipts.ToListAsync());
-        Assert.Equal(14, (await context.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         Assert.Equal(18, await context.EntryCategories.CountAsync());
     }
 
