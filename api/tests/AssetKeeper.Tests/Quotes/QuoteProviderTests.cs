@@ -3,6 +3,7 @@ using System.Text;
 using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
 using AssetKeeper.Infrastructure.Quotes;
+using Microsoft.Extensions.Options;
 
 namespace AssetKeeper.Tests.Quotes;
 
@@ -83,7 +84,9 @@ public sealed class QuoteProviderTests
               {"Code":"900901","Name":"云赛B股","Classify":"BStock","SecurityTypeName":"沪B","QuoteID":"1.900901"}
             ],"Status":0,"Message":"成功"}}
             """;
-        var provider = new EastmoneyStockQuoteProvider(CreateClient(_ => JsonResponse(payload)));
+        var provider = new EastmoneyStockQuoteProvider(
+            CreateClient(_ => JsonResponse(payload)),
+            Options.Create(new QuoteProviderOptions()));
 
         var results = await provider.SearchAsync("创业板", CancellationToken.None);
 
@@ -102,7 +105,9 @@ public sealed class QuoteProviderTests
         const string payload = """
             {"rc":0,"data":{"f43":2447,"f57":"159915","f58":"创业板ETF易方达","f59":3,"f60":2535,"f86":1793342907}}
             """;
-        var provider = new EastmoneyStockQuoteProvider(CreateClient(_ => JsonResponse(payload)));
+        var provider = new EastmoneyStockQuoteProvider(
+            CreateClient(_ => JsonResponse(payload)),
+            Options.Create(new QuoteProviderOptions()));
 
         var quote = await provider.GetLatestAsync(StockMarket.Shenzhen, "159915", CancellationToken.None);
 
@@ -111,6 +116,55 @@ public sealed class QuoteProviderTests
         Assert.Equal("创业板ETF易方达", quote.Name);
         Assert.Equal(new DateOnly(2026, 10, 30), quote.PriceDate);
         Assert.Equal("eastmoney", quote.Source);
+    }
+
+    [Fact]
+    public async Task EastmoneyStockQuote_FallsBackToSecondaryHostWhenPrimaryFails()
+    {
+        const string payload = """
+            {"rc":0,"data":{"f43":2447,"f57":"159915","f58":"创业板ETF易方达","f59":3,"f60":2535,"f86":1793342907}}
+            """;
+        var hosts = new List<string>();
+        var client = new HttpClient(new StubHandler(request =>
+        {
+            hosts.Add(request.RequestUri!.Host);
+
+            if (request.RequestUri.Host == "primary.test")
+            {
+                throw new HttpRequestException("An error occurred while sending the request.");
+            }
+
+            return JsonResponse(payload);
+        }))
+        {
+            BaseAddress = new Uri("https://primary.test/")
+        };
+        var provider = new EastmoneyStockQuoteProvider(
+            client,
+            Options.Create(new QuoteProviderOptions { StockFallbackBaseUrl = "https://fallback.test/" }));
+
+        var quote = await provider.GetLatestAsync(StockMarket.Shenzhen, "159915", CancellationToken.None);
+
+        Assert.Equal(2.447m, quote.Price);
+        Assert.Equal(["primary.test", "fallback.test"], hosts);
+    }
+
+    [Fact]
+    public async Task EastmoneyStockQuote_WhenAllHostsFail_ThrowsFriendlyUnavailable()
+    {
+        var client = new HttpClient(new StubHandler(_ =>
+            throw new HttpRequestException("An error occurred while sending the request.")))
+        {
+            BaseAddress = new Uri("https://primary.test/")
+        };
+        var provider = new EastmoneyStockQuoteProvider(
+            client,
+            Options.Create(new QuoteProviderOptions { StockFallbackBaseUrl = "https://fallback.test/" }));
+
+        var exception = await Assert.ThrowsAsync<QuoteUnavailableException>(
+            () => provider.GetLatestAsync(StockMarket.Shenzhen, "159915", CancellationToken.None));
+
+        Assert.Equal("股票行情服务暂时无法连接，请稍后重试。", exception.Message);
     }
 
     private static HttpClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)

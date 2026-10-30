@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
+using Microsoft.Extensions.Options;
 
 namespace AssetKeeper.Infrastructure.Quotes;
 
@@ -12,10 +13,12 @@ public sealed class EastmoneyStockQuoteProvider : IStockQuoteProvider
     public const string SourceName = "eastmoney";
 
     private readonly HttpClient _httpClient;
+    private readonly QuoteProviderOptions _options;
 
-    public EastmoneyStockQuoteProvider(HttpClient httpClient)
+    public EastmoneyStockQuoteProvider(HttpClient httpClient, IOptions<QuoteProviderOptions> options)
     {
         _httpClient = httpClient;
+        _options = options.Value;
     }
 
     public async Task<ExternalStockQuote> GetLatestAsync(
@@ -29,17 +32,9 @@ public sealed class EastmoneyStockQuoteProvider : IStockQuoteProvider
         }
 
         var normalizedCode = code.Trim().ToUpperInvariant();
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"api/qt/stock/get?secid={SecId(market, normalizedCode)}&fields=f43,f57,f58,f59,f60,f86");
-        request.Headers.Referrer = new Uri("https://quote.eastmoney.com/");
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new QuoteUnavailableException($"股票行情服务返回 {(int)response.StatusCode}。");
-        }
+        using var response = await SendQuoteRequestAsync(
+            $"api/qt/stock/get?secid={SecId(market, normalizedCode)}&fields=f43,f57,f58,f59,f60,f86",
+            cancellationToken);
 
         try
         {
@@ -173,6 +168,54 @@ public sealed class EastmoneyStockQuoteProvider : IStockQuoteProvider
     private static string SecId(StockMarket market, string code)
     {
         return market == StockMarket.Shanghai ? $"1.{code}" : $"0.{code}";
+    }
+
+    // 主站不通时依次降级到备用站点：连接失败、超时和非 2xx 都换下一个站点重试。
+    private async Task<HttpResponseMessage> SendQuoteRequestAsync(
+        string relativeUrl,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+
+        foreach (var baseUrl in QuoteBaseUrls())
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{relativeUrl}");
+            request.Headers.Referrer = new Uri("https://quote.eastmoney.com/");
+
+            try
+            {
+                var response = await _httpClient.SendAsync(request, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return response;
+                }
+
+                lastError = new QuoteUnavailableException($"股票行情服务返回 {(int)response.StatusCode}。");
+                response.Dispose();
+            }
+            catch (HttpRequestException exception)
+            {
+                lastError = exception;
+            }
+            catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                lastError = exception;
+            }
+        }
+
+        throw new QuoteUnavailableException("股票行情服务暂时无法连接，请稍后重试。", lastError);
+    }
+
+    private IEnumerable<string> QuoteBaseUrls()
+    {
+        var primary = _httpClient.BaseAddress?.ToString() ?? _options.StockBaseUrl;
+        var candidates = new[] { primary, _options.StockFallbackBaseUrl };
+
+        return candidates
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.EndsWith('/') ? url : $"{url}/")
+            .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     // 支持范围：沪深北 A 股，以及在沪深两市上市、按股票方式交易的场内基金（ETF、LOF、封闭式基金）。

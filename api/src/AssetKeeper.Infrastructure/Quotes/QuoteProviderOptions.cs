@@ -8,5 +8,8 @@ public sealed class QuoteProviderOptions
 
     public string StockBaseUrl { get; set; } = "https://push2.eastmoney.com/";
 
+    // 主站偶发整机空响应（连上后不回包），备用站点字段完全一致，价格可能略有延迟。
+    public string StockFallbackBaseUrl { get; set; } = "https://push2delay.eastmoney.com/";
+
     public int TimeoutSeconds { get; set; } = 8;
 }
