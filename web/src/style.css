@@ -1,6 +1,6 @@
 html {
   background: var(--color-bg-page);
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
@@ -96,6 +96,16 @@ summary:focus-visible {
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
+}
+
+/* 金额方向：红增绿减，只用于带正负方向的收益、收益率、余额变化与结余。
+ * 组件内会给金额元素设置默认文字色，工具类需覆盖它，因此使用 !important。 */
+.amount-gain {
+  color: var(--color-finance-gain) !important;
+}
+
+.amount-loss {
+  color: var(--color-finance-loss) !important;
 }
 
 .state {

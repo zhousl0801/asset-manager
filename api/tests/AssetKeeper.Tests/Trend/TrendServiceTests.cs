@@ -4,6 +4,8 @@ using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Provident;
+using AssetKeeper.Application.Stocks;
+using AssetKeeper.Domain.Assets;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Tests.Ledgers;
 using Microsoft.EntityFrameworkCore;
@@ -36,7 +38,7 @@ public sealed class TrendServiceTests
 
         var latest = trend.Points.Single(point => point.Date == Today);
         Assert.True(latest.IsComplete);
-        Assert.Equal(13000m, latest.TotalAssets);
+        Assert.Equal(14000m, latest.TotalAssets);
         Assert.Equal(2000m, latest.Provident);
         Assert.Equal(1000m, latest.FundValue);
         Assert.Equal(9000m, latest.GoldValue);
@@ -44,6 +46,8 @@ public sealed class TrendServiceTests
         Assert.True(latest.HasProvident);
         Assert.True(latest.HasFunds);
         Assert.True(latest.HasGold);
+        Assert.Equal(1000m, latest.StockValue);
+        Assert.True(latest.HasStocks);
     }
 
     [Fact]
@@ -79,6 +83,19 @@ public sealed class TrendServiceTests
             CancellationToken.None);
         await new GoldService(repository, dates).SaveHoldingAsync(
             new(10m, 8000m, 900m, Today.AddDays(-50), null, Guid.NewGuid(), HoldingDate: Today.AddDays(-50)),
+            CancellationToken.None);
+        await new StockService(repository, dates).SaveHoldingAsync(
+            new SaveStockHoldingRequest(
+                StockMarket.Shanghai,
+                "600519",
+                "贵州茅台",
+                10m,
+                1000m,
+                100m,
+                Today.AddDays(-50),
+                Today.AddDays(-50),
+                null,
+                Guid.NewGuid()),
             CancellationToken.None);
         await new ProvidentFundService(repository, dates).DepositAsync(
             new(2000m, Today.AddDays(-10), "缴存", Guid.NewGuid()),

@@ -30,8 +30,11 @@ public sealed class LedgerReplayCalculator
         var (sellApplies, sellConfirms) = ValidateFundSellLinks(active);
         var goldSellPendings = ValidateGoldSellLinks(active);
         var fundStates = data.Positions.ToDictionary(position => position.Id, position => new MutableHolding());
+        var stockStates = data.Stocks.ToDictionary(position => position.Id, position => new MutableHolding());
         var goldState = data.Gold is null ? null : new MutableHolding();
         var unknownFunds = active.Where(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Fund)
+            .Select(fact => fact.PositionId).ToHashSet();
+        var unknownStocks = active.Where(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Stock)
             .Select(fact => fact.PositionId).ToHashSet();
         var unknownGold = active.Any(fact => fact.NeedsDateConfirmation && fact.AssetType == AssetType.Gold);
 
@@ -88,6 +91,11 @@ public sealed class LedgerReplayCalculator
                 ApplyHolding(fundStates[fact.PositionId.Value], fact, facts, pendingBuys, sellApplies, sellConfirms, goldSellPendings, false);
             }
 
+            if (fact.AssetType == AssetType.Stock && fact.PositionId is not null && !unknownStocks.Contains(fact.PositionId))
+            {
+                ApplyHolding(stockStates[fact.PositionId.Value], fact, facts, pendingBuys, sellApplies, sellConfirms, goldSellPendings, true);
+            }
+
             if (fact.AssetType == AssetType.Gold && goldState is not null && !unknownGold)
             {
                 ApplyHolding(goldState, fact, facts, pendingBuys, sellApplies, sellConfirms, goldSellPendings, true);
@@ -105,6 +113,15 @@ public sealed class LedgerReplayCalculator
                 known ? state.Realized : position.RealizedProfit, known ? state.CoverageFrom : null, known,
                 (known ? state.CoverageFrom is null : asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source,
                 known ? state.PendingAmount : 0m, known ? state.AppliedShares : 0m, known ? state.PendingArrivalAmount : 0m);
+        }).ToList();
+        var stocks = data.Stocks.Select(position =>
+        {
+            var state = stockStates[position.Id];
+            var known = !unknownStocks.Contains(position.Id);
+            var quote = Latest(observations, AssetType.Stock, position.Id);
+            return new HoldingReplay(position.Id, known ? state.Quantity : position.Shares, known ? state.Cost : position.Cost,
+                known ? state.Realized : position.RealizedProfit, known ? state.CoverageFrom : null, known,
+                (known ? state.CoverageFrom is null : asOfDate != currentDate) ? null : quote?.Price, quote?.EffectiveDate, quote?.Source);
         }).ToList();
         HoldingReplay? gold = null;
 
@@ -134,21 +151,26 @@ public sealed class LedgerReplayCalculator
             issues.Add("部分基金持仓日期或行情依据不足");
         }
 
+        if (stocks.Any(stock => !stock.CanRebuild || stock.CoverageFrom is null || stock.Value is null))
+        {
+            issues.Add("部分股票持仓日期或行情依据不足");
+        }
+
         if (gold is null || !gold.CanRebuild || gold.CoverageFrom is null || gold.Value is null)
         {
             issues.Add("积存金持仓日期或行情依据不足");
         }
 
         return new ReplayResult(asOfDate, cashKnown && cashStart <= asOfDate ? cash : null, cashStart, cashDate,
-            providentStart is null ? null : provident, providentStart, providentDate, funds, gold, adjustments, issues);
+            providentStart is null ? null : provident, providentStart, providentDate, funds, stocks, gold, adjustments, issues);
     }
 
     private static void ApplyHolding(MutableHolding state, BusinessFact fact, IReadOnlyList<BusinessFact> allFacts,
         IReadOnlyDictionary<Guid, BusinessFact> pendingBuys, IReadOnlyDictionary<Guid, BusinessFact> sellApplies,
         IReadOnlyDictionary<Guid, BusinessFact> sellConfirms, IReadOnlyDictionary<Guid, BusinessFact> goldSellPendings,
-        bool gold)
+        bool canStartWithBuy)
     {
-        if (fact.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote)
+        if (fact.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote or AssetTransactionKind.StockQuote)
         {
             return;
         }
@@ -222,9 +244,12 @@ public sealed class LedgerReplayCalculator
             return;
         }
 
-        var opening = fact.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening;
-        var correction = fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection;
-        var buy = fact.Kind is AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyConfirm or AssetTransactionKind.GoldBuy;
+        var opening = fact.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening
+            or AssetTransactionKind.StockOpening;
+        var correction = fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection
+            or AssetTransactionKind.StockCorrection;
+        var buy = fact.Kind is AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyConfirm
+            or AssetTransactionKind.GoldBuy or AssetTransactionKind.StockBuy;
 
         if (opening)
         {
@@ -243,8 +268,9 @@ public sealed class LedgerReplayCalculator
             if (state.CoverageFrom is null)
             {
                 var hadOpening = allFacts.Any(other => other.AssetType == fact.AssetType && other.PositionId == fact.PositionId
-                    && other.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening or AssetTransactionKind.GoldCorrection);
-                Ensure(gold && !hadOpening, fact, "缺少有效起始持仓，须先处理关联起始记录");
+                    && other.Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.GoldOpening
+                        or AssetTransactionKind.GoldCorrection or AssetTransactionKind.StockOpening);
+                Ensure(canStartWithBuy && !hadOpening, fact, "缺少有效起始持仓，须先处理关联起始记录");
                 state.CoverageFrom = fact.Date;
             }
 
@@ -465,7 +491,7 @@ public sealed class LedgerReplayCalculator
 
     private static PriceObservation? Latest(IEnumerable<PriceObservation> prices, AssetType assetType, Guid? positionId)
     {
-        return prices.Where(price => price.AssetType == assetType && price.FundPositionId == positionId)
+        return prices.Where(price => price.AssetType == assetType && price.PositionId == positionId)
             .OrderByDescending(price => price.EffectiveDate).ThenByDescending(price => price.RevisionOrder).FirstOrDefault();
     }
 

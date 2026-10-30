@@ -86,7 +86,7 @@ public sealed record BusinessFact
             Id = transaction.Id,
             Source = "asset",
             AssetType = transaction.AssetType,
-            PositionId = transaction.FundPositionId,
+            PositionId = transaction.PositionId,
             Kind = transaction.Kind,
             Date = transaction.BusinessDate,
             Sequence = transaction.BusinessSequence,

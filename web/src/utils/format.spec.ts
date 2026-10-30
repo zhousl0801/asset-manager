@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  amountTone,
   formatBusinessDate,
   formatBusinessTime,
   formatMoney,
@@ -42,6 +43,19 @@ describe('formatSignedMoney', () => {
   it('keeps zero unsigned and shows a dash for missing values', () => {
     expect(formatSignedMoney(0)).toBe('0.00')
     expect(formatSignedMoney(null)).toBe('—')
+  })
+})
+
+describe('amountTone', () => {
+  it('maps positive and negative values to gain and loss', () => {
+    expect(amountTone(12.5)).toBe('amount-gain')
+    expect(amountTone(-0.01)).toBe('amount-loss')
+  })
+
+  it('leaves zero and missing values uncolored', () => {
+    expect(amountTone(0)).toBe('')
+    expect(amountTone(null)).toBe('')
+    expect(amountTone(undefined)).toBe('')
   })
 })
 

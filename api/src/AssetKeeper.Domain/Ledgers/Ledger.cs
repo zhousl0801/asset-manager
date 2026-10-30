@@ -36,6 +36,8 @@ public sealed class Ledger
 
     public bool GoldNotHeld { get; private set; }
 
+    public bool StockNotHeld { get; private set; }
+
     public bool IsNotHeld(AssetType assetType)
     {
         return assetType switch
@@ -43,6 +45,7 @@ public sealed class Ledger
             AssetType.Fund => FundNotHeld,
             AssetType.ProvidentFund => ProvidentFundNotHeld,
             AssetType.Gold => GoldNotHeld,
+            AssetType.Stock => StockNotHeld,
             _ => throw new ArgumentOutOfRangeException(nameof(assetType), assetType, "不支持的资产类型。")
         };
     }
@@ -66,6 +69,9 @@ public sealed class Ledger
                 break;
             case AssetType.Gold:
                 GoldNotHeld = notHeld;
+                break;
+            case AssetType.Stock:
+                StockNotHeld = notHeld;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(assetType), assetType, "不支持的资产类型。");

@@ -27,6 +27,10 @@ public sealed class AssetTransaction
 
     public Guid? FundPositionId { get; private set; }
 
+    public Guid? StockPositionId { get; private set; }
+
+    public Guid? PositionId => FundPositionId ?? StockPositionId;
+
     public Guid? LinkedTransactionId { get; private set; }
 
     public decimal? Quantity { get; private set; }
@@ -86,8 +90,9 @@ public sealed class AssetTransaction
         }
 
         var opening = Kind is AssetTransactionKind.FundOpening or AssetTransactionKind.FundCorrection
-            or AssetTransactionKind.GoldOpening or AssetTransactionKind.GoldCorrection or AssetTransactionKind.ProvidentOpening;
-        var quote = Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote;
+            or AssetTransactionKind.GoldOpening or AssetTransactionKind.GoldCorrection or AssetTransactionKind.ProvidentOpening
+            or AssetTransactionKind.StockOpening or AssetTransactionKind.StockCorrection;
+        var quote = Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote or AssetTransactionKind.StockQuote;
         var pendingBuy = Kind == AssetTransactionKind.FundBuyPending;
         var confirmedBuy = Kind == AssetTransactionKind.FundBuyConfirm;
         var sellApply = Kind == AssetTransactionKind.FundSellApply;
@@ -95,6 +100,10 @@ public sealed class AssetTransaction
         var sellArrival = Kind == AssetTransactionKind.FundSellArrival;
         var goldSellPending = Kind == AssetTransactionKind.GoldSellPending;
         var goldSellArrival = Kind == AssetTransactionKind.GoldSellArrival;
+        var stockBuy = Kind == AssetTransactionKind.StockBuy;
+        var stockSell = Kind == AssetTransactionKind.StockSell;
+        var stockTrade = stockBuy || stockSell;
+        var stockSnapshot = Kind is AssetTransactionKind.StockOpening or AssetTransactionKind.StockCorrection;
         EnsureAmount(amount, nameof(amount));
 
         if (amount < 0 || (!opening && !quote && !sellApply && amount == 0))
@@ -131,6 +140,11 @@ public sealed class AssetTransaction
             throw new ArgumentException("确认记录必须提供成交净值和净值日期。");
         }
 
+        if ((stockTrade || stockSnapshot) && (price is null || priceDate is null))
+        {
+            throw new ArgumentException("股票交易或持仓核对必须提供价格和行情日期。");
+        }
+
         if (price is not null && (price <= 0 || price > MaximumPrice || decimal.Round(price.Value, 4) != price.Value))
         {
             throw new ArgumentException("价格必须大于 0，最多四位小数。");
@@ -148,15 +162,23 @@ public sealed class AssetTransaction
 
         if (fee is not null && fee != 0m)
         {
-            if (!pendingBuy && !confirmedBuy && !sellConfirm)
+            if (!pendingBuy && !confirmedBuy && !sellConfirm && !stockTrade)
             {
                 throw new ArgumentException("只有确认记录可以记录费用。");
             }
 
-            EnsureFee(fee.Value, amount);
+            if (stockTrade)
+            {
+                EnsureStockFee(fee.Value, quantity!.Value * price!.Value);
+            }
+            else
+            {
+                EnsureFee(fee.Value, amount);
+            }
+
             Fee = fee.Value;
         }
-        else if ((pendingBuy || confirmedBuy || sellConfirm) && fee is not null)
+        else if (((pendingBuy || confirmedBuy || sellConfirm || stockTrade) && fee is not null) || stockTrade)
         {
             Fee = 0m;
         }
@@ -170,6 +192,26 @@ public sealed class AssetTransaction
             EnsureFee(Fee, amount);
         }
 
+        if (stockTrade)
+        {
+            // 费用在下单时输入，但再次校验，避免历史更正把成交金额和费用改得不一致。
+            EnsureStockFee(Fee, quantity!.Value * price!.Value);
+            var gross = decimal.Round(quantity.Value * price.Value, 2);
+            var expectedAmount = stockBuy ? gross + Fee : gross - Fee;
+
+            if (amount != expectedAmount)
+            {
+                throw new ArgumentException(stockBuy
+                    ? "买入实际扣款必须等于成交金额加费用。"
+                    : "卖出净到账必须等于成交金额减费用。");
+            }
+
+            if (stockSell && expectedAmount <= 0m)
+            {
+                throw new ArgumentException("卖出净到账必须大于 0。");
+            }
+        }
+
         if (note?.Trim().Length > MaximumNoteLength)
         {
             throw new ArgumentException("备注不能超过 200 个字符。");
@@ -180,9 +222,11 @@ public sealed class AssetTransaction
         Price = price;
         CashEffect = Kind switch
         {
-            AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyPending or AssetTransactionKind.GoldBuy => -amount,
+            AssetTransactionKind.FundBuy or AssetTransactionKind.FundBuyPending or AssetTransactionKind.GoldBuy
+                or AssetTransactionKind.StockBuy => -amount,
             AssetTransactionKind.FundSell or AssetTransactionKind.FundSellArrival or AssetTransactionKind.GoldSell
-                or AssetTransactionKind.GoldSellArrival or AssetTransactionKind.ProvidentWithdrawal => amount,
+                or AssetTransactionKind.GoldSellArrival or AssetTransactionKind.ProvidentWithdrawal
+                or AssetTransactionKind.StockSell => amount,
             _ => 0m
         };
         Note = Normalize(note);
@@ -204,7 +248,21 @@ public sealed class AssetTransaction
     public static AssetTransaction CreateSnapshot(Guid ledgerId, Guid? positionId, AssetType assetType, AssetTransactionKind kind,
         decimal? quantity, decimal cost, decimal? price, DateOnly date, DateOnly? priceDate, string? note, Guid requestId, DateTimeOffset now)
     {
-        var transaction = Create(ledgerId, requestId, assetType, kind, positionId, quantity, cost, 0m, price, "起始资产 / 持仓核对", note, date, now);
+        var transaction = Create(
+            ledgerId,
+            requestId,
+            assetType,
+            kind,
+            assetType == AssetType.Stock ? null : positionId,
+            quantity,
+            cost,
+            0m,
+            price,
+            "起始资产 / 持仓核对",
+            note,
+            date,
+            now,
+            stockPositionId: assetType == AssetType.Stock ? positionId : null);
         transaction.Correct(quantity, cost, price, date, priceDate, 0, note);
         return transaction;
     }
@@ -714,6 +772,120 @@ public sealed class AssetTransaction
             now);
     }
 
+    public static AssetTransaction CreateStockBuy(
+        Guid ledgerId,
+        Guid stockPositionId,
+        decimal shares,
+        decimal amount,
+        decimal price,
+        decimal fee,
+        string subject,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveQuantity(shares, nameof(shares));
+        EnsurePositiveAmount(amount, nameof(amount));
+        EnsureStockFee(fee, shares * price);
+
+        var gross = decimal.Round(shares * price, 2);
+
+        if (amount != gross + fee)
+        {
+            throw new ArgumentException("买入实际扣款必须等于成交金额加费用。", nameof(amount));
+        }
+
+        return Create(
+            ledgerId,
+            requestId,
+            AssetType.Stock,
+            AssetTransactionKind.StockBuy,
+            null,
+            shares,
+            amount,
+            -amount,
+            price,
+            subject,
+            note,
+            businessDate,
+            now,
+            fee,
+            RequireStockPositionId(stockPositionId));
+    }
+
+    public static AssetTransaction CreateStockSell(
+        Guid ledgerId,
+        Guid stockPositionId,
+        decimal shares,
+        decimal amount,
+        decimal price,
+        decimal fee,
+        string subject,
+        DateOnly businessDate,
+        string? note,
+        Guid requestId,
+        DateTimeOffset now)
+    {
+        EnsurePositiveQuantity(shares, nameof(shares));
+        EnsurePositiveAmount(amount, nameof(amount));
+        EnsureStockFee(fee, shares * price);
+
+        var gross = decimal.Round(shares * price, 2);
+
+        if (amount != gross - fee || amount <= 0m)
+        {
+            throw new ArgumentException("卖出净到账必须等于成交金额减费用且大于 0。", nameof(amount));
+        }
+
+        return Create(
+            ledgerId,
+            requestId,
+            AssetType.Stock,
+            AssetTransactionKind.StockSell,
+            null,
+            shares,
+            amount,
+            amount,
+            price,
+            subject,
+            note,
+            businessDate,
+            now,
+            fee,
+            RequireStockPositionId(stockPositionId));
+    }
+
+    public static AssetTransaction CreateStockQuote(
+        Guid ledgerId,
+        Guid stockPositionId,
+        decimal price,
+        string subject,
+        DateOnly quoteDate,
+        Guid requestId,
+        DateTimeOffset now,
+        string? source = null)
+    {
+        var transaction = Create(
+            ledgerId,
+            requestId,
+            AssetType.Stock,
+            AssetTransactionKind.StockQuote,
+            null,
+            null,
+            0m,
+            0m,
+            price,
+            subject,
+            null,
+            quoteDate,
+            now,
+            stockPositionId: RequireStockPositionId(stockPositionId));
+        transaction.QuoteSource = NormalizeQuoteSource(source);
+
+        return transaction;
+    }
+
     private static AssetTransaction Create(
         Guid ledgerId,
         Guid requestId,
@@ -728,7 +900,8 @@ public sealed class AssetTransaction
         string? note,
         DateOnly businessDate,
         DateTimeOffset now,
-        decimal fee = 0m)
+        decimal fee = 0m,
+        Guid? stockPositionId = null)
     {
         if (ledgerId == Guid.Empty)
         {
@@ -798,7 +971,7 @@ public sealed class AssetTransaction
             throw new ArgumentException($"备注不能超过 {MaximumNoteLength} 个字符。", nameof(note));
         }
 
-        if (fee != 0m)
+        if (fee != 0m && assetType != AssetType.Stock)
         {
             EnsureFee(fee, amount);
         }
@@ -810,7 +983,8 @@ public sealed class AssetTransaction
             RequestId = requestId,
             AssetType = assetType,
             Kind = kind,
-            FundPositionId = fundPositionId,
+            FundPositionId = assetType == AssetType.Stock ? null : fundPositionId,
+            StockPositionId = assetType == AssetType.Stock ? stockPositionId ?? fundPositionId : null,
             Quantity = quantity,
             Amount = amount,
             CashEffect = cashEffect,
@@ -831,6 +1005,16 @@ public sealed class AssetTransaction
         }
 
         return fundPositionId;
+    }
+
+    private static Guid RequireStockPositionId(Guid stockPositionId)
+    {
+        if (stockPositionId == Guid.Empty)
+        {
+            throw new ArgumentException("股票持仓标识无效。", nameof(stockPositionId));
+        }
+
+        return stockPositionId;
     }
 
     private static void EnsureAmount(decimal amount, string paramName)
@@ -861,6 +1045,21 @@ public sealed class AssetTransaction
         if (fee < 0 || fee > amount)
         {
             throw new ArgumentException("费用必须在 0 与买入金额之间。", nameof(fee));
+        }
+
+        if (decimal.Round(fee, 2) != fee)
+        {
+            throw new ArgumentException("费用最多保留两位小数。", nameof(fee));
+        }
+    }
+
+    private static void EnsureStockFee(decimal fee, decimal grossAmount)
+    {
+        var gross = decimal.Round(grossAmount, 2);
+
+        if (fee < 0m || fee >= gross)
+        {
+            throw new ArgumentException("费用必须大于等于 0 且小于成交金额。", nameof(fee));
         }
 
         if (decimal.Round(fee, 2) != fee)

@@ -10,7 +10,7 @@ import AssetTrendChart from '../components/AssetTrendChart.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { useLedgerStore } from '../stores/ledger'
-import { formatBusinessDate, formatMoney, formatSignedMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
+import { amountTone, formatBusinessDate, formatMoney, formatSignedMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
 import { buildScopedTrend } from '../utils/trend'
 import type { MonthChange } from '../types/ledger'
 import type { AutoPlan, PlanOccurrence, PlanOverview, PlanType } from '../types/plan'
@@ -60,7 +60,7 @@ const recordedCount = computed(() => {
     return 0
   }
 
-  return [ledger.cash, ledger.providentFund, ledger.fund, ledger.gold]
+  return [ledger.cash, ledger.providentFund, ledger.fund, ledger.gold, ledger.stock]
     .filter((asset) => asset.isConfigured && !asset.notHeld)
     .length
 })
@@ -193,14 +193,6 @@ function percentLabel(value: number | null): string {
   return `${sign}${value.toFixed(2)}%`
 }
 
-function changeClass(value: number | null | undefined): string {
-  if (value === null || value === undefined || value === 0) {
-    return ''
-  }
-
-  return value > 0 ? 'gain' : 'loss'
-}
-
 function selectPoint(point: AssetTrendPoint): void {
   trendSelection.value = point
 }
@@ -298,10 +290,10 @@ onMounted(loadLedger)
           @click="changeSheetOpen = true"
         >
           <span>本月变化</span>
-          <b :class="changeClass(monthChange.comparableChange)">
+          <b :class="amountTone(monthChange.comparableChange)">
             {{ formatSignedMoney(monthChange.comparableChange ?? 0) }}
           </b>
-          <span v-if="changePercent !== null" class="change-percent" :class="changeClass(changePercent)">
+          <span v-if="changePercent !== null" class="change-percent" :class="amountTone(changePercent)">
             {{ percentLabel(changePercent) }}
           </span>
           <span class="info-mark">ⓘ</span>
@@ -394,7 +386,7 @@ onMounted(loadLedger)
           </div>
           <div>
             <span>结余</span>
-            <b>{{ formatMoney(overview.month.surplus) }}</b>
+            <b :class="amountTone(overview.month.hasRecords ? overview.month.surplus : null)">{{ formatSignedMoney(overview.month.surplus) }}</b>
           </div>
         </div>
         <p v-if="!overview.month.hasRecords" class="hint">本月还没有收支记录。<RouterLink class="text-btn" :to="{ name: 'entry' }">去记一笔 ›</RouterLink></p>
@@ -430,15 +422,15 @@ onMounted(loadLedger)
         <template v-if="monthChange.hasComparableData">
           <div class="breakdown-row">
             <span>市值变动</span>
-            <b :class="changeClass(monthChange.marketValueChange)">{{ formatSignedMoney(monthChange.marketValueChange ?? 0) }}</b>
+            <b :class="amountTone(monthChange.marketValueChange)">{{ formatSignedMoney(monthChange.marketValueChange ?? 0) }}</b>
           </div>
           <div class="breakdown-row">
             <span>净存入·转账</span>
-            <b :class="changeClass(monthChange.netDeposit)">{{ formatSignedMoney(monthChange.netDeposit ?? 0) }}</b>
+            <b :class="amountTone(monthChange.netDeposit)">{{ formatSignedMoney(monthChange.netDeposit ?? 0) }}</b>
           </div>
           <div class="breakdown-total">
             <span>本月变化</span>
-            <b :class="changeClass(monthChange.comparableChange)">{{ formatSignedMoney(monthChange.comparableChange ?? 0) }}</b>
+            <b :class="amountTone(monthChange.comparableChange)">{{ formatSignedMoney(monthChange.comparableChange ?? 0) }}</b>
           </div>
         </template>
         <p v-else class="hint">账本起始日晚于本月月初，暂无可比基线。记录满一个完整月份后即可看到同口径变化。</p>
@@ -580,14 +572,6 @@ onMounted(loadLedger)
   margin: 4px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--text-footnote);
-}
-
-b.gain {
-  color: var(--color-finance-gain);
-}
-
-b.loss {
-  color: var(--color-finance-loss);
 }
 
 .trend-panel {

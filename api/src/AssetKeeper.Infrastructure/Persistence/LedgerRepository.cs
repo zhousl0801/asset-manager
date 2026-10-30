@@ -32,6 +32,7 @@ public sealed class LedgerRepository : ILedgerRepository
         await _dbContext.AssetTransactions.Where(transaction => transaction.LedgerId == ledgerId).LoadAsync(cancellationToken);
         await _dbContext.PriceObservations.Where(price => price.LedgerId == ledgerId).LoadAsync(cancellationToken);
         await _dbContext.FundPositions.Where(position => position.LedgerId == ledgerId).LoadAsync(cancellationToken);
+        await _dbContext.StockPositions.Where(position => position.LedgerId == ledgerId).LoadAsync(cancellationToken);
         await _dbContext.ProvidentFundAccounts.Where(account => account.LedgerId == ledgerId).LoadAsync(cancellationToken);
         await _dbContext.GoldHoldings.Where(holding => holding.LedgerId == ledgerId).LoadAsync(cancellationToken);
         return new LedgerReplayData(ledger,
@@ -40,6 +41,7 @@ public sealed class LedgerRepository : ILedgerRepository
             _dbContext.AssetTransactions.Local.Where(transaction => transaction.LedgerId == ledgerId).ToList(),
             _dbContext.PriceObservations.Local.Where(price => price.LedgerId == ledgerId).ToList(),
             _dbContext.FundPositions.Local.Where(position => position.LedgerId == ledgerId).ToList(),
+            _dbContext.StockPositions.Local.Where(position => position.LedgerId == ledgerId).ToList(),
             _dbContext.ProvidentFundAccounts.Local.SingleOrDefault(account => account.LedgerId == ledgerId),
             _dbContext.GoldHoldings.Local.SingleOrDefault(holding => holding.LedgerId == ledgerId));
     }
@@ -58,7 +60,9 @@ public sealed class LedgerRepository : ILedgerRepository
         return _dbContext.PriceObservations
             .AsNoTracking()
             .Where(price => price.LedgerId == ledgerId && price.AssetType == assetType
-                && price.FundPositionId == positionId && !price.IsSuperseded)
+                && ((assetType == AssetType.Stock && price.StockPositionId == positionId)
+                    || (assetType != AssetType.Stock && price.FundPositionId == positionId))
+                && !price.IsSuperseded)
             .OrderByDescending(price => price.EffectiveDate)
             .ThenByDescending(price => price.RevisionOrder)
             .FirstOrDefaultAsync(cancellationToken);
@@ -339,6 +343,51 @@ public sealed class LedgerRepository : ILedgerRepository
     public async Task AddGoldHoldingAsync(GoldHolding holding, CancellationToken cancellationToken)
     {
         await _dbContext.GoldHoldings.AddAsync(holding, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StockPosition>> GetStockPositionsAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.StockPositions
+            .AsNoTracking()
+            .Where(position => position.LedgerId == ledgerId)
+            .OrderBy(position => position.Market)
+            .ThenBy(position => position.Code)
+            .ThenBy(position => position.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<StockPosition?> GetStockPositionForUpdateAsync(
+        Guid ledgerId,
+        Guid positionId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.StockPositions
+            .SingleOrDefaultAsync(
+                position => position.Id == positionId && position.LedgerId == ledgerId,
+                cancellationToken);
+    }
+
+    public Task<StockPosition?> FindStockPositionForUpdateAsync(
+        Guid ledgerId,
+        StockMarket market,
+        string code,
+        CancellationToken cancellationToken)
+    {
+        var normalized = code.Trim().ToUpperInvariant();
+
+        return _dbContext.StockPositions
+            .SingleOrDefaultAsync(
+                position => position.LedgerId == ledgerId
+                    && position.Market == market
+                    && position.Code == normalized,
+                cancellationToken);
+    }
+
+    public async Task AddStockPositionAsync(StockPosition position, CancellationToken cancellationToken)
+    {
+        await _dbContext.StockPositions.AddAsync(position, cancellationToken);
     }
 
     public async Task<IReadOnlyList<FundGroup>> GetFundGroupsAsync(

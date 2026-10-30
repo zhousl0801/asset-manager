@@ -1,1 +1,0 @@
-import{b as e,g as t,k as n,o as r,x as i}from"./vue-router-Crmsifma.js";import{t as a}from"./AppIcon-CL9WHDfB.js";var o=r(i({__name:`BackButton`,emits:[`back`],setup(r){return(r,i)=>(n(),t(`button`,{class:`back-button`,type:`button`,"aria-label":`返回`,onClick:i[0]||=e=>r.$emit(`back`)},[e(a,{name:`chevron-back`})]))}}),[[`__scopeId`,`data-v-ba2be8cb`]]);export{o as t};

@@ -4,6 +4,7 @@ using AssetKeeper.Application.Backup;
 using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
+using AssetKeeper.Application.Stocks;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Plans;
 using AssetKeeper.Application.Provident;
@@ -33,6 +34,7 @@ public sealed class BackupServiceTests
         Assert.NotNull(export);
         Assert.NotEmpty(export.Entries);
         Assert.Equal(1, Assert.Single(export.FundPositions).ConfirmationDelayDays);
+        Assert.Single(export.StockPositions);
         Assert.NotEmpty(export.AssetTransactions);
         Assert.NotEmpty(export.Plans);
         Assert.NotEmpty(export.PlanOccurrences);
@@ -65,6 +67,8 @@ public sealed class BackupServiceTests
         Assert.Equal(export.FundGroups.Count, afterRestore.FundGroups.Count);
         Assert.Equal(export.FundPositions.Count, afterRestore.FundPositions.Count);
         Assert.Equal(1, Assert.Single(afterRestore.FundPositions).ConfirmationDelayDays);
+        Assert.Equal(export.StockPositions.Count, afterRestore.StockPositions.Count);
+        Assert.Equal(export.StockPositions[0].Code, afterRestore.StockPositions[0].Code);
         Assert.Equal(export.CashAdjustments.Count, afterRestore.CashAdjustments.Count);
         Assert.Equal(export.PriceObservations.Count, afterRestore.PriceObservations.Count);
         Assert.Equal(export.CashAccount.Balance, afterRestore.CashAccount.Balance);
@@ -163,6 +167,7 @@ public sealed class BackupServiceTests
             (typeof(AssetKeeper.Domain.Cash.CashAdjustment), typeof(BackupCashAdjustment)),
             (typeof(AssetKeeper.Domain.Assets.FundGroup), typeof(BackupFundGroup)),
             (typeof(AssetKeeper.Domain.Assets.FundPosition), typeof(BackupFundPosition)),
+            (typeof(AssetKeeper.Domain.Assets.StockPosition), typeof(BackupStockPosition)),
             (typeof(AssetKeeper.Domain.Assets.AssetTransaction), typeof(BackupAssetTransaction)),
             (typeof(AssetKeeper.Domain.Assets.PriceObservation), typeof(BackupPriceObservation)),
             (typeof(AutoPlan), typeof(BackupPlan)),
@@ -250,6 +255,19 @@ public sealed class BackupServiceTests
         await groups.AssignAsync(position.Result.Position.Id, new AssignFundGroupRequest(group.Group!.Id), CancellationToken.None);
         await new GoldService(repository, dates).SaveHoldingAsync(
             new SaveGoldHoldingRequest(10m, 8000m, 900m, new DateOnly(2026, 9, 20), "已有积存金", Guid.NewGuid(), HoldingDate: new DateOnly(2026, 9, 20)),
+            CancellationToken.None);
+        await new StockService(repository, dates).SaveHoldingAsync(
+            new SaveStockHoldingRequest(
+                AssetKeeper.Domain.Assets.StockMarket.Shanghai,
+                "600519",
+                "贵州茅台",
+                100m,
+                150000m,
+                1600m,
+                new DateOnly(2026, 9, 20),
+                new DateOnly(2026, 9, 20),
+                "已有股票",
+                Guid.NewGuid()),
             CancellationToken.None);
 
         var planRepository = new PlanRepository(db);

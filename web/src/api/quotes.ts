@@ -1,6 +1,6 @@
 import { apiRequest } from './client'
 
-export type QuoteRefreshScope = 'all' | 'funds' | 'gold'
+export type QuoteRefreshScope = 'all' | 'funds' | 'gold' | 'stocks'
 
 export interface QuoteRefreshItem {
   assetType: string
@@ -30,6 +30,9 @@ export interface QuoteRefreshRun {
   goldAttempted: number
   goldSucceeded: number
   goldFailed: number
+  stockAttempted: number
+  stockSucceeded: number
+  stockFailed: number
   updated: number
   items: QuoteRefreshItem[]
   errors: string[]

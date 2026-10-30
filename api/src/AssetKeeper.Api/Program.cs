@@ -10,6 +10,7 @@ using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Plans;
 using AssetKeeper.Application.Provident;
 using AssetKeeper.Application.Quotes;
+using AssetKeeper.Application.Stocks;
 using AssetKeeper.Infrastructure.Backup;
 using AssetKeeper.Infrastructure.Persistence;
 using AssetKeeper.Infrastructure.Quotes;
@@ -116,6 +117,7 @@ builder.Services.AddScoped<CategoryService>();
 builder.Services.AddScoped<CashService>();
 builder.Services.AddScoped<ProvidentFundService>();
 builder.Services.AddScoped<GoldService>();
+builder.Services.AddScoped<StockService>();
 builder.Services.AddScoped<FundService>();
 builder.Services.AddScoped<FundGroupService>();
 builder.Services.AddScoped<FundReturnService>();
@@ -142,6 +144,13 @@ builder.Services.AddHttpClient<IGoldQuoteProvider, IcbcGoldQuoteProvider>((servi
 {
     var options = services.GetRequiredService<IOptions<QuoteProviderOptions>>().Value;
     client.BaseAddress = new Uri(options.GoldBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetKeeper/1.0");
+});
+builder.Services.AddHttpClient<IStockQuoteProvider, EastmoneyStockQuoteProvider>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<QuoteProviderOptions>>().Value;
+    client.BaseAddress = new Uri(options.StockBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetKeeper/1.0");
 });

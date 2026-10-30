@@ -20,12 +20,14 @@ public sealed record ReplayResult(
     DateOnly? ProvidentCoverageFrom,
     DateOnly ProvidentBalanceDate,
     IReadOnlyList<HoldingReplay> Funds,
+    IReadOnlyList<HoldingReplay> Stocks,
     HoldingReplay? Gold,
     IReadOnlyList<AdjustmentReplay> Adjustments,
     IReadOnlyList<string> Issues)
 {
     public decimal KnownTotalAssets => (CashBalance ?? 0m) + (ProvidentBalance ?? 0m)
         + Funds.Sum(position => (position.Value ?? 0m) + position.PendingAmount + position.PendingArrivalAmount)
+        + Stocks.Sum(position => position.Value ?? 0m)
         + (Gold?.Value ?? 0m) + (Gold?.PendingArrivalAmount ?? 0m);
 
     public decimal? TotalAssets => Issues.Count == 0 ? KnownTotalAssets : null;

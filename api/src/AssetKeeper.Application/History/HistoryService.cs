@@ -54,7 +54,7 @@ public sealed class HistoryService
         var audit = await _repository.GetHistoryAuditAsync(ledger.Id, cancellationToken);
         return new HistoryOverviewDto(ledger.Version, opening, facts.OrderByDescending(fact => fact.Date).ThenByDescending(fact => fact.Sequence).ToList(),
             data.Prices.OrderByDescending(price => price.EffectiveDate).ThenByDescending(price => price.RevisionOrder)
-                .Select(price => new HistoryPriceDto(price.Id, price.FundPositionId, price.AssetType.ToString(), price.Price, price.EffectiveDate,
+                .Select(price => new HistoryPriceDto(price.Id, price.PositionId, price.AssetType.ToString(), price.Price, price.EffectiveDate,
                     price.Source, price.ObtainedAt, price.IsSuperseded)).ToList(), audit,
             new LedgerReplayCalculator().Calculate(data, facts, date, currentDate: _dates.Today));
     }
@@ -238,9 +238,18 @@ public sealed class HistoryService
             throw new HistoryValidationException("基金净值来自行情数据源，不能手动更正；请刷新净值或撤销错误的记录。");
         }
 
+        if (original.AssetType == AssetType.Stock
+            && original.Kind == AssetTransactionKind.StockQuote
+            && request.Action == "correct"
+            && (request.Price != original.Price || request.PriceDate != original.PriceDate))
+        {
+            throw new HistoryValidationException("股票行情来自行情数据源，不能手动更正；请刷新行情或撤销错误的记录。");
+        }
+
         if (original.Source == "asset" && !original.NeedsDateConfirmation && facts.Any(fact => !fact.IsReversed && fact.NeedsDateConfirmation
             && fact.AssetType == original.AssetType && fact.PositionId == original.PositionId)
-            && original.Kind is not (AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote))
+            && original.Kind is not (AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote
+                or AssetTransactionKind.StockQuote))
         {
             throw new HistoryValidationException("请先确认该资产原始持仓记录的日期。");
         }

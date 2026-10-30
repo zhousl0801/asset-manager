@@ -4,7 +4,7 @@ public sealed class QuoteRefreshOptions
 {
     public bool Enabled { get; set; } = true;
 
-    public int IntervalSeconds { get; set; } = 900;
+    public int IntervalSeconds { get; set; } = 3600;
 
     public bool RunOnStartup { get; set; }
 
@@ -15,4 +15,6 @@ public sealed class QuoteRefreshOptions
     public bool IncludeFunds { get; set; } = true;
 
     public bool IncludeGold { get; set; } = true;
+
+    public bool IncludeStocks { get; set; } = true;
 }

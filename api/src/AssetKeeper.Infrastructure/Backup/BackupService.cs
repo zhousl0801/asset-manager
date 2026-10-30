@@ -63,9 +63,10 @@ public sealed class BackupService
             errors.Add($"备份格式不受支持：{backup.Format}。");
         }
 
-        if (backup.Version != BackupDocument.CurrentVersion)
+        if (backup.Version < BackupDocument.MinimumSupportedVersion
+            || backup.Version > BackupDocument.CurrentVersion)
         {
-            errors.Add($"备份版本 {backup.Version} 不受支持，当前支持版本 {BackupDocument.CurrentVersion}。");
+            errors.Add($"备份版本 {backup.Version} 不受支持，当前支持版本 {BackupDocument.MinimumSupportedVersion}-{BackupDocument.CurrentVersion}。");
         }
 
         if (backup.ExportedAt == default)
@@ -276,7 +277,7 @@ public sealed class BackupService
             transaction.Quantity,
             transaction.Price,
             transaction.Fee,
-            transaction.Subject ?? "基金 / 积存金",
+            transaction.Subject ?? "基金 / 积存金 / 股票",
             transaction.IsReversed ? "已撤销" : "有效",
             "业务记录",
             BuildTransactionLinks(transaction))));
@@ -361,6 +362,7 @@ public sealed class BackupService
         var adjustments = await _db.CashAdjustments.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.BusinessDate).ThenBy(item => item.BusinessSequence).ThenBy(item => item.Id).ToListAsync(cancellationToken);
         var groups = await _db.FundGroups.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.SortOrder).ThenBy(item => item.Name).ToListAsync(cancellationToken);
         var positions = await _db.FundPositions.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.Name).ThenBy(item => item.ShareClass).ThenBy(item => item.Platform).ThenBy(item => item.Id).ToListAsync(cancellationToken);
+        var stockPositions = await _db.StockPositions.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.Market).ThenBy(item => item.Code).ThenBy(item => item.Id).ToListAsync(cancellationToken);
         var transactions = await _db.AssetTransactions.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.BusinessDate).ThenBy(item => item.BusinessSequence).ThenBy(item => item.Id).ToListAsync(cancellationToken);
         var prices = await _db.PriceObservations.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.EffectiveDate).ThenBy(item => item.RevisionOrder).ThenBy(item => item.Id).ToListAsync(cancellationToken);
         var plans = await _db.AutoPlans.AsNoTracking().Where(item => item.LedgerId == ledgerId).OrderBy(item => item.CreatedAt).ThenBy(item => item.Id).ToListAsync(cancellationToken);
@@ -381,6 +383,7 @@ public sealed class BackupService
             CashAdjustments = adjustments.Select(ToDto<BackupCashAdjustment>).ToList(),
             FundGroups = groups.Select(ToDto<BackupFundGroup>).ToList(),
             FundPositions = positions.Select(ToDto<BackupFundPosition>).ToList(),
+            StockPositions = stockPositions.Select(ToDto<BackupStockPosition>).ToList(),
             AssetTransactions = transactions.Select(ToDto<BackupAssetTransaction>).ToList(),
             PriceObservations = prices.Select(ToDto<BackupPriceObservation>).ToList(),
             Plans = plans.Select(ToDto<BackupPlan>).ToList(),
@@ -411,6 +414,7 @@ public sealed class BackupService
                 CashAdjustments = document.CashAdjustments?.Select(ToEntity<CashAdjustment>).ToList() ?? [],
                 FundGroups = document.FundGroups?.Select(ToEntity<FundGroup>).ToList() ?? [],
                 FundPositions = document.FundPositions?.Select(ToEntity<FundPosition>).ToList() ?? [],
+                StockPositions = document.StockPositions?.Select(ToEntity<StockPosition>).ToList() ?? [],
                 AssetTransactions = document.AssetTransactions?.Select(ToEntity<AssetTransaction>).ToList() ?? [],
                 PriceObservations = document.PriceObservations?.Select(ToEntity<PriceObservation>).ToList() ?? [],
                 Plans = document.Plans?.Select(ToEntity<AutoPlan>).ToList() ?? [],
@@ -495,6 +499,22 @@ public sealed class BackupService
             }
         }
 
+        foreach (var stock in parsed.StockPositions)
+        {
+            if (stock.LedgerId != parsed.Ledger.Id
+                || string.IsNullOrWhiteSpace(stock.Code)
+                || string.IsNullOrWhiteSpace(stock.Name)
+                || stock.Shares < 0m
+                || stock.Cost < 0m
+                || stock.Price <= 0m
+                || stock.Shares == 0m && stock.Cost != 0m
+                || stock.PreviousClose is <= 0m
+                || stock.PreviousCloseDate is not null && stock.PreviousClose is null)
+            {
+                errors.Add($"股票持仓 {stock.Id} 的数据无效。");
+            }
+        }
+
         if (parsed.Ledger.NextFactSequence < 0)
         {
             errors.Add("账本业务顺序号无效。");
@@ -511,6 +531,7 @@ public sealed class BackupService
         CheckDuplicateIds(parsed.CashAdjustments.Select(item => item.Id), "现金核对", errors, duplicateRisks);
         CheckDuplicateIds(parsed.FundGroups.Select(item => item.Id), "投资分组", errors, duplicateRisks);
         CheckDuplicateIds(parsed.FundPositions.Select(item => item.Id), "基金持仓", errors, duplicateRisks);
+        CheckDuplicateIds(parsed.StockPositions.Select(item => item.Id), "股票持仓", errors, duplicateRisks);
         CheckDuplicateIds(parsed.AssetTransactions.Select(item => item.Id), "资产交易", errors, duplicateRisks);
         CheckDuplicateIds(parsed.PriceObservations.Select(item => item.Id), "行情观测", errors, duplicateRisks);
         CheckDuplicateIds(parsed.Plans.Select(item => item.Id), "自动计划", errors, duplicateRisks);
@@ -545,6 +566,7 @@ public sealed class BackupService
         var adjustmentIds = parsed.CashAdjustments.Select(item => item.Id).ToHashSet();
         var groupIds = parsed.FundGroups.Select(item => item.Id).ToHashSet();
         var positionIds = parsed.FundPositions.Select(item => item.Id).ToHashSet();
+        var stockPositionIds = parsed.StockPositions.Select(item => item.Id).ToHashSet();
         var transactionIds = parsed.AssetTransactions.Select(item => item.Id).ToHashSet();
         var planIds = parsed.Plans.Select(item => item.Id).ToHashSet();
 
@@ -620,6 +642,33 @@ public sealed class BackupService
             }
         }
 
+        foreach (var stock in parsed.StockPositions)
+        {
+            if (stock.LedgerId != parsed.Ledger.Id
+                || string.IsNullOrWhiteSpace(stock.Code)
+                || string.IsNullOrWhiteSpace(stock.Name)
+                || stock.Shares < 0m
+                || stock.Cost < 0m
+                || stock.Price <= 0m
+                || stock.Shares == 0m && stock.Cost != 0m)
+            {
+                errors.Add($"股票持仓 {stock.Id} 的数据无效。");
+            }
+        }
+
+        var stockKeys = parsed.StockPositions
+            .GroupBy(item => $"{item.Market}/{item.Code.ToUpperInvariant()}")
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+
+        if (stockKeys.Count > 0)
+        {
+            var message = $"股票持仓存在重复：{string.Join("、", stockKeys.Take(5))}。";
+            errors.Add(message);
+            duplicateRisks.Add(message);
+        }
+
         foreach (var transaction in parsed.AssetTransactions)
         {
             if (transaction.LedgerId != parsed.Ledger.Id
@@ -632,6 +681,11 @@ public sealed class BackupService
             if (transaction.FundPositionId is not null && !positionIds.Contains(transaction.FundPositionId.Value))
             {
                 errors.Add($"资产交易 {transaction.Id} 关联的基金持仓不存在。");
+            }
+
+            if (transaction.StockPositionId is not null && !stockPositionIds.Contains(transaction.StockPositionId.Value))
+            {
+                errors.Add($"资产交易 {transaction.Id} 关联的股票持仓不存在。");
             }
 
             if (transaction.LinkedTransactionId is not null && !transactionIds.Contains(transaction.LinkedTransactionId.Value))
@@ -658,6 +712,11 @@ public sealed class BackupService
             if (price.FundPositionId is not null && !positionIds.Contains(price.FundPositionId.Value))
             {
                 errors.Add($"行情观测 {price.Id} 关联的基金持仓不存在。");
+            }
+
+            if (price.StockPositionId is not null && !stockPositionIds.Contains(price.StockPositionId.Value))
+            {
+                errors.Add($"行情观测 {price.Id} 关联的股票持仓不存在。");
             }
 
             if (price.SourceTransactionId is not null && !transactionIds.Contains(price.SourceTransactionId.Value))
@@ -813,6 +872,40 @@ public sealed class BackupService
             }
         }
 
+        foreach (var position in parsed.StockPositions)
+        {
+            var state = replay.Stocks.FirstOrDefault(stock => stock.PositionId == position.Id);
+
+            if (state is null)
+            {
+                errors.Add($"股票持仓 {position.Id} 未参与业务重放。");
+                continue;
+            }
+
+            if (!state.CanRebuild)
+            {
+                warnings.Add($"股票「{position.Name}」的起始日期待确认，保留原值和待确认状态。");
+                continue;
+            }
+
+            if (state.Quantity != position.Shares
+                || state.Cost != position.Cost
+                || state.RealizedProfit != position.RealizedProfit)
+            {
+                errors.Add($"股票「{position.Name}」的数量、成本或已实现收益与业务重放结果不一致。");
+            }
+
+            if (state.Price is decimal price && price != position.Price)
+            {
+                errors.Add($"股票「{position.Name}」的最新价与业务重放结果不一致。");
+            }
+
+            if (state.PriceDate is DateOnly priceDate && priceDate != position.PriceDate)
+            {
+                errors.Add($"股票「{position.Name}」的行情日期与业务重放结果不一致。");
+            }
+        }
+
         if (parsed.GoldHolding is not null && replay.Gold is not null)
         {
             if (replay.Gold.CanRebuild
@@ -853,6 +946,7 @@ public sealed class BackupService
                 parsed.AssetTransactions,
                 parsed.PriceObservations,
                 parsed.FundPositions,
+                parsed.StockPositions,
                 parsed.ProvidentAccount,
                 parsed.GoldHolding);
             var facts = BusinessFact.From(data);
@@ -918,6 +1012,7 @@ public sealed class BackupService
                 await RemoveAsync(_db.AssetTransactions, item => item.LedgerId == current.Id, cancellationToken);
                 await RemoveAsync(_db.PlanOccurrences, item => item.LedgerId == current.Id, cancellationToken);
                 await RemoveAsync(_db.AutoPlans, item => item.LedgerId == current.Id, cancellationToken);
+                await RemoveAsync(_db.StockPositions, item => item.LedgerId == current.Id, cancellationToken);
                 await RemoveAsync(_db.FundPositions, item => item.LedgerId == current.Id, cancellationToken);
                 await RemoveAsync(_db.FundGroups, item => item.LedgerId == current.Id, cancellationToken);
                 await RemoveAsync(_db.GoldHoldings, item => item.LedgerId == current.Id, cancellationToken);
@@ -952,6 +1047,7 @@ public sealed class BackupService
             _db.EntryCategories.AddRange(parsed.Categories);
             _db.FundGroups.AddRange(parsed.FundGroups);
             _db.FundPositions.AddRange(parsed.FundPositions);
+            _db.StockPositions.AddRange(parsed.StockPositions);
             await _db.SaveChangesAsync(cancellationToken);
 
             _db.LedgerEntries.AddRange(parsed.Entries);
@@ -1186,6 +1282,11 @@ public sealed class BackupService
             links.Add($"position={transaction.FundPositionId}");
         }
 
+        if (transaction.StockPositionId is not null)
+        {
+            links.Add($"stockPosition={transaction.StockPositionId}");
+        }
+
         if (transaction.LinkedTransactionId is not null)
         {
             links.Add($"linked={transaction.LinkedTransactionId}");
@@ -1239,6 +1340,11 @@ public sealed class BackupService
             AssetTransactionKind.GoldCorrection => "积存金持仓更正",
             AssetTransactionKind.GoldOpening => "积存金起始持仓",
             AssetTransactionKind.ProvidentOpening => "公积金起始余额",
+            AssetTransactionKind.StockOpening => "股票起始持仓",
+            AssetTransactionKind.StockBuy => "股票买入",
+            AssetTransactionKind.StockSell => "股票卖出",
+            AssetTransactionKind.StockQuote => "股票行情更新",
+            AssetTransactionKind.StockCorrection => "股票持仓更正",
             _ => kind.ToString()
         };
     }
@@ -1288,6 +1394,7 @@ public sealed class BackupService
         public IReadOnlyList<CashAdjustment> CashAdjustments { get; init; } = [];
         public IReadOnlyList<FundGroup> FundGroups { get; init; } = [];
         public IReadOnlyList<FundPosition> FundPositions { get; init; } = [];
+        public IReadOnlyList<StockPosition> StockPositions { get; init; } = [];
         public IReadOnlyList<AssetTransaction> AssetTransactions { get; init; } = [];
         public IReadOnlyList<PriceObservation> PriceObservations { get; init; } = [];
         public IReadOnlyList<AutoPlan> Plans { get; init; } = [];

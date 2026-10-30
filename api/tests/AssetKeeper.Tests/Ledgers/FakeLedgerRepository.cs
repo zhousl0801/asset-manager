@@ -22,6 +22,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     private readonly List<CashAdjustment> _adjustments = new();
     private readonly List<FundGroup> _fundGroups = new();
     private readonly List<FundPosition> _fundPositions = new();
+    private readonly List<StockPosition> _stockPositions = new();
     private readonly List<AssetTransaction> _assetTransactions = new();
 
     public Ledger? Ledger { get; private set; }
@@ -46,6 +47,8 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
 
     public IReadOnlyList<FundPosition> FundPositions => _fundPositions;
 
+    public IReadOnlyList<StockPosition> StockPositions => _stockPositions;
+
     public IReadOnlyList<AssetTransaction> AssetTransactions => _assetTransactions;
 
     public Task<IReadOnlyList<HistoryAuditDto>> GetHistoryAuditAsync(Guid ledgerId, CancellationToken cancellationToken)
@@ -56,7 +59,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
 
     public Task<LedgerReplayData> GetReplayDataAsync(Guid ledgerId, CancellationToken cancellationToken)
     {
-        return Task.FromResult(new LedgerReplayData(Ledger!, _entries, _adjustments, _assetTransactions, _prices, _fundPositions, ProvidentAccount, GoldHolding));
+        return Task.FromResult(new LedgerReplayData(Ledger!, _entries, _adjustments, _assetTransactions, _prices, _fundPositions, _stockPositions, ProvidentAccount, GoldHolding));
     }
 
     public Task AddPriceObservationAsync(PriceObservation price, CancellationToken cancellationToken)
@@ -73,7 +76,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
     {
         var price = _prices
             .Where(item => item.LedgerId == ledgerId && item.AssetType == assetType
-                && item.FundPositionId == positionId && !item.IsSuperseded)
+                && item.PositionId == positionId && !item.IsSuperseded)
             .OrderByDescending(item => item.EffectiveDate)
             .ThenByDescending(item => item.RevisionOrder)
             .FirstOrDefault();
@@ -95,6 +98,7 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         _adjustments.RemoveAll(item => !_savedObjects.Contains(item));
         _assetTransactions.RemoveAll(item => !_savedObjects.Contains(item));
         _fundPositions.RemoveAll(item => !_savedObjects.Contains(item));
+        _stockPositions.RemoveAll(item => !_savedObjects.Contains(item));
         _receipts.RemoveAll(item => !_savedObjects.Contains(item));
         _prices.RemoveAll(item => !_savedObjects.Contains(item));
         ProvidentAccount = _savedProvident;
@@ -340,6 +344,49 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<StockPosition>> GetStockPositionsAsync(
+        Guid ledgerId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<StockPosition> positions = _stockPositions
+            .Where(position => position.LedgerId == ledgerId)
+            .OrderBy(position => position.Market)
+            .ThenBy(position => position.Code)
+            .ThenBy(position => position.Id)
+            .ToList();
+
+        return Task.FromResult(positions);
+    }
+
+    public Task<StockPosition?> GetStockPositionForUpdateAsync(
+        Guid ledgerId,
+        Guid positionId,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_stockPositions.SingleOrDefault(
+            position => position.Id == positionId && position.LedgerId == ledgerId));
+    }
+
+    public Task<StockPosition?> FindStockPositionForUpdateAsync(
+        Guid ledgerId,
+        StockMarket market,
+        string code,
+        CancellationToken cancellationToken)
+    {
+        var normalized = code.Trim().ToUpperInvariant();
+
+        return Task.FromResult(_stockPositions.SingleOrDefault(
+            position => position.LedgerId == ledgerId
+                && position.Market == market
+                && position.Code == normalized));
+    }
+
+    public Task AddStockPositionAsync(StockPosition position, CancellationToken cancellationToken)
+    {
+        _stockPositions.Add(position);
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<FundGroup>> GetFundGroupsAsync(
         Guid ledgerId,
         CancellationToken cancellationToken)
@@ -474,7 +521,13 @@ internal sealed class FakeLedgerRepository : ILedgerRepository
         _savedProvident = ProvidentAccount;
         _savedGold = GoldHolding;
         _savedObjects.Clear();
-        _savedObjects.AddRange(_entries.Cast<object>().Concat(_adjustments).Concat(_assetTransactions).Concat(_fundPositions).Concat(_receipts).Concat(_prices));
+        _savedObjects.AddRange(_entries.Cast<object>()
+            .Concat(_adjustments)
+            .Concat(_assetTransactions)
+            .Concat(_fundPositions)
+            .Concat(_stockPositions)
+            .Concat(_receipts)
+            .Concat(_prices));
         _savedObjects.AddRange(new object?[] { Ledger, CashAccount, ProvidentAccount, GoldHolding }.OfType<object>());
         _saved = _savedObjects.Distinct().ToDictionary(item => item, item => item.GetType().GetProperties()
             .Where(property => property.SetMethod is not null && (property.PropertyType.IsValueType || property.PropertyType == typeof(string)))

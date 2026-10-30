@@ -16,6 +16,8 @@ export interface AssetTrendPoint {
   hasProvident: boolean
   hasFunds: boolean
   hasGold: boolean
+  stockValue?: number | null
+  hasStocks?: boolean
 }
 
 export interface AssetTrend {

@@ -4,7 +4,8 @@ public enum QuoteRefreshScope
 {
     All,
     Funds,
-    Gold
+    Gold,
+    Stocks
 }
 
 public sealed record QuoteRefreshRequest(QuoteRefreshScope Scope = QuoteRefreshScope.All);
@@ -36,6 +37,9 @@ public sealed record QuoteRefreshRunDto(
     int GoldAttempted,
     int GoldSucceeded,
     int GoldFailed,
+    int StockAttempted,
+    int StockSucceeded,
+    int StockFailed,
     int Updated,
     IReadOnlyList<QuoteRefreshItemDto> Items,
     IReadOnlyList<string> Errors);

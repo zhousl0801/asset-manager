@@ -48,10 +48,12 @@ function overview(startDate: string, overrides: Record<string, unknown> = {}) {
     fund: { isConfigured: false, amount: null, note: '尚未录入', notHeld: false },
     providentFund: { isConfigured: true, amount: 100345, note: '本月暂无缴存', notHeld: false },
     gold: { isConfigured: true, amount: 10821.75, note: '持有 12.4948 克', notHeld: false },
+    stock: { isConfigured: false, amount: null, note: '尚未录入', notHeld: false },
     month: { income: 0, expense: 0, surplus: 0, hasRecords: false },
     fundNotHeld: false,
     providentFundNotHeld: false,
     goldNotHeld: false,
+    stockNotHeld: false,
     coverageComplete: false,
     ...overrides
   }

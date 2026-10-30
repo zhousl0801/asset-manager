@@ -21,5 +21,10 @@ public enum AssetTransactionKind
     GoldCorrection,
     ProvidentOpening,
     GoldOpening,
-    FundCorrection
+    FundCorrection,
+    StockOpening,
+    StockBuy,
+    StockSell,
+    StockQuote,
+    StockCorrection
 }

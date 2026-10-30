@@ -15,10 +15,12 @@ const overview: LedgerOverview = {
   fund: { isConfigured: false, amount: null, note: '尚未录入', notHeld: false },
   providentFund: { isConfigured: true, amount: 1000, note: '本月暂无缴存', notHeld: false },
   gold: { isConfigured: true, amount: 500, note: '持有 1 克', notHeld: false },
+  stock: { isConfigured: false, amount: null, note: '尚未录入', notHeld: false },
   month: { income: 0, expense: 0, surplus: 0, hasRecords: false },
   fundNotHeld: false,
   providentFundNotHeld: false,
   goldNotHeld: false,
+  stockNotHeld: false,
   coverageComplete: false
 }
 
@@ -26,7 +28,8 @@ const changes = [
   { assetType: 'cash' as const, change: 0, isNew: false },
   { assetType: 'providentFund' as const, change: null, isNew: true },
   { assetType: 'fund' as const, change: null, isNew: false },
-  { assetType: 'gold' as const, change: null, isNew: true }
+  { assetType: 'gold' as const, change: null, isNew: true },
+  { assetType: 'stock' as const, change: null, isNew: false }
 ]
 
 const stubs = {

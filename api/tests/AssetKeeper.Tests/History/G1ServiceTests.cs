@@ -4,6 +4,7 @@ using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.History;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Provident;
+using AssetKeeper.Application.Stocks;
 using AssetKeeper.Domain.Assets;
 using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.Funds;
@@ -248,6 +249,61 @@ public sealed class G1ServiceTests
         Assert.Contains(preview.Errors, error => error.Contains("不能手动更正"));
         Assert.Equal(1000m, (await service.GetAsync(null, CancellationToken.None))!.Snapshot.Funds.Single().Value);
         Assert.Equal(1000m, (await new LedgerService(context.Repository, context.Dates).GetOverviewAsync(CancellationToken.None))!.Fund.Amount);
+    }
+
+    [Fact]
+    public async Task ReverseStockBuy_RestoresSharesAndCash()
+    {
+        await using var context = await CreateAsync();
+        var stocks = new StockService(context.Repository, context.Dates);
+        await stocks.SaveHoldingAsync(
+            new SaveStockHoldingRequest(
+                StockMarket.Shanghai,
+                "600519",
+                "贵州茅台",
+                100m,
+                1000m,
+                10m,
+                Today.AddDays(-10),
+                Today.AddDays(-10),
+                null,
+                Guid.NewGuid()),
+            CancellationToken.None);
+        var buy = await stocks.BuyAsync(
+            new BuyStockRequest(
+                StockMarket.Shanghai,
+                "600519",
+                "贵州茅台",
+                100m,
+                10m,
+                0m,
+                Today.AddDays(-5),
+                null,
+                Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, buy.Status);
+        var service = new HistoryService(context.Repository, context.Dates);
+        var history = (await service.GetAsync(null, CancellationToken.None))!;
+        var fact = history.Facts.Single(item => item.Kind == AssetTransactionKind.StockBuy);
+        var request = Change(history, fact) with { Action = "reverse" };
+        var preview = await service.PreviewAsync(request, CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, preview.Status);
+        Assert.Equal(100m, preview.Result!.After.Stocks.Single().Quantity);
+        Assert.Equal(1000m, preview.Result.After.Stocks.Single().Cost);
+        Assert.Equal(10000m, preview.Result.After.CashBalance);
+
+        var confirmed = await service.ChangeAsync(
+            new ConfirmHistoryChangeRequest(request, preview.Result.PreviewToken),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, confirmed.Status);
+        var overview = await stocks.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(100m, overview.Positions.Single().Shares);
+        Assert.Equal(1000m, overview.Positions.Single().Cost);
+        Assert.Equal(10000m, overview.CashBalance);
     }
 
     [Fact]

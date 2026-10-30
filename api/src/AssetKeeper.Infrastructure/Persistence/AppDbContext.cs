@@ -35,6 +35,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<GoldHolding> GoldHoldings => Set<GoldHolding>();
 
+    public DbSet<StockPosition> StockPositions => Set<StockPosition>();
+
     public DbSet<AssetTransaction> AssetTransactions => Set<AssetTransaction>();
 
     public DbSet<AutoPlan> AutoPlans => Set<AutoPlan>();

@@ -6,5 +6,7 @@ public sealed class QuoteProviderOptions
 
     public string GoldBaseUrl { get; set; } = "https://mybank.icbc.com.cn/";
 
+    public string StockBaseUrl { get; set; } = "https://push2.eastmoney.com/";
+
     public int TimeoutSeconds { get; set; } = 8;
 }

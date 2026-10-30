@@ -24,14 +24,16 @@ export interface LedgerOverview {
   fund: AssetOverview
   providentFund: AssetOverview
   gold: AssetOverview
+  stock: AssetOverview
   month: MonthSummary
   fundNotHeld: boolean
   providentFundNotHeld: boolean
   goldNotHeld: boolean
+  stockNotHeld: boolean
   coverageComplete: boolean
 }
 
-export type AssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
+export type AssetKey = 'cash' | 'providentFund' | 'fund' | 'gold' | 'stock'
 
 export interface AssetChange {
   assetType: AssetKey
@@ -62,6 +64,7 @@ export interface UpdateAssetCoverageInput {
   fundNotHeld: boolean
   providentFundNotHeld: boolean
   goldNotHeld: boolean
+  stockNotHeld: boolean
 }
 
 export interface InitializeLedgerInput {

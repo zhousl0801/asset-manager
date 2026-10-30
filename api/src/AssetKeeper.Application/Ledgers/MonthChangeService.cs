@@ -95,7 +95,8 @@ public sealed class MonthChangeService
             BuildAssetChange("cash", beforeValues, nowValues),
             BuildAssetChange("providentFund", beforeValues, nowValues),
             BuildAssetChange("fund", beforeValues, nowValues),
-            BuildAssetChange("gold", beforeValues, nowValues)
+            BuildAssetChange("gold", beforeValues, nowValues),
+            BuildAssetChange("stock", beforeValues, nowValues)
         };
 
         if (!hasPreMonthBaseline)
@@ -143,7 +144,8 @@ public sealed class MonthChangeService
                 ? new AssetValue(true, 0m)
                 : new AssetValue(result.ProvidentBalance is not null, result.ProvidentBalance),
             ["fund"] = ReadFund(result, ledger),
-            ["gold"] = ReadGold(result, ledger)
+            ["gold"] = ReadGold(result, ledger),
+            ["stock"] = ReadStock(result, ledger)
         };
 
         return values;
@@ -181,6 +183,25 @@ public sealed class MonthChangeService
             : result.Gold.Value + result.Gold.PendingArrivalAmount);
     }
 
+    private static AssetValue ReadStock(ReplayResult result, AssetKeeper.Domain.Ledgers.Ledger ledger)
+    {
+        var recorded = result.Stocks
+            .Where(position => position.CoverageFrom is not null && position.CoverageFrom <= result.AsOfDate)
+            .ToList();
+
+        if (recorded.Count == 0)
+        {
+            return ledger.StockNotHeld ? new AssetValue(true, 0m) : new AssetValue(false, null);
+        }
+
+        if (recorded.Any(position => position.Value is null))
+        {
+            return new AssetValue(true, null);
+        }
+
+        return new AssetValue(true, recorded.Sum(position => position.Value ?? 0m));
+    }
+
     private static AssetChangeDto BuildAssetChange(
         string assetType,
         Dictionary<string, AssetValue> before,
@@ -214,8 +235,9 @@ public sealed class MonthChangeService
             .Where(fact => !fact.IsReversed
                 && fact.Date >= from
                 && fact.Date <= to
-                && fact.AssetType is AssetType.Fund or AssetType.Gold
-                && fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection)
+                && fact.AssetType is AssetType.Fund or AssetType.Gold or AssetType.Stock
+                && fact.Kind is AssetTransactionKind.FundCorrection or AssetTransactionKind.GoldCorrection
+                    or AssetTransactionKind.StockCorrection)
             .ToList();
         var difference = 0m;
 
@@ -236,9 +258,12 @@ public sealed class MonthChangeService
                         || (fact.Date == correction.Date && fact.Sequence < correction.Sequence))
                     .ToList();
                 var earlier = calculator.Calculate(data, earlierFacts, correction.Date, currentDate: correction.Date);
-                previousQuantity = correction.AssetType == AssetType.Fund
-                    ? earlier.Funds.FirstOrDefault(item => item.PositionId == correction.PositionId)?.Quantity ?? 0m
-                    : earlier.Gold?.Quantity ?? 0m;
+                previousQuantity = correction.AssetType switch
+                {
+                    AssetType.Fund => earlier.Funds.FirstOrDefault(item => item.PositionId == correction.PositionId)?.Quantity ?? 0m,
+                    AssetType.Stock => earlier.Stocks.FirstOrDefault(item => item.PositionId == correction.PositionId)?.Quantity ?? 0m,
+                    _ => earlier.Gold?.Quantity ?? 0m
+                };
             }
             catch (HistoryValidationException)
             {

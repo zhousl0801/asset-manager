@@ -15,6 +15,7 @@ internal sealed class PriceObservationConfiguration : IEntityTypeConfiguration<P
         builder.Property(price => price.LedgerId).HasColumnName("ledger_id");
         builder.Property(price => price.AssetType).HasColumnName("asset_type").HasConversion<string>().HasMaxLength(20);
         builder.Property(price => price.FundPositionId).HasColumnName("fund_position_id");
+        builder.Property(price => price.StockPositionId).HasColumnName("stock_position_id");
         builder.Property(price => price.SourceTransactionId).HasColumnName("source_transaction_id");
         builder.Property(price => price.Price).HasColumnName("price").HasPrecision(18, 4);
         builder.Property(price => price.EffectiveDate).HasColumnName("effective_date").HasColumnType("date");
@@ -23,8 +24,10 @@ internal sealed class PriceObservationConfiguration : IEntityTypeConfiguration<P
         builder.Property(price => price.RevisionOrder).HasColumnName("revision_order");
         builder.Property(price => price.IsSuperseded).HasColumnName("is_superseded");
         builder.HasIndex(price => new { price.LedgerId, price.AssetType, price.FundPositionId, price.EffectiveDate });
+        builder.HasIndex(price => new { price.LedgerId, price.AssetType, price.StockPositionId, price.EffectiveDate });
         builder.HasOne<Ledger>().WithMany().HasForeignKey(price => price.LedgerId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<FundPosition>().WithMany().HasForeignKey(price => price.FundPositionId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<StockPosition>().WithMany().HasForeignKey(price => price.StockPositionId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<AssetTransaction>().WithMany().HasForeignKey(price => price.SourceTransactionId).OnDelete(DeleteBehavior.Cascade);
     }
 }

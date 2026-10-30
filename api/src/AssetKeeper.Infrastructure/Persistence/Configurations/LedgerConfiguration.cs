@@ -61,5 +61,10 @@ internal sealed class LedgerConfiguration : IEntityTypeConfiguration<Ledger>
             .HasColumnName("gold_not_held")
             .HasDefaultValue(false)
             .IsRequired();
+
+        builder.Property(ledger => ledger.StockNotHeld)
+            .HasColumnName("stock_not_held")
+            .HasDefaultValue(false)
+            .IsRequired();
     }
 }

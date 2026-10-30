@@ -26,7 +26,7 @@ const recordedCount = computed(() => {
     return 0
   }
 
-  return [overview.value.cash, overview.value.providentFund, overview.value.fund, overview.value.gold]
+  return [overview.value.cash, overview.value.providentFund, overview.value.fund, overview.value.gold, overview.value.stock]
     .filter((asset) => asset.isConfigured && !asset.notHeld)
     .length
 })
@@ -41,7 +41,8 @@ const missingAssets = computed(() => {
   return [
     { label: '公积金', route: '/provident', configured: ledger.providentFund.isConfigured, notHeld: ledger.providentFund.notHeld },
     { label: '基金', route: '/funds', configured: ledger.fund.isConfigured, notHeld: ledger.fund.notHeld },
-    { label: '积存金', route: '/gold', configured: ledger.gold.isConfigured, notHeld: ledger.gold.notHeld }
+    { label: '积存金', route: '/gold', configured: ledger.gold.isConfigured, notHeld: ledger.gold.notHeld },
+    { label: '股票', route: '/stocks', configured: ledger.stock.isConfigured, notHeld: ledger.stock.notHeld }
   ].filter((asset) => !asset.configured && !asset.notHeld)
 })
 
@@ -86,6 +87,14 @@ const maintenanceRows = computed(() => {
       route: '/gold',
       action: ledger.gold.notHeld ? '恢复' : ledger.gold.isConfigured ? '核对' : '去录入',
       notHeld: ledger.gold.notHeld
+    },
+    {
+      key: 'stock' as const,
+      label: '股票',
+      note: ledger.stock.note ?? (ledger.stock.isConfigured ? '持仓与交易' : '尚未录入'),
+      route: '/stocks',
+      action: ledger.stock.notHeld ? '恢复' : ledger.stock.isConfigured ? '查看' : '去录入',
+      notHeld: ledger.stock.notHeld
     }
   ]
 })
@@ -142,7 +151,8 @@ async function toggleNotHeld(key: AssetKey, notHeld: boolean): Promise<void> {
     overview.value = await updateAssetCoverage({
       fundNotHeld: key === 'fund' ? notHeld : ledger.fundNotHeld,
       providentFundNotHeld: key === 'providentFund' ? notHeld : ledger.providentFundNotHeld,
-      goldNotHeld: key === 'gold' ? notHeld : ledger.goldNotHeld
+      goldNotHeld: key === 'gold' ? notHeld : ledger.goldNotHeld,
+      stockNotHeld: key === 'stock' ? notHeld : ledger.stockNotHeld
     })
     notice.value = notHeld ? '已标记为不持有。' : '已恢复为待录入。'
   } catch (error) {
@@ -205,7 +215,7 @@ function goHome(): void {
       />
 
       <p class="foot-note">
-        点击资产行查看明细；现金始终计入，公积金、基金和积存金可以标记为不持有。标记不持有不会删除已有记录。
+        点击资产行查看明细；现金始终计入，公积金、基金、积存金和股票可以标记为不持有。标记不持有不会删除已有记录。
       </p>
     </template>
 

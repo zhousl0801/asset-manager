@@ -58,6 +58,14 @@ public sealed class TrendService
                     : recordedFunds.Sum(item => item.Value ?? 0m);
             var hasGold = result.Gold?.CoverageFrom is DateOnly goldFrom && goldFrom <= date;
             var goldValue = hasGold ? result.Gold!.Value : null;
+            var recordedStocks = result.Stocks
+                .Where(item => item.CoverageFrom is not null && item.CoverageFrom <= date)
+                .ToList();
+            var stockValue = recordedStocks.Count == 0
+                ? (decimal?)null
+                : recordedStocks.Any(item => item.Value is null)
+                    ? null
+                    : recordedStocks.Sum(item => item.Value ?? 0m);
             var point = new AssetTrendPointDto(
                 date,
                 result.TotalAssets,
@@ -73,7 +81,9 @@ public sealed class TrendService
                 result.CashBalance is not null,
                 result.ProvidentBalance is not null,
                 recordedFunds.Count > 0,
-                hasGold);
+                hasGold,
+                stockValue,
+                recordedStocks.Count > 0);
             points.Add(point);
             anyIncomplete |= !point.IsComplete;
         }

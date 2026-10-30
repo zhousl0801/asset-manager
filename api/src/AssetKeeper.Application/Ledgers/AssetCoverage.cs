@@ -3,7 +3,8 @@ namespace AssetKeeper.Application.Ledgers;
 public sealed record UpdateAssetCoverageRequest(
     bool FundNotHeld,
     bool ProvidentFundNotHeld,
-    bool GoldNotHeld);
+    bool GoldNotHeld,
+    bool StockNotHeld);
 
 public enum AssetCoverageStatus
 {

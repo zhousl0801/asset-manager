@@ -18,7 +18,7 @@ public sealed class AssetCoverageTests
         await using var context = await CreateAsync(includeFund: true);
 
         var result = await context.Ledger.UpdateCoverageAsync(
-            new UpdateAssetCoverageRequest(false, true, true),
+            new UpdateAssetCoverageRequest(false, true, true, true),
             CancellationToken.None);
 
         Assert.Equal(AssetCoverageStatus.Updated, result.Status);
@@ -26,6 +26,7 @@ public sealed class AssetCoverageTests
         Assert.True(result.Overview.CoverageComplete);
         Assert.True(result.Overview.ProvidentFund.NotHeld);
         Assert.True(result.Overview.Gold.NotHeld);
+        Assert.True(result.Overview.Stock.NotHeld);
         Assert.False(result.Overview.Fund.NotHeld);
         Assert.Equal(0m, result.Overview.ProvidentFund.Amount);
         Assert.Equal(2000m, result.Overview.TotalAssets);
@@ -37,7 +38,7 @@ public sealed class AssetCoverageTests
         await using var context = await CreateAsync(includeFund: true);
 
         var result = await context.Ledger.UpdateCoverageAsync(
-            new UpdateAssetCoverageRequest(true, false, false),
+            new UpdateAssetCoverageRequest(true, false, false, false),
             CancellationToken.None);
 
         Assert.Equal(AssetCoverageStatus.Invalid, result.Status);

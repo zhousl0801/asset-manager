@@ -39,10 +39,10 @@ public sealed class QuoteRefreshSchedulerService : BackgroundService
             return;
         }
 
-        if (!options.IncludeFunds && !options.IncludeGold)
+        if (!options.IncludeFunds && !options.IncludeGold && !options.IncludeStocks)
         {
             _monitor.SetSchedule(true, intervalSeconds, null);
-            _logger.LogWarning("行情定时刷新已启用，但基金和积存金均被关闭，任务不会执行。");
+            _logger.LogWarning("行情定时刷新已启用，但基金、积存金和股票均被关闭，任务不会执行。");
             return;
         }
 
@@ -89,9 +89,13 @@ public sealed class QuoteRefreshSchedulerService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<QuoteRefreshService>();
             var options = _options.Value;
-            var refreshScope = options.IncludeFunds && options.IncludeGold
-                ? QuoteRefreshScope.All
-                : options.IncludeFunds ? QuoteRefreshScope.Funds : QuoteRefreshScope.Gold;
+            var enabled = new[]
+            {
+                options.IncludeFunds ? QuoteRefreshScope.Funds : (QuoteRefreshScope?)null,
+                options.IncludeGold ? QuoteRefreshScope.Gold : null,
+                options.IncludeStocks ? QuoteRefreshScope.Stocks : null
+            }.Where(scope => scope is not null).Select(scope => scope!.Value).ToList();
+            var refreshScope = enabled.Count == 1 ? enabled[0] : QuoteRefreshScope.All;
             var result = await service.RefreshAsync(
                 refreshScope,
                 "scheduled",
@@ -102,11 +106,13 @@ public sealed class QuoteRefreshSchedulerService : BackgroundService
             if (result is not null)
             {
                 _logger.LogInformation(
-                    "定时行情刷新结束：基金 {FundSucceeded}/{FundAttempted}，积存金 {GoldSucceeded}/{GoldAttempted}，更新 {Updated} 项。",
+                    "定时行情刷新结束：基金 {FundSucceeded}/{FundAttempted}，积存金 {GoldSucceeded}/{GoldAttempted}，股票 {StockSucceeded}/{StockAttempted}，更新 {Updated} 项。",
                     result.FundSucceeded,
                     result.FundAttempted,
                     result.GoldSucceeded,
                     result.GoldAttempted,
+                    result.StockSucceeded,
+                    result.StockAttempted,
                     result.Updated);
             }
         }

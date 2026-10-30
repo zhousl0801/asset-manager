@@ -4,8 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0B0C0F" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('asset-keeper.theme')
+          const mode = stored === 'light' || stored === 'dark' ? stored : 'system'
+          const dark = mode === 'dark'
+            || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.colorScheme = dark ? 'dark' : 'light'
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0B0C0F' : '#FFFFFF')
+        } catch {
+          // 主题脚本失败时保持 HTML 默认的浅色主题。
+        }
+      })()
+    </script>
     <meta name="description" content="资产管家：个人资产观察与日常记账。" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -13,13 +27,13 @@
     <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <title>资产管家</title>
-    <script type="module" crossorigin src="/assets/index-DwKmeNy7.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/reactivity.esm-bundler-MaKiBduG.js">
-    <link rel="modulepreload" crossorigin href="/assets/access-zrKqLrnu.js">
-    <link rel="modulepreload" crossorigin href="/assets/vue-router-Crmsifma.js">
-    <link rel="modulepreload" crossorigin href="/assets/AppIcon-CL9WHDfB.js">
-    <link rel="stylesheet" crossorigin href="/assets/AppIcon-Bjt7d8UL.css">
-    <link rel="stylesheet" crossorigin href="/assets/index-BIRdeYUr.css">
+    <script type="module" crossorigin src="/assets/index-BPEEk20h.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/reactivity.esm-bundler-2zCxAArA.js">
+    <link rel="modulepreload" crossorigin href="/assets/access-DPaTn7fl.js">
+    <link rel="modulepreload" crossorigin href="/assets/vue-router-DmxBHxFp.js">
+    <link rel="modulepreload" crossorigin href="/assets/AppIcon-COTA1E1_.js">
+    <link rel="stylesheet" crossorigin href="/assets/AppIcon-CteV4bqI.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-B5cLwrZj.css">
   <link rel="manifest" href="/manifest.webmanifest"></head>
   <body>
     <div id="app"></div>

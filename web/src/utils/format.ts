@@ -32,6 +32,23 @@ export function formatSignedMoney(value: Decimal.Value | null | undefined): stri
   return `${amount.isPositive() ? '+' : '−'}${formatMoney(amount.abs())}`
 }
 
+export type AmountTone = 'amount-gain' | 'amount-loss' | ''
+
+/** 金额方向统一为“红增绿减”；0 和缺失值不着色。 */
+export function amountTone(value: Decimal.Value | null | undefined): AmountTone {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  const amount = new Decimal(value)
+
+  if (!amount.isFinite() || amount.isZero()) {
+    return ''
+  }
+
+  return amount.isPositive() ? 'amount-gain' : 'amount-loss'
+}
+
 export function formatBusinessDate(value: string): string {
   const parts = value.split('-')
 

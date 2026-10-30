@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppIcon from './AppIcon.vue'
-import { formatMoney, formatSignedMoney, sumAmounts } from '../utils/format'
+import { amountTone, formatMoney, formatSignedMoney, sumAmounts } from '../utils/format'
 import type { AssetChange, AssetKey, LedgerOverview } from '../types/ledger'
 
 interface DistributionRow {
@@ -14,6 +14,7 @@ interface DistributionRow {
   configured: boolean
   notHeld: boolean
   note: string
+  noteAmount?: number | null
   change: AssetChange | null
   percent: number | null
 }
@@ -32,7 +33,7 @@ const emit = defineEmits<{ toggleNotHeld: [key: AssetKey, notHeld: boolean] }>()
 const rows = computed<DistributionRow[]>(() => {
   const ledger = props.overview
   const changeByKey = new Map((props.changes ?? []).map((item) => [item.assetType, item]))
-  const recordedTotal = sumAmounts([ledger.cash, ledger.providentFund, ledger.fund, ledger.gold]
+  const recordedTotal = sumAmounts([ledger.cash, ledger.providentFund, ledger.fund, ledger.gold, ledger.stock]
     .filter((asset) => asset.isConfigured && !asset.notHeld && asset.amount !== null)
     .map(asset => asset.amount ?? 0))
   const percentOf = (amount: number | null): number | null =>
@@ -47,9 +48,8 @@ const rows = computed<DistributionRow[]>(() => {
       amount: ledger.cash.amount,
       configured: true,
       notHeld: false,
-      note: ledger.month.hasRecords
-        ? `本月结余 ${formatSignedMoney(ledger.month.surplus)}`
-        : '统一账户余额',
+      note: ledger.month.hasRecords ? '本月结余' : '统一账户余额',
+      noteAmount: ledger.month.hasRecords ? ledger.month.surplus : null,
       change: changeByKey.get('cash') ?? null,
       percent: percentOf(ledger.cash.amount)
     },
@@ -88,6 +88,18 @@ const rows = computed<DistributionRow[]>(() => {
       note: ledger.gold.note ?? '尚未录入',
       change: changeByKey.get('gold') ?? null,
       percent: percentOf(ledger.gold.amount)
+    },
+    {
+      key: 'stock',
+      label: '股票',
+      icon: 'stock',
+      to: '/stocks',
+      amount: ledger.stock.amount,
+      configured: ledger.stock.isConfigured,
+      notHeld: ledger.stock.notHeld,
+      note: ledger.stock.note ?? '尚未录入',
+      change: changeByKey.get('stock') ?? null,
+      percent: percentOf(ledger.stock.amount)
     }
   ]
 })
@@ -147,6 +159,14 @@ function changeLabel(row: DistributionRow): string {
 
   return `较上月 ${formatSignedMoney(row.change.change)}`
 }
+
+function changeTone(row: DistributionRow): string {
+  if (row.notHeld || !row.configured || row.change?.isNew || props.comparable === false || row.change?.change == null) {
+    return ''
+  }
+
+  return amountTone(row.change.change)
+}
 </script>
 
 <template>
@@ -178,11 +198,13 @@ function changeLabel(row: DistributionRow): string {
               <i class="dot" :class="`type-${row.key}`" />
               <b>{{ row.label }}</b>
             </span>
-            <small>{{ row.note }}</small>
+            <small>
+              {{ row.note }}<template v-if="row.noteAmount != null">&nbsp;<span :class="amountTone(row.noteAmount)">{{ formatSignedMoney(row.noteAmount) }}</span></template>
+            </small>
           </span>
           <span class="asset-side">
             <b class="asset-amount">{{ amountLabel(row) }}</b>
-            <small>{{ changeLabel(row) }}</small>
+            <small><span :class="changeTone(row)">{{ changeLabel(row) }}</span></small>
           </span>
           <span class="asset-percent">
             <span>{{ row.percent === null ? '—' : `${row.percent.toFixed(1)}%` }}</span>
@@ -299,6 +321,10 @@ function changeLabel(row: DistributionRow): string {
 
 .type-gold {
   background: var(--color-chart-receivable);
+}
+
+.type-stock {
+  background: var(--color-chart-stock);
 }
 
 .asset-list {

@@ -2,7 +2,7 @@ import { addAmounts, formatMoney } from './format'
 import { chartFontSize, chartTheme } from './chartTheme'
 import type { AssetTrend, AssetTrendPoint, TrendRange } from '../types/trend'
 
-export type ScopedAssetKey = 'cash' | 'providentFund' | 'fund' | 'gold'
+export type ScopedAssetKey = 'cash' | 'providentFund' | 'fund' | 'gold' | 'stock'
 
 export interface ScopedTrendPoint {
   date: string
@@ -22,13 +22,14 @@ export interface ScopedTrend {
   latest: ScopedTrendPoint | null
 }
 
-const assetOrder: ScopedAssetKey[] = ['cash', 'providentFund', 'fund', 'gold']
+const assetOrder: ScopedAssetKey[] = ['cash', 'providentFund', 'fund', 'gold', 'stock']
 
 export const assetLabels: Record<ScopedAssetKey, string> = {
   cash: '现金',
   providentFund: '公积金',
   fund: '基金',
-  gold: '积存金'
+  gold: '积存金',
+  stock: '股票'
 }
 
 export function assetPresent(point: AssetTrendPoint, key: ScopedAssetKey): boolean {
@@ -41,6 +42,8 @@ export function assetPresent(point: AssetTrendPoint, key: ScopedAssetKey): boole
       return point.hasFunds
     case 'gold':
       return point.hasGold
+    case 'stock':
+      return point.hasStocks ?? false
   }
 }
 
@@ -54,6 +57,8 @@ export function assetValue(point: AssetTrendPoint, key: ScopedAssetKey): number 
       return point.fundValue === null ? null : addAmounts(point.fundValue, point.fundPending, point.fundPendingArrival)
     case 'gold':
       return point.goldValue === null ? null : addAmounts(point.goldValue, point.goldPendingArrival)
+    case 'stock':
+      return point.stockValue ?? null
   }
 }
 

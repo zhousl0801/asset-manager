@@ -11,5 +11,6 @@ public sealed record LedgerReplayData(
     IReadOnlyList<AssetTransaction> Transactions,
     IReadOnlyList<PriceObservation> Prices,
     IReadOnlyList<FundPosition> Positions,
+    IReadOnlyList<StockPosition> Stocks,
     ProvidentFundAccount? Provident,
     GoldHolding? Gold);

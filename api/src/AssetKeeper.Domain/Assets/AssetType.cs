@@ -4,5 +4,6 @@ public enum AssetType
 {
     ProvidentFund,
     Fund,
-    Gold
+    Gold,
+    Stock
 }

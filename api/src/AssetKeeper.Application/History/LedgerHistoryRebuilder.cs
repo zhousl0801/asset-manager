@@ -21,10 +21,11 @@ public sealed class LedgerHistoryRebuilder
         Guid? adjustmentId, CancellationToken cancellationToken)
     {
         var data = await _repository.GetReplayDataAsync(ledger.Id, cancellationToken);
-        var isQuote = transaction.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote;
+        var isQuote = transaction.Kind is AssetTransactionKind.FundQuote or AssetTransactionKind.GoldQuote
+            or AssetTransactionKind.StockQuote;
 
         if (!isQuote && data.Transactions.Any(item => !item.IsReversed && item.NeedsDateConfirmation
-            && item.AssetType == transaction.AssetType && item.FundPositionId == transaction.FundPositionId))
+            && item.AssetType == transaction.AssetType && item.PositionId == transaction.PositionId))
         {
             throw new HistoryValidationException("该资产的起始持仓日期待确认，请先在历史核对中确认原始记录日期。");
         }
@@ -41,7 +42,7 @@ public sealed class LedgerHistoryRebuilder
         if (transaction.Price is decimal price && transaction.PriceDate is DateOnly priceDate && !transaction.IsReversed)
         {
             await _repository.AddPriceObservationAsync(PriceObservation.Create(ledger.Id, transaction.AssetType,
-                transaction.FundPositionId, transaction.Id, price, priceDate, _dates.UtcNow, ledger.AllocateFactSequence(),
+                transaction.PositionId, transaction.Id, price, priceDate, _dates.UtcNow, ledger.AllocateFactSequence(),
                 transaction.QuoteSource), cancellationToken);
         }
     }
@@ -86,6 +87,13 @@ public sealed class LedgerHistoryRebuilder
             var position = data.Positions.Single(item => item.Id == fund.PositionId);
             position.RestoreProjection(fund.Quantity, fund.Cost, fund.RealizedProfit, fund.Price ?? position.NetValue,
                 fund.PriceDate ?? position.NetValueDate, _dates.UtcNow);
+        }
+
+        foreach (var stock in result.Stocks)
+        {
+            var position = data.Stocks.Single(item => item.Id == stock.PositionId);
+            position.RestoreProjection(stock.Quantity, stock.Cost, stock.RealizedProfit, stock.Price ?? position.Price,
+                stock.PriceDate ?? position.PriceDate, _dates.UtcNow);
         }
 
         if (data.Gold is not null && result.Gold is not null)

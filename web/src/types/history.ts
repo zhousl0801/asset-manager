@@ -50,6 +50,7 @@ export interface ReplayResult {
   providentBalance: number | null
   providentCoverageFrom: string | null
   funds: HoldingReplay[]
+  stocks: HoldingReplay[]
   gold: HoldingReplay | null
   adjustments: { id: string; previousBalance: number; difference: number }[]
   issues: string[]

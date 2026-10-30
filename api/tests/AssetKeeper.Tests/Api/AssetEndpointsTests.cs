@@ -7,6 +7,8 @@ using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Provident;
+using AssetKeeper.Application.Stocks;
+using AssetKeeper.Domain.Assets;
 using AssetKeeper.Tests.Ledgers;
 
 namespace AssetKeeper.Tests.Api;
@@ -24,10 +26,94 @@ public sealed class AssetEndpointsTests
         var provident = await client.GetAsync("/api/ledger/provident");
         var gold = await client.GetAsync("/api/ledger/gold");
         var funds = await client.GetAsync("/api/ledger/funds");
+        var stocks = await client.GetAsync("/api/ledger/stocks");
 
         Assert.Equal(HttpStatusCode.NotFound, provident.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, gold.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, funds.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, stocks.StatusCode);
+    }
+
+    [Fact]
+    public async Task StockFlow_CreatesPositionTradesAndUpdatesHomeOverview()
+    {
+        using var factory = new AssetKeeperApiFactory
+        {
+            Clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 21, 2, 0, 0, TimeSpan.Zero))
+        };
+        using var client = factory.CreateClient();
+        var today = new DateOnly(2026, 10, 21);
+        var date = today.ToString("yyyy-MM-dd");
+        await InitializeLedgerAsync(client, 100000m, today.AddDays(-10));
+
+        var positionResponse = await client.PostAsJsonAsync("/api/ledger/stocks/positions", new
+        {
+            market = "shanghai",
+            code = "600519",
+            name = "贵州茅台",
+            shares = 100m,
+            cost = 150000m,
+            price = 1600m,
+            priceDate = date,
+            holdingDate = date,
+            note = "已有持仓",
+            requestId = Guid.NewGuid()
+        });
+        var position = await positionResponse.Content.ReadFromJsonAsync<StockMutationResultDto>(JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, positionResponse.StatusCode);
+        Assert.NotNull(position);
+        Assert.Equal(100m, position.Position.Shares);
+
+        var buyResponse = await client.PostAsJsonAsync("/api/ledger/stocks/buys", new
+        {
+            market = "shanghai",
+            code = "600519",
+            name = "贵州茅台",
+            shares = 10m,
+            price = 1700m,
+            fee = 5m,
+            businessDate = date,
+            note = "加仓",
+            requestId = Guid.NewGuid()
+        });
+        var buy = await buyResponse.Content.ReadFromJsonAsync<StockMutationResultDto>(JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, buyResponse.StatusCode);
+        Assert.NotNull(buy);
+        Assert.Equal(110m, buy.Position.Shares);
+
+        var sellResponse = await client.PostAsJsonAsync("/api/ledger/stocks/sells", new
+        {
+            positionId = position.Position.Id,
+            shares = 10m,
+            price = 1750m,
+            fee = 5m,
+            businessDate = date,
+            note = "减仓",
+            requestId = Guid.NewGuid()
+        });
+        var sell = await sellResponse.Content.ReadFromJsonAsync<StockMutationResultDto>(JsonOptions);
+
+        Assert.Equal(HttpStatusCode.OK, sellResponse.StatusCode);
+        Assert.NotNull(sell);
+        Assert.Equal(100m, sell.Position.Shares);
+        Assert.True(sell.Position.RealizedProfit > 0m);
+
+        var stocks = await client.GetFromJsonAsync<StockOverviewDto>("/api/ledger/stocks", JsonOptions);
+        var home = await client.GetFromJsonAsync<LedgerOverviewDto>("/api/ledger", JsonOptions);
+
+        Assert.NotNull(stocks);
+        Assert.Equal(1, stocks.PositionCount);
+        Assert.Equal(175000m, stocks.TotalValue);
+        Assert.Equal(3, stocks.Activities.Count);
+        Assert.Contains(stocks.Activities, activity => activity.Type == StockActivityType.Buy);
+        Assert.Contains(stocks.Activities, activity => activity.Type == StockActivityType.Sell);
+
+        Assert.NotNull(home);
+        Assert.True(home.Stock.IsConfigured);
+        Assert.Equal(175000m, home.Stock.Amount);
+        Assert.Equal(home.Cash.Amount! + home.Stock.Amount!, home.TotalAssets);
     }
 
     [Fact]

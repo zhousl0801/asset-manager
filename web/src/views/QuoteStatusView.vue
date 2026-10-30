@@ -23,8 +23,14 @@ const schedulerText = computed(() => {
     return '定时刷新未启用'
   }
 
-  const minutes = Math.round(status.value.intervalSeconds / 60)
-  return minutes > 0 ? `每 ${minutes} 分钟自动刷新` : `每 ${status.value.intervalSeconds} 秒自动刷新`
+  const seconds = status.value.intervalSeconds
+
+  if (seconds > 0 && seconds % 3600 === 0) {
+    return `每 ${seconds / 3600} 小时自动刷新`
+  }
+
+  const minutes = Math.round(seconds / 60)
+  return minutes > 0 ? `每 ${minutes} 分钟自动刷新` : `每 ${seconds} 秒自动刷新`
 })
 
 onMounted(load)
@@ -54,8 +60,10 @@ async function refresh(scope: QuoteRefreshScope): Promise<void> {
 
   try {
     const run = await refreshQuotes(scope)
-    notice.value = run.fundFailed + run.goldFailed > 0
-      ? `刷新完成：成功 ${run.fundSucceeded + run.goldSucceeded} 项，失败 ${run.fundFailed + run.goldFailed} 项。`
+    const failed = run.fundFailed + run.goldFailed + run.stockFailed
+    const succeeded = run.fundSucceeded + run.goldSucceeded + run.stockSucceeded
+    notice.value = failed > 0
+      ? `刷新完成：成功 ${succeeded} 项，失败 ${failed} 项。`
       : `刷新完成：更新 ${run.updated} 项，耗时 ${run.durationMs} 毫秒。`
     await load()
   } catch (error) {
@@ -127,8 +135,12 @@ function priceText(item: QuoteStatusItem): string {
     return '—'
   }
 
-  return item.assetType === 'gold'
-    ? `¥${formatMoney(item.price)}/克`
+  if (item.assetType === 'gold') {
+    return `¥${formatMoney(item.price)}/克`
+  }
+
+  return item.assetType === 'stock'
+    ? `¥${formatMoney(item.price)}`
     : formatQuantity(item.price)
 }
 </script>
@@ -175,6 +187,14 @@ function priceText(item: QuoteStatusItem): string {
         >
           {{ refreshingScope === 'gold' ? '刷新中…' : '刷新积存金报价' }}
         </button>
+        <button
+          type="button"
+          class="refresh-secondary"
+          :disabled="refreshingScope !== null"
+          @click="refresh('stocks')"
+        >
+          {{ refreshingScope === 'stocks' ? '刷新中…' : '刷新股票' }}
+        </button>
       </div>
     </section>
 
@@ -197,6 +217,10 @@ function priceText(item: QuoteStatusItem): string {
           <div>
             <span>积存金</span>
             <b>{{ status.lastRun.goldSucceeded }}/{{ status.lastRun.goldAttempted }}</b>
+          </div>
+          <div>
+            <span>股票</span>
+            <b>{{ status.lastRun.stockSucceeded }}/{{ status.lastRun.stockAttempted }}</b>
           </div>
           <div>
             <span>更新</span>

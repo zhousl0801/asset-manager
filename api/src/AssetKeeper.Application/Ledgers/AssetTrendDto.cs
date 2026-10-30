@@ -15,7 +15,9 @@ public sealed record AssetTrendPointDto(
     bool HasCash = false,
     bool HasProvident = false,
     bool HasFunds = false,
-    bool HasGold = false);
+    bool HasGold = false,
+    decimal? StockValue = null,
+    bool HasStocks = false);
 
 public sealed record AssetTrendDto(
     TrendRange Range,

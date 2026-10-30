@@ -1,9 +1,9 @@
 /* 资产管家 · 瓷白 + 克莱因蓝 · v1.1 · 2026-10-28
- * 配套说明：UI配色规范.md。浅色为默认主题，并跟随系统 prefers-color-scheme 切换深色。
+ * 配套说明：UI配色规范.md。浅色为默认主题，通过 data-color-scheme="light|dark" 切换深色。
  * 应用在页面或根容器设置 data-theme="porcelain" 后生效。
  */
 [data-theme="porcelain"] {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* 原始色板：业务组件优先引用下方语义变量。 */
   --palette-white: #FFFFFF;
@@ -99,6 +99,7 @@
   --color-chart-investment: #6A4BC3;
   --color-chart-property: #187E88;
   --color-chart-receivable: #9B6B13;
+  --color-chart-stock: #C15A3A;
   --color-chart-other: #65748D;
   --color-chart-liability: #8D4F70;
   --color-chart-net-assets: var(--palette-blue-600);
@@ -123,11 +124,10 @@
 }
 
 
-@media (prefers-color-scheme: dark) {
-  [data-theme="porcelain"] {
-    color-scheme: dark;
+[data-theme="porcelain"][data-color-scheme="dark"] {
+  color-scheme: dark;
 
-    --color-brand: #6E8EFF;
+  --color-brand: #6E8EFF;
     --color-brand-hover: #8AA4FF;
     --color-brand-active: #5F7FF0;
     --color-brand-soft: #1E2A4D;
@@ -186,6 +186,7 @@
     --color-chart-investment: #B39DFF;
     --color-chart-property: #5EE0D0;
     --color-chart-receivable: #FFD166;
+    --color-chart-stock: #FF9D7A;
     --color-chart-other: #A1A1A6;
     --color-chart-liability: #E58BB4;
     --color-chart-net-assets: #9BB6FF;
@@ -206,5 +207,4 @@
     --color-skeleton-highlight: #3A3A3C;
     --color-text-selection-bg: #1E2A4D;
     --color-text-selection-fg: #F5F5F7;
-  }
 }

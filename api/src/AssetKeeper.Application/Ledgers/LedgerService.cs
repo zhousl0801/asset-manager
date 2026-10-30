@@ -37,6 +37,7 @@ public sealed class LedgerService
             ledger.Id,
             cancellationToken);
         var fundPositions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
+        var stockPositions = await _ledgerRepository.GetStockPositionsAsync(ledger.Id, cancellationToken);
         var goldHolding = await _ledgerRepository.GetGoldHoldingAsync(ledger.Id, cancellationToken);
         var providentTransactions = providentAccount is null
             ? Array.Empty<AssetTransaction>()
@@ -72,6 +73,7 @@ public sealed class LedgerService
         var fundIsNotHeld = ledger.FundNotHeld && fundPositions.Count == 0;
         var providentIsNotHeld = ledger.ProvidentFundNotHeld && providentAccount is null;
         var goldIsNotHeld = ledger.GoldNotHeld && (goldHolding is null || goldHolding.Grams == 0);
+        var stockIsNotHeld = ledger.StockNotHeld && stockPositions.Count == 0;
         var fund = fundIsNotHeld
             ? notHeld
             : fundPositions.Count == 0
@@ -105,6 +107,17 @@ public sealed class LedgerService
                     true,
                     goldHolding.Value + pendingGoldArrival,
                     goldNote);
+        var stockNote = stockPositions.Count == 0
+            ? string.Empty
+            : $"持有 {stockPositions.Count(position => position.Shares > 0m)} 只股票";
+        var stock = stockIsNotHeld
+            ? notHeld
+            : stockPositions.Count == 0
+                ? notConfigured
+                : new AssetOverviewDto(
+                    true,
+                    stockPositions.Sum(position => position.Value),
+                    stockNote);
 
         if (fundPositions.Count > 0 && snapshot.Funds.Any(item => item.Value is null))
         {
@@ -124,9 +137,19 @@ public sealed class LedgerService
             gold = gold with { Note = "当前缓存估值，持仓日期待确认" };
         }
 
+        if (stockPositions.Count > 0 && snapshot.Stocks.Any(item => item.Value is null))
+        {
+            stock = stock with { Amount = null, Note = "行情或起始依据不足，前往历史核对" };
+        }
+        else if (snapshot.Stocks.Any(item => !item.CanRebuild))
+        {
+            stock = stock with { Note = "当前缓存估值，持仓日期待确认" };
+        }
+
         var coverageComplete = (fundIsNotHeld || (fundPositions.Count > 0 && fund.Amount is not null))
             && (providentIsNotHeld || providentAccount is not null)
-            && (goldIsNotHeld || (goldHolding is not null && gold.Amount is not null));
+            && (goldIsNotHeld || (goldHolding is not null && gold.Amount is not null))
+            && (stockIsNotHeld || (stockPositions.Count > 0 && stock.Amount is not null));
 
         return Map(
             ledger,
@@ -137,9 +160,11 @@ public sealed class LedgerService
             fund,
             provident,
             gold,
+            stock,
             fundIsNotHeld,
             providentIsNotHeld,
             goldIsNotHeld,
+            stockIsNotHeld,
             coverageComplete)
             with
         { IsComplete = coverageComplete };
@@ -157,6 +182,7 @@ public sealed class LedgerService
         }
 
         var fundPositions = await _ledgerRepository.GetFundPositionsAsync(ledger.Id, cancellationToken);
+        var stockPositions = await _ledgerRepository.GetStockPositionsAsync(ledger.Id, cancellationToken);
         var providentAccount = await _ledgerRepository.GetProvidentFundAccountAsync(ledger.Id, cancellationToken);
         var goldHolding = await _ledgerRepository.GetGoldHoldingAsync(ledger.Id, cancellationToken);
         var errors = new List<string>();
@@ -176,6 +202,11 @@ public sealed class LedgerService
             errors.Add("积存金已有持仓，不能标记为不持有。");
         }
 
+        if (request.StockNotHeld && stockPositions.Count > 0)
+        {
+            errors.Add("股票已有持仓，不能标记为不持有。");
+        }
+
         if (errors.Count > 0)
         {
             return AssetCoverageResult.Invalid([.. errors]);
@@ -185,6 +216,7 @@ public sealed class LedgerService
         ledger.SetNotHeld(AssetType.Fund, request.FundNotHeld, now);
         ledger.SetNotHeld(AssetType.ProvidentFund, request.ProvidentFundNotHeld, now);
         ledger.SetNotHeld(AssetType.Gold, request.GoldNotHeld, now);
+        ledger.SetNotHeld(AssetType.Stock, request.StockNotHeld, now);
 
         try
         {
@@ -244,6 +276,8 @@ public sealed class LedgerService
             new AssetOverviewDto(false, null, "尚未录入"),
             new AssetOverviewDto(false, null, "尚未录入"),
             new AssetOverviewDto(false, null, "尚未录入"),
+            new AssetOverviewDto(false, null, "尚未录入"),
+            false,
             false,
             false,
             false,
@@ -293,16 +327,19 @@ public sealed class LedgerService
         AssetOverviewDto fund,
         AssetOverviewDto providentFund,
         AssetOverviewDto gold,
+        AssetOverviewDto stock,
         bool fundNotHeld,
         bool providentFundNotHeld,
         bool goldNotHeld,
+        bool stockNotHeld,
         bool coverageComplete)
     {
         var cash = new AssetOverviewDto(true, cashAccount.Balance, "统一余额");
         var totalAssets = cashAccount.Balance
             + (fund.Amount ?? 0m)
             + (providentFund.Amount ?? 0m)
-            + (gold.Amount ?? 0m);
+            + (gold.Amount ?? 0m)
+            + (stock.Amount ?? 0m);
 
         return new LedgerOverviewDto(
             ledger.Id,
@@ -315,10 +352,12 @@ public sealed class LedgerService
             fund,
             providentFund,
             gold,
+            stock,
             new MonthSummaryDto(income, expense, income - expense, hasRecords),
             FundNotHeld: fundNotHeld,
             ProvidentFundNotHeld: providentFundNotHeld,
             GoldNotHeld: goldNotHeld,
+            StockNotHeld: stockNotHeld,
             CoverageComplete: coverageComplete);
     }
 }

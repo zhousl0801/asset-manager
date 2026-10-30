@@ -14,6 +14,10 @@ public sealed class PriceObservation
 
     public Guid? FundPositionId { get; private set; }
 
+    public Guid? StockPositionId { get; private set; }
+
+    public Guid? PositionId => FundPositionId ?? StockPositionId;
+
     public Guid? SourceTransactionId { get; private set; }
 
     public decimal Price { get; private set; }
@@ -50,7 +54,8 @@ public sealed class PriceObservation
             Id = Guid.NewGuid(),
             LedgerId = ledgerId,
             AssetType = assetType,
-            FundPositionId = positionId,
+            FundPositionId = assetType == AssetType.Stock ? null : positionId,
+            StockPositionId = assetType == AssetType.Stock ? positionId : null,
             SourceTransactionId = transactionId,
             Price = price,
             EffectiveDate = effectiveDate,

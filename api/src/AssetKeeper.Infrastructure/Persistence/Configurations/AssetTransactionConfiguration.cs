@@ -48,6 +48,9 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
         builder.Property(transaction => transaction.FundPositionId)
             .HasColumnName("fund_position_id");
 
+        builder.Property(transaction => transaction.StockPositionId)
+            .HasColumnName("stock_position_id");
+
         builder.Property(transaction => transaction.LinkedTransactionId)
             .HasColumnName("linked_transaction_id");
 
@@ -113,6 +116,11 @@ internal sealed class AssetTransactionConfiguration : IEntityTypeConfiguration<A
         builder.HasOne<FundPosition>()
             .WithMany()
             .HasForeignKey(transaction => transaction.FundPositionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne<StockPosition>()
+            .WithMany()
+            .HasForeignKey(transaction => transaction.StockPositionId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

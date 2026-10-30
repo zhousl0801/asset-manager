@@ -30,6 +30,9 @@ const status = {
     goldAttempted: 1,
     goldSucceeded: 1,
     goldFailed: 0,
+    stockAttempted: 0,
+    stockSucceeded: 0,
+    stockFailed: 0,
     updated: 1,
     items: [],
     errors: ['失败基金：行情服务不可用']
@@ -61,7 +64,8 @@ beforeEach(() => {
     trigger: 'manual', scope: 'all',
     startedAt: '2026-10-23T02:10:00Z', completedAt: '2026-10-23T02:10:01Z',
     durationMs: 900, fundAttempted: 2, fundSucceeded: 2, fundFailed: 0,
-    goldAttempted: 0, goldSucceeded: 0, goldFailed: 0, updated: 0, items: [], errors: []
+    goldAttempted: 0, goldSucceeded: 0, goldFailed: 0,
+    stockAttempted: 0, stockSucceeded: 0, stockFailed: 0, updated: 0, items: [], errors: []
   })
 })
 

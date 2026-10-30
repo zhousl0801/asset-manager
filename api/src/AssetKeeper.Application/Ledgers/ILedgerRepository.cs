@@ -111,6 +111,14 @@ public interface ILedgerRepository
 
     Task AddGoldHoldingAsync(GoldHolding holding, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<StockPosition>> GetStockPositionsAsync(Guid ledgerId, CancellationToken cancellationToken);
+
+    Task<StockPosition?> GetStockPositionForUpdateAsync(Guid ledgerId, Guid positionId, CancellationToken cancellationToken);
+
+    Task<StockPosition?> FindStockPositionForUpdateAsync(Guid ledgerId, StockMarket market, string code, CancellationToken cancellationToken);
+
+    Task AddStockPositionAsync(StockPosition position, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<FundGroup>> GetFundGroupsAsync(
         Guid ledgerId,
         CancellationToken cancellationToken);

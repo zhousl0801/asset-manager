@@ -3,7 +3,8 @@ namespace AssetKeeper.Application.Backup;
 public sealed class BackupDocument
 {
     public const string CurrentFormat = "asset-keeper-backup";
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
+    public const int MinimumSupportedVersion = 1;
 
     public string Format { get; set; } = CurrentFormat;
 
@@ -28,6 +29,8 @@ public sealed class BackupDocument
     public List<BackupFundGroup> FundGroups { get; set; } = [];
 
     public List<BackupFundPosition> FundPositions { get; set; } = [];
+
+    public List<BackupStockPosition> StockPositions { get; set; } = [];
 
     public List<BackupAssetTransaction> AssetTransactions { get; set; } = [];
 
@@ -54,6 +57,7 @@ public sealed class BackupLedger
     public bool FundNotHeld { get; set; }
     public bool ProvidentFundNotHeld { get; set; }
     public bool GoldNotHeld { get; set; }
+    public bool StockNotHeld { get; set; }
 }
 
 public sealed class BackupCashAccount
@@ -179,6 +183,28 @@ public sealed class BackupFundPosition
     public int Version { get; set; }
 }
 
+public sealed class BackupStockPosition
+{
+    public Guid Id { get; set; }
+    public Guid LedgerId { get; set; }
+    public string Market { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Currency { get; set; } = "CNY";
+    public decimal Shares { get; set; }
+    public decimal Cost { get; set; }
+    public decimal Price { get; set; }
+    public DateOnly PriceDate { get; set; }
+    public decimal? PreviousClose { get; set; }
+    public DateOnly? PreviousCloseDate { get; set; }
+    public decimal RealizedProfit { get; set; }
+    public DateTimeOffset? LastQuoteAttemptAt { get; set; }
+    public string? LastQuoteSource { get; set; }
+    public string? LastQuoteError { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public int Version { get; set; }
+}
+
 public sealed class BackupAssetTransaction
 {
     public Guid Id { get; set; }
@@ -187,6 +213,7 @@ public sealed class BackupAssetTransaction
     public string AssetType { get; set; } = string.Empty;
     public string Kind { get; set; } = string.Empty;
     public Guid? FundPositionId { get; set; }
+    public Guid? StockPositionId { get; set; }
     public Guid? LinkedTransactionId { get; set; }
     public decimal? Quantity { get; set; }
     public decimal Amount { get; set; }
@@ -214,6 +241,7 @@ public sealed class BackupPriceObservation
     public Guid LedgerId { get; set; }
     public string AssetType { get; set; } = string.Empty;
     public Guid? FundPositionId { get; set; }
+    public Guid? StockPositionId { get; set; }
     public Guid? SourceTransactionId { get; set; }
     public decimal Price { get; set; }
     public DateOnly EffectiveDate { get; set; }

@@ -129,6 +129,10 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("request_id");
 
+                    b.Property<Guid?>("StockPositionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_position_id");
+
                     b.Property<string>("Subject")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -142,6 +146,8 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("FundPositionId");
+
+                    b.HasIndex("StockPositionId");
 
                     b.HasIndex("LedgerId", "BusinessDate");
 
@@ -417,13 +423,21 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_transaction_id");
 
+                    b.Property<Guid?>("StockPositionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stock_position_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("FundPositionId");
 
                     b.HasIndex("SourceTransactionId");
 
+                    b.HasIndex("StockPositionId");
+
                     b.HasIndex("LedgerId", "AssetType", "FundPositionId", "EffectiveDate");
+
+                    b.HasIndex("LedgerId", "AssetType", "StockPositionId", "EffectiveDate");
 
                     b.ToTable("price_observations", (string)null);
                 });
@@ -464,6 +478,108 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("provident_fund_accounts", (string)null);
+                });
+
+            modelBuilder.Entity("AssetKeeper.Domain.Assets.StockPosition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<decimal>("Cost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("cost");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset?>("LastQuoteAttemptAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("last_quote_attempt_at");
+
+                    b.Property<string>("LastQuoteError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("last_quote_error");
+
+                    b.Property<string>("LastQuoteSource")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("last_quote_source");
+
+                    b.Property<Guid>("LedgerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ledger_id");
+
+                    b.Property<string>("Market")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("market");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal?>("PreviousClose")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("previous_close");
+
+                    b.Property<DateOnly?>("PreviousCloseDate")
+                        .HasColumnType("date")
+                        .HasColumnName("previous_close_date");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("price");
+
+                    b.Property<DateOnly>("PriceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("price_date");
+
+                    b.Property<decimal>("RealizedProfit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("realized_profit");
+
+                    b.Property<decimal>("Shares")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("shares");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LedgerId");
+
+                    b.HasIndex("LedgerId", "Market", "Code")
+                        .IsUnique();
+
+                    b.ToTable("stock_positions", (string)null);
                 });
 
             modelBuilder.Entity("AssetKeeper.Domain.Cash.CashAccount", b =>
@@ -688,6 +804,12 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date")
                         .HasColumnName("start_date");
+
+                    b.Property<bool>("StockNotHeld")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("stock_not_held");
 
                     b.Property<string>("TimeZone")
                         .IsRequired()
@@ -1121,6 +1243,11 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AssetKeeper.Domain.Assets.StockPosition", null)
+                        .WithMany()
+                        .HasForeignKey("StockPositionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Ledger");
                 });
 
@@ -1181,6 +1308,11 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SourceTransactionId")
                         .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("AssetKeeper.Domain.Assets.StockPosition", null)
+                        .WithMany()
+                        .HasForeignKey("StockPositionId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("AssetKeeper.Domain.Assets.ProvidentFundAccount", b =>
@@ -1188,6 +1320,17 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                     b.HasOne("AssetKeeper.Domain.Ledgers.Ledger", "Ledger")
                         .WithOne()
                         .HasForeignKey("AssetKeeper.Domain.Assets.ProvidentFundAccount", "LedgerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ledger");
+                });
+
+            modelBuilder.Entity("AssetKeeper.Domain.Assets.StockPosition", b =>
+                {
+                    b.HasOne("AssetKeeper.Domain.Ledgers.Ledger", "Ledger")
+                        .WithMany()
+                        .HasForeignKey("LedgerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

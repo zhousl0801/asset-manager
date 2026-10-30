@@ -1,5 +1,6 @@
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Gold;
+using AssetKeeper.Application.Stocks;
 using AssetKeeper.Application.Ledgers;
 using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
@@ -151,6 +152,16 @@ public sealed class BatchQuoteRefreshTests
         Assert.Contains(status.Items, item => item.AssetType == "gold" && item.Status == "notRecorded");
     }
 
+    [Fact]
+    public async Task Status_UsesOneHourRefreshIntervalByDefault()
+    {
+        var context = await CreateAsync(null);
+
+        var status = await context.Quotes.GetStatusAsync(CancellationToken.None);
+
+        Assert.Equal(3600, status.IntervalSeconds);
+    }
+
     private static CreateFundPositionRequest PositionRequest(string? code, string name = "纳指基金")
     {
         return new CreateFundPositionRequest(
@@ -178,12 +189,14 @@ public sealed class BatchQuoteRefreshTests
             CancellationToken.None);
         var funds = new FundService(repository, dates, fundProvider);
         var gold = new GoldService(repository, dates, goldProvider);
+        var stocks = new StockService(repository, dates);
         var monitor = new QuoteRefreshMonitor();
         var options = Options.Create(new QuoteRefreshOptions { RetryDelaySeconds = 0 });
         var quotes = new QuoteRefreshService(
             repository,
             funds,
             gold,
+            stocks,
             dates,
             monitor,
             options,
