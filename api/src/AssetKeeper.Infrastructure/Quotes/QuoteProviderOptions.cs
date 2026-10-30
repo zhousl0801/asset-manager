@@ -4,6 +4,9 @@ public sealed class QuoteProviderOptions
 {
     public string FundBaseUrl { get; set; } = "https://api.fund.eastmoney.com/";
 
+    // 移动端净值接口在另一个集群，字段名与主站一致（FSRQ / DWJZ），作为基金净值的降级源。
+    public string FundFallbackBaseUrl { get; set; } = "https://fundmobapi.eastmoney.com/";
+
     public string GoldBaseUrl { get; set; } = "https://mybank.icbc.com.cn/";
 
     public string StockBaseUrl { get; set; } = "https://push2.eastmoney.com/";

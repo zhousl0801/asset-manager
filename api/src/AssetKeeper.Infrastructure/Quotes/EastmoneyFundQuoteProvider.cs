@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using AssetKeeper.Application.Quotes;
+using Microsoft.Extensions.Options;
 
 namespace AssetKeeper.Infrastructure.Quotes;
 
@@ -8,11 +9,15 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
 {
     public const string SourceName = "eastmoney";
 
-    private readonly HttpClient _httpClient;
+    private const string MobileHistoryPath = "FundMNewApi/FundMNHisNetList";
 
-    public EastmoneyFundQuoteProvider(HttpClient httpClient)
+    private readonly HttpClient _httpClient;
+    private readonly QuoteProviderOptions _options;
+
+    public EastmoneyFundQuoteProvider(HttpClient httpClient, IOptions<QuoteProviderOptions> options)
     {
         _httpClient = httpClient;
+        _options = options.Value;
     }
 
     public async Task<ExternalFundQuote> GetLatestAsync(string code, CancellationToken cancellationToken)
@@ -103,10 +108,44 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
             throw new QuoteUnavailableException("基金代码为空，无法获取净值。");
         }
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"f10/lsjz?fundCode={Uri.EscapeDataString(code.Trim())}&pageIndex=1&pageSize={(date is null ? 1 : 100)}");
-        request.Headers.Referrer = new Uri("https://fundf10.eastmoney.com/");
+        var trimmedCode = code.Trim();
+        var pageSize = date is null ? 1 : 100;
+        Exception? lastError = null;
+
+        // 一个站点不通就换下一个：主站与移动端接口在不同集群，字段一致。
+        foreach (var endpoint in QuoteEndpoints(trimmedCode, pageSize))
+        {
+            try
+            {
+                return await RequestQuoteAsync(endpoint, trimmedCode, date, cancellationToken);
+            }
+            catch (Exception exception) when (exception is QuoteUnavailableException or HttpRequestException or TaskCanceledException)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
+                lastError = exception;
+            }
+        }
+
+        if (lastError is QuoteUnavailableException unavailable)
+        {
+            throw new QuoteUnavailableException(unavailable.Message, unavailable);
+        }
+
+        throw new QuoteUnavailableException("基金净值服务暂时无法连接，请稍后重试。", lastError);
+    }
+
+    private async Task<ExternalFundQuote> RequestQuoteAsync(
+        (FundQuoteFormat Format, string Url, Uri Referrer) endpoint,
+        string code,
+        DateOnly? date,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint.Url);
+        request.Headers.Referrer = endpoint.Referrer;
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
 
@@ -120,10 +159,7 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
-            if (!document.RootElement.TryGetProperty("Data", out var data)
-                || !data.TryGetProperty("LSJZList", out var list)
-                || list.ValueKind != JsonValueKind.Array
-                || list.GetArrayLength() == 0)
+            if (!TryReadHistoryList(document.RootElement, endpoint.Format, out var list) || list.GetArrayLength() == 0)
             {
                 throw new QuoteUnavailableException("基金净值服务未返回有效记录。");
             }
@@ -149,7 +185,7 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
                 throw new QuoteUnavailableException("基金净值服务返回的日期或净值无效。");
             }
 
-            return new ExternalFundQuote(code.Trim(), netValue, effectiveDate, SourceName, DateTimeOffset.UtcNow);
+            return new ExternalFundQuote(code, netValue, effectiveDate, SourceName, DateTimeOffset.UtcNow);
         }
         catch (QuoteUnavailableException)
         {
@@ -159,5 +195,47 @@ public sealed class EastmoneyFundQuoteProvider : IFundQuoteProvider
         {
             throw new QuoteUnavailableException("基金净值服务返回的数据无法解析。", exception);
         }
+    }
+
+    private IEnumerable<(FundQuoteFormat Format, string Url, Uri Referrer)> QuoteEndpoints(string code, int pageSize)
+    {
+        var escaped = Uri.EscapeDataString(code);
+
+        yield return (
+            FundQuoteFormat.HistoryJson,
+            $"{Normalize(_options.FundBaseUrl)}f10/lsjz?fundCode={escaped}&pageIndex=1&pageSize={pageSize}",
+            new Uri("https://fundf10.eastmoney.com/"));
+
+        yield return (
+            FundQuoteFormat.MobileHistoryJson,
+            $"{Normalize(_options.FundFallbackBaseUrl)}{MobileHistoryPath}?FCODE={escaped}&pageIndex=1&pageSize={pageSize}"
+            + "&plat=Android&appType=ttjj&product=EFund&Version=1&deviceid=1",
+            new Uri("https://fund.eastmoney.com/"));
+    }
+
+    private static string Normalize(string baseUrl)
+    {
+        return baseUrl.EndsWith('/') ? baseUrl : $"{baseUrl}/";
+    }
+
+    private static bool TryReadHistoryList(JsonElement root, FundQuoteFormat format, out JsonElement list)
+    {
+        list = default;
+
+        if (format == FundQuoteFormat.HistoryJson)
+        {
+            return root.TryGetProperty("Data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("LSJZList", out list)
+                && list.ValueKind == JsonValueKind.Array;
+        }
+
+        return root.TryGetProperty("Datas", out list) && list.ValueKind == JsonValueKind.Array;
+    }
+
+    private enum FundQuoteFormat
+    {
+        HistoryJson,
+        MobileHistoryJson
     }
 }

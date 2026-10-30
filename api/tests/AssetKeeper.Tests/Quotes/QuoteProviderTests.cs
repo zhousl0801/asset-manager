@@ -15,7 +15,9 @@ public sealed class QuoteProviderTests
         const string payload = """
             {"Data":{"LSJZList":[{"FSRQ":"2026-10-21","DWJZ":"1.0640"}]},"ErrCode":0}
             """;
-        var provider = new EastmoneyFundQuoteProvider(CreateClient(_ => JsonResponse(payload)));
+        var provider = new EastmoneyFundQuoteProvider(
+            CreateClient(_ => JsonResponse(payload)),
+            Options.Create(new QuoteProviderOptions { FundFallbackBaseUrl = "https://fund-fallback.test/" }));
 
         var quote = await provider.GetLatestAsync("000001", CancellationToken.None);
 
@@ -29,7 +31,9 @@ public sealed class QuoteProviderTests
     public async Task EastmoneyFundQuote_WithEmptyList_ThrowsUnavailable()
     {
         const string payload = """{"Data":{"LSJZList":[]},"ErrCode":0}""";
-        var provider = new EastmoneyFundQuoteProvider(CreateClient(_ => JsonResponse(payload)));
+        var provider = new EastmoneyFundQuoteProvider(
+            CreateClient(_ => JsonResponse(payload)),
+            Options.Create(new QuoteProviderOptions { FundFallbackBaseUrl = "https://fund-fallback.test/" }));
 
         await Assert.ThrowsAsync<QuoteUnavailableException>(() => provider.GetLatestAsync("000001", CancellationToken.None));
     }
@@ -116,6 +120,89 @@ public sealed class QuoteProviderTests
         Assert.Equal("创业板ETF易方达", quote.Name);
         Assert.Equal(new DateOnly(2026, 10, 30), quote.PriceDate);
         Assert.Equal("eastmoney", quote.Source);
+    }
+
+    [Fact]
+    public async Task EastmoneyFundQuote_FallsBackToMobileSourceWhenPrimaryFails()
+    {
+        const string mobilePayload = """
+            {"Datas":[{"FSRQ":"2026-10-29","DWJZ":"0.9680"},{"FSRQ":"2026-10-28","DWJZ":"1.0150"}],"ErrCode":0,"Success":true}
+            """;
+        var hosts = new List<string>();
+        var client = new HttpClient(new StubHandler(request =>
+        {
+            hosts.Add(request.RequestUri!.Host);
+
+            if (request.RequestUri.Host == "fund-primary.test")
+            {
+                throw new HttpRequestException("An error occurred while sending the request.");
+            }
+
+            return JsonResponse(mobilePayload);
+        }))
+        {
+            BaseAddress = new Uri("https://unused.test/")
+        };
+        var provider = new EastmoneyFundQuoteProvider(
+            client,
+            Options.Create(new QuoteProviderOptions
+            {
+                FundBaseUrl = "https://fund-primary.test/",
+                FundFallbackBaseUrl = "https://fund-fallback.test/"
+            }));
+
+        var quote = await provider.GetLatestAsync("000001", CancellationToken.None);
+
+        Assert.Equal(0.9680m, quote.NetValue);
+        Assert.Equal(new DateOnly(2026, 10, 29), quote.EffectiveDate);
+        Assert.Equal(["fund-primary.test", "fund-fallback.test"], hosts);
+    }
+
+    [Fact]
+    public async Task EastmoneyFundQuote_FallsBackToMobileSourceForSpecificDate()
+    {
+        const string mobilePayload = """
+            {"Datas":[{"FSRQ":"2026-10-29","DWJZ":"0.9680"},{"FSRQ":"2026-10-28","DWJZ":"1.0150"}],"ErrCode":0,"Success":true}
+            """;
+        var client = new HttpClient(new StubHandler(request => request.RequestUri!.Host == "fund-primary.test"
+            ? throw new HttpRequestException("boom")
+            : JsonResponse(mobilePayload)))
+        {
+            BaseAddress = new Uri("https://unused.test/")
+        };
+        var provider = new EastmoneyFundQuoteProvider(
+            client,
+            Options.Create(new QuoteProviderOptions
+            {
+                FundBaseUrl = "https://fund-primary.test/",
+                FundFallbackBaseUrl = "https://fund-fallback.test/"
+            }));
+
+        var quote = await provider.GetForDateAsync("000001", new DateOnly(2026, 10, 28), CancellationToken.None);
+
+        Assert.Equal(1.0150m, quote.NetValue);
+        Assert.Equal(new DateOnly(2026, 10, 28), quote.EffectiveDate);
+    }
+
+    [Fact]
+    public async Task EastmoneyFundQuote_WhenAllSourcesFail_ThrowsUnavailable()
+    {
+        var client = new HttpClient(new StubHandler(_ => throw new HttpRequestException("boom")))
+        {
+            BaseAddress = new Uri("https://unused.test/")
+        };
+        var provider = new EastmoneyFundQuoteProvider(
+            client,
+            Options.Create(new QuoteProviderOptions
+            {
+                FundBaseUrl = "https://fund-primary.test/",
+                FundFallbackBaseUrl = "https://fund-fallback.test/"
+            }));
+
+        var exception = await Assert.ThrowsAsync<QuoteUnavailableException>(
+            () => provider.GetLatestAsync("000001", CancellationToken.None));
+
+        Assert.Equal("基金净值服务暂时无法连接，请稍后重试。", exception.Message);
     }
 
     [Fact]
