@@ -110,6 +110,20 @@ public sealed class FundsController : AssetOperationsControllerBase
         return ToActionResult(result);
     }
 
+    [HttpPost("positions/{positionId:guid}/prior-realized-profit")]
+    [ProducesResponseType<FundPositionDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SetPriorRealizedProfit(
+        Guid positionId,
+        [FromBody] SetPriorRealizedProfitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fundService.SetPriorRealizedProfitAsync(positionId, request, cancellationToken);
+        return ToActionResult(result);
+    }
+
     [HttpPost("positions/correct-shares")]
     public async Task<IActionResult> CorrectShares(
         [FromBody] CorrectFundSharesRequest request,

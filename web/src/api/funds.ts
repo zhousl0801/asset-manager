@@ -9,6 +9,7 @@ import type {
   FundQuoteRefreshResult,
   FundSellArrivalInput,
   FundSearchResult,
+  FundPosition,
   SellFundInput,
   CorrectFundSharesInput
 } from '../types/fund'
@@ -99,6 +100,19 @@ export function buyFund(input: BuyFundInput): Promise<FundMutationResult> {
     method: 'POST',
     body: JSON.stringify(input)
   })
+}
+
+export function setFundPriorRealizedProfit(
+  positionId: string,
+  input: { amount: number; note: string; requestId: string }
+): Promise<FundPosition> {
+  return apiRequest<FundPosition>(
+    `/api/ledger/funds/positions/${encodeURIComponent(positionId)}/prior-realized-profit`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input)
+    }
+  )
 }
 
 export function confirmFundBuy(transactionId: string, input: ConfirmFundBuyInput): Promise<FundMutationResult> {

@@ -16,7 +16,8 @@ import {
   fetchFundOverview,
   renameFundGroup,
   searchFunds,
-  sellFund
+  sellFund,
+  setFundPriorRealizedProfit
 } from '../api/funds'
 import { fetchPlanOverview } from '../api/plans'
 import { ApiError, getApiErrorMessage } from '../api/client'
@@ -37,6 +38,7 @@ import {
   formatSignedMoney,
   parseAmount,
   parseNonNegativeQuantity,
+  parseSignedAmount,
   parsePrice,
   parseQuantity,
   sumAmounts,
@@ -56,7 +58,7 @@ import type {
 } from '../types/fund'
 import type { AutoPlan } from '../types/plan'
 
-type SheetKind = 'opening' | 'buy' | 'buyConfirm' | 'shares' | 'sell' | 'sellConfirm' | 'sellArrival'
+type SheetKind = 'opening' | 'buy' | 'buyConfirm' | 'shares' | 'priorProfit' | 'sell' | 'sellConfirm' | 'sellArrival'
 type PortfolioView = 'positions' | 'returns' | 'activities' | 'plans'
 type GroupScope = 'all' | 'ungrouped' | string
 type FundMetricKey = 'daily' | 'value' | 'profit' | 'cumulative' | 'rate' | 'cost' | 'weight' | 'pending'
@@ -96,6 +98,7 @@ const formError = ref('')
 const confirmingSellId = ref<string | null>(null)
 const arrivingConfirmId = ref<string | null>(null)
 const confirmingBuyId = ref<string | null>(null)
+const priorProfitPositionId = ref<string | null>(null)
 const duplicatePrompt = ref<{ position: FundPosition; shares: number; cost: number } | null>(null)
 const activeGroup = ref<GroupScope>('all')
 const activeView = ref<PortfolioView>(normalizeView(route.params.view))
@@ -140,6 +143,7 @@ const form = reactive({
   confirmationDelayDays: '2',
   businessDate: today,
   tradeDate: today,
+  priorProfit: '',
   note: ''
 })
 
@@ -606,6 +610,8 @@ const sheetTitle = computed(() => {
       return '确认买入份额'
     case 'shares':
       return '调整基金份额'
+    case 'priorProfit':
+      return '建账前已实现收益'
     case 'sell':
       return '申请赎回基金'
     case 'sellConfirm':
@@ -626,6 +632,8 @@ const sheetSubtitle = computed(() => {
       return '到期自动确认，这里用于提前或更正'
     case 'shares':
       return '生成份额核对记录，保留原有流水'
+    case 'priorProfit':
+      return '按平台数字补录，只影响累计收益'
     case 'sell':
       return '份额冻结，仍在持仓中估值'
     case 'sellConfirm':
@@ -1222,6 +1230,7 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   form.note = ''
   form.businessDate = today
   form.tradeDate = today
+  form.priorProfit = ''
   form.shares = ''
   form.cost = ''
   form.amount = ''
@@ -1247,6 +1256,13 @@ function openSheet(kind: SheetKind, positionId?: string): void {
 
   form.positionId = positionId ?? overview.value?.positions[0]?.id ?? ''
   form.platform = ''
+
+  if (kind === 'priorProfit') {
+    priorProfitPositionId.value = form.positionId
+    const position = overview.value?.positions.find((item) => item.id === form.positionId)
+    form.priorProfit = String(position?.priorRealizedProfit ?? 0)
+    return
+  }
 
   const position = selectedPosition.value
   if (kind === 'shares' && position) {
@@ -1340,6 +1356,8 @@ async function submit(): Promise<void> {
       await submitBuyConfirm()
     } else if (sheet.value === 'shares') {
       await submitShareCorrection()
+    } else if (sheet.value === 'priorProfit') {
+      await submitPriorProfit()
     } else if (sheet.value === 'sell') {
       await submitSell()
     } else if (sheet.value === 'sellConfirm') {
@@ -1467,6 +1485,35 @@ async function updateDuplicatePosition(): Promise<void> {
 async function addDuplicatePosition(): Promise<void> {
   duplicatePrompt.value = null
   await submitOpening(true)
+}
+
+function openPriorProfitSheet(positionId: string): void {
+  openSheet('priorProfit', positionId)
+}
+
+async function submitPriorProfit(): Promise<void> {
+  const positionId = priorProfitPositionId.value
+  const amount = parseSignedAmount(form.priorProfit)
+
+  if (!positionId) {
+    formError.value = '请选择要补录的基金持仓。'
+    return
+  }
+
+  if (amount === null) {
+    formError.value = '请填写有效金额，可为负数，最多两位小数。'
+    return
+  }
+
+  isSaving.value = true
+  await setFundPriorRealizedProfit(positionId, {
+    amount,
+    note: form.note.trim(),
+    requestId: requestId.value
+  })
+  notice.value = `已记录建账前已实现收益 ${formatSignedMoney(amount)}。`
+  sheet.value = null
+  await loadOverview()
 }
 
 async function submitBuy(): Promise<void> {
@@ -2041,6 +2088,10 @@ function goBack(): void {
                     <div class="holding-copy">
                       <strong>{{ holding.platform || '未标平台' }}</strong>
                       <small>{{ formatQuantity(holding.shares) }} 份</small>
+                      <small class="prior-profit-line">
+                        建账前已实现 {{ formatSignedMoney(holding.priorRealizedProfit ?? 0) }}
+                        <button type="button" class="link-button" @click="openPriorProfitSheet(holding.positionId)">修改</button>
+                      </small>
                     </div>
                     <div class="holding-buttons">
                       <button type="button" @click="openSheet('buy', holding.positionId)">买入</button>
@@ -2468,6 +2519,21 @@ function goBack(): void {
             class="text-button danger-text"
             @click="cancelPending(selectedPendingBuy.transactionId)"
           >撤销这笔待确认</button>
+        </template>
+
+        <template v-else-if="sheet === 'priorProfit'">
+          <label class="form-field">
+            <span>建账前已实现收益（元）</span>
+            <input v-model="form.priorProfit" type="text" inputmode="decimal" placeholder="0.00" />
+            <small>
+              按平台上的「累计收益 − 持有收益」填写，可为负数。只影响累计收益，
+              不改持仓成本、份额和现金。
+            </small>
+          </label>
+          <label class="form-field">
+            <span>备注</span>
+            <input v-model="form.note" type="text" placeholder="例如：按支付宝 2026-10-30 的数据补录" />
+          </label>
         </template>
 
         <template v-else-if="sheet === 'shares'">
@@ -3202,6 +3268,22 @@ function goBack(): void {
   margin-top: 2px;
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
+}
+
+.prior-profit-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-brand);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .holding-buttons {

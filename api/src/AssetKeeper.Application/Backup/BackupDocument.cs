@@ -175,6 +175,7 @@ public sealed class BackupFundPosition
     public decimal NetValue { get; set; }
     public DateOnly NetValueDate { get; set; }
     public decimal RealizedProfit { get; set; }
+    public decimal PriorRealizedProfit { get; set; }
     public DateTimeOffset? LastQuoteAttemptAt { get; set; }
     public string? LastQuoteSource { get; set; }
     public string? LastQuoteError { get; set; }

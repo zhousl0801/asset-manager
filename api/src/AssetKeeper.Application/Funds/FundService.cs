@@ -151,7 +151,7 @@ public sealed class FundService
             positions.Sum(position => position.Value) + pendingAmount + pendingArrivalAmount,
             positions.Sum(position => position.Cost),
             positions.Sum(position => position.HoldingProfit),
-            positions.Sum(position => position.RealizedProfit),
+            positions.Sum(position => position.TotalRealizedProfit),
             ledger.CashAccount?.Balance ?? 0m,
             mappedPositions,
             activities,
@@ -275,7 +275,7 @@ public sealed class FundService
                             decimal.Round(classMembers.Sum(position => position.Cost), 2),
                             classValue,
                             decimal.Round(classMembers.Sum(position => position.HoldingProfit), 2),
-                            decimal.Round(classMembers.Sum(position => position.RealizedProfit), 2),
+                            decimal.Round(classMembers.Sum(position => position.TotalRealizedProfit), 2),
                             netValues.Count == 1 ? netValues[0] : null,
                             netValueDates.Count == 1 ? netValueDates[0] : null,
                             classMembers.Select(position => new FundPlatformHoldingDto(
@@ -290,11 +290,12 @@ public sealed class FundService
                                 position.NetValueDate,
                                 position.Value,
                                 position.HoldingProfit,
-                                position.RealizedProfit,
+                                position.TotalRealizedProfit,
                                 replayStates[position.Id].Value is not null,
                                 position.ConfirmationDelayDays,
                                 dailyProfits.GetValueOrDefault(position.Id).Profit,
-                                dailyProfits.GetValueOrDefault(position.Id).Rate)).ToList(),
+                                dailyProfits.GetValueOrDefault(position.Id).Rate,
+                                position.PriorRealizedProfit)).ToList(),
                             classGroup.Key,
                             classMembers[0].Code,
                             string.IsNullOrWhiteSpace(classMembers[0].Code) ? "按规范化基金名称和类别匹配" : "按基金代码和类别匹配",
@@ -322,7 +323,7 @@ public sealed class FundService
                     value,
                     decimal.Round(members.Sum(position => position.Cost), 2),
                     decimal.Round(members.Sum(position => position.HoldingProfit), 2),
-                    decimal.Round(members.Sum(position => position.RealizedProfit), 2),
+                    decimal.Round(members.Sum(position => position.TotalRealizedProfit), 2),
                     decimal.Round(pendingBuyAmount, 2),
                     decimal.Round(pendingArrivalAmount, 2),
                     decimal.Round(value + pendingBuyAmount + pendingArrivalAmount, 2),
@@ -425,7 +426,8 @@ public sealed class FundService
                 quote.NetValue,
                 quote.EffectiveDate,
                 now,
-                request.ConfirmationDelayDays);
+                request.ConfirmationDelayDays,
+                request.PriorRealizedProfit);
             var transaction = AssetTransaction.CreateFundOpening(
                 ledger.Id,
                 position.Id,
@@ -1430,6 +1432,54 @@ public sealed class FundService
         }
     }
 
+    public Task<AssetOperationResult<FundPositionDto>> SetPriorRealizedProfitAsync(
+        Guid positionId,
+        SetPriorRealizedProfitRequest request,
+        CancellationToken cancellationToken)
+    {
+        return new MutationExecutor(_ledgerRepository, _businessDateProvider).ExecuteAsync(
+            "fund.prior-profit.set",
+            request.RequestId,
+            new { PositionId = positionId, Request = request },
+            () => SetPriorRealizedProfitCoreAsync(positionId, request, cancellationToken),
+            result => result.Status is AssetOperationStatus.Success or AssetOperationStatus.Created,
+            result => result with { Status = AssetOperationStatus.Success },
+            AssetOperationResult<FundPositionDto>.Conflict,
+            message => AssetOperationResult<FundPositionDto>.Invalid(new[] { message }),
+            cancellationToken);
+    }
+
+    private async Task<AssetOperationResult<FundPositionDto>> SetPriorRealizedProfitCoreAsync(
+        Guid positionId,
+        SetPriorRealizedProfitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ledger = await _ledgerRepository.GetForUpdateAsync(cancellationToken);
+        if (ledger is null)
+        {
+            return AssetOperationResult<FundPositionDto>.NotFound("账本尚未初始化。");
+        }
+
+        var position = await _ledgerRepository.GetFundPositionForUpdateAsync(ledger.Id, positionId, cancellationToken);
+        if (position is null)
+        {
+            return AssetOperationResult<FundPositionDto>.NotFound("基金持仓不存在。");
+        }
+
+        try
+        {
+            position.SetPriorRealizedProfit(request.Amount, _businessDateProvider.UtcNow);
+            ledger.Touch(_businessDateProvider.UtcNow);
+            await _ledgerRepository.SaveChangesAsync(cancellationToken);
+        }
+        catch (ArgumentException exception)
+        {
+            return AssetOperationResult<FundPositionDto>.Invalid(new[] { exception.Message });
+        }
+
+        return AssetOperationResult<FundPositionDto>.Success(Map(position));
+    }
+
     private static string Shorten(string message)
     {
         return message.Length <= 300 ? message : message[..300];
@@ -1492,11 +1542,13 @@ public sealed class FundService
             position.NetValueDate,
             position.Value,
             position.HoldingProfit,
-            position.RealizedProfit,
+            // 已实现收益按「账本记录 + 建账前」合并，累计收益 = 持有收益 + 已实现收益。
+            position.TotalRealizedProfit,
             LastQuoteAttemptAt: position.LastQuoteAttemptAt,
             LastQuoteSource: position.LastQuoteSource,
             LastQuoteError: position.LastQuoteError,
-            ConfirmationDelayDays: position.ConfirmationDelayDays);
+            ConfirmationDelayDays: position.ConfirmationDelayDays,
+            PriorRealizedProfit: position.PriorRealizedProfit);
     }
 
     private static FundActivityDto Map(

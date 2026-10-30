@@ -65,6 +65,12 @@ internal sealed class FundPositionConfiguration : IEntityTypeConfiguration<FundP
             .HasPrecision(18, 2)
             .IsRequired();
 
+        builder.Property(position => position.PriorRealizedProfit)
+            .HasColumnName("prior_realized_profit")
+            .HasPrecision(18, 2)
+            .HasDefaultValue(0m)
+            .IsRequired();
+
         builder.Property(position => position.ConfirmationDelayDays)
             .HasColumnName("confirmation_delay_days")
             .HasDefaultValue(2)

@@ -40,6 +40,9 @@ public sealed class FundPosition
 
     public decimal RealizedProfit { get; private set; }
 
+    /// <summary>建账前已实现的累计收益（含分红、以往卖出的盈亏），由用户按平台数字录入，重放不会覆盖。</summary>
+    public decimal PriorRealizedProfit { get; private set; }
+
     public DateTimeOffset? LastQuoteAttemptAt { get; private set; }
 
     public string? LastQuoteSource { get; private set; }
@@ -59,6 +62,9 @@ public sealed class FundPosition
     public decimal Value => decimal.Round(Shares * NetValue, 2);
 
     public decimal HoldingProfit => decimal.Round(Value - Cost, 2);
+
+    /// <summary>已实现收益合计：账本记录 + 建账前，用于显示与「累计收益 = 持有 + 已实现」。</summary>
+    public decimal TotalRealizedProfit => RealizedProfit + PriorRealizedProfit;
 
     public string DisplayName => string.IsNullOrWhiteSpace(ShareClass) ? Name : $"{Name} {ShareClass}";
 
@@ -90,11 +96,33 @@ public sealed class FundPosition
         Version++;
     }
 
-    public void RecordQuoteSyncAttempt(DateTimeOffset now, string? source, string? error)
-    {
+    public void RecordQuoteSyncAttempt(DateTimeOffset now, string? source, string? error)    {
         LastQuoteAttemptAt = now;
         LastQuoteSource = Normalize(source);
         LastQuoteError = Normalize(error);
+        UpdatedAt = now;
+        Version++;
+    }
+
+    /// <summary>设置建账前已实现收益；正负皆可，只影响累计收益，不改持仓成本与份额。</summary>
+    public void SetPriorRealizedProfit(decimal amount, DateTimeOffset now)
+    {
+        if (decimal.Round(amount, 2) != amount)
+        {
+            throw new ArgumentException("金额最多保留两位小数。", nameof(amount));
+        }
+
+        if (Math.Abs(amount) > MaximumAmount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "金额超出允许范围。");
+        }
+
+        if (PriorRealizedProfit == amount)
+        {
+            return;
+        }
+
+        PriorRealizedProfit = amount;
         UpdatedAt = now;
         Version++;
     }
@@ -110,7 +138,8 @@ public sealed class FundPosition
         decimal netValue,
         DateOnly netValueDate,
         DateTimeOffset now,
-        int confirmationDelayDays = 2)
+        int confirmationDelayDays = 2,
+        decimal priorRealizedProfit = 0m)
     {
         if (ledgerId == Guid.Empty)
         {
@@ -149,6 +178,7 @@ public sealed class FundPosition
             NetValue = netValue,
             NetValueDate = netValueDate,
             ConfirmationDelayDays = confirmationDelayDays,
+            PriorRealizedProfit = priorRealizedProfit,
             UpdatedAt = now
         };
     }

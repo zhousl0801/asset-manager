@@ -270,6 +270,13 @@ namespace AssetKeeper.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("platform");
 
+                    b.Property<decimal>("PriorRealizedProfit")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("prior_realized_profit");
+
                     b.Property<decimal>("RealizedProfit")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")

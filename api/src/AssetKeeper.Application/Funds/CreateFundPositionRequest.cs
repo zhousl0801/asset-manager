@@ -16,4 +16,5 @@ public sealed record CreateFundPositionRequest(
     string? Note,
     Guid RequestId,
     DateOnly? HoldingDate = null,
-    int ConfirmationDelayDays = 2);
+    int ConfirmationDelayDays = 2,
+    decimal PriorRealizedProfit = 0m);

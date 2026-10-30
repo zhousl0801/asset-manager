@@ -430,6 +430,52 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task SetPriorRealizedProfitAsync_FeedsRealizedAndCumulativeWithoutTouchingCostOrCash()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+
+        var result = await context.Funds.SetPriorRealizedProfitAsync(
+            position.Id,
+            new SetPriorRealizedProfitRequest(2762.09m, "按平台数据补录", Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.True(result.Status is AssetOperationStatus.Success or AssetOperationStatus.Created);
+        Assert.NotNull(result.Result);
+        Assert.Equal(2762.09m, result.Result.PriorRealizedProfit);
+        Assert.Equal(2762.09m, result.Result.RealizedProfit);
+
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Equal(2762.09m, overview.TotalRealizedProfit);
+        Assert.Equal(2762.09m, overview.Funds.Single().RealizedProfit);
+        Assert.Equal(1000m, overview.Positions[0].Cost);
+        Assert.Equal(100m, overview.Positions[0].Shares);
+        Assert.Equal(10000m, overview.CashBalance);
+    }
+
+    [Fact]
+    public async Task SetPriorRealizedProfitAsync_AcceptsNegativeAndRejectsMoreThanTwoDecimals()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+
+        var negative = await context.Funds.SetPriorRealizedProfitAsync(
+            position.Id,
+            new SetPriorRealizedProfitRequest(-63.13m, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(-63.13m, negative.Result!.PriorRealizedProfit);
+
+        var invalid = await context.Funds.SetPriorRealizedProfitAsync(
+            position.Id,
+            new SetPriorRealizedProfitRequest(1.234m, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, invalid.Status);
+    }
+
+    [Fact]
     public async Task BuyAsync_WithExplicitTradeDate_UsesThatDayForConfirmation()
     {
         var context = await CreateContextAsync();

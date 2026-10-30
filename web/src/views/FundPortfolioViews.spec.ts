@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
   createPosition: vi.fn(),
   confirmBuy: vi.fn(),
-  correctShares: vi.fn()
+  correctShares: vi.fn(),
+  priorProfit: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: {}, path: '/funds' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -22,6 +23,7 @@ vi.mock('../api/funds', () => ({
   confirmFundBuy: mocks.confirmBuy,
   createFundPosition: mocks.createPosition,
   correctFundShares: mocks.correctShares,
+  setFundPriorRealizedProfit: mocks.priorProfit,
   sellFund: vi.fn(),
   confirmFundSell: vi.fn(),
   arriveFundSell: vi.fn(),
@@ -49,7 +51,8 @@ const positionA = {
   netValueDate: '2026-10-20',
   value: 1200,
   holdingProfit: 200,
-  realizedProfit: 0,
+  realizedProfit: 2762.09,
+  priorRealizedProfit: 2762.09,
   lastQuoteAttemptAt: null,
   lastQuoteSource: 'manual',
   lastQuoteError: null,
@@ -120,7 +123,8 @@ const fundA = {
       platforms: [{
         positionId: 'a', platform: '平台甲', name: '纳指基金', code: '000001', shareClass: 'A',
         shares: 100, cost: 1000, netValue: 12, netValueDate: '2026-10-20', value: 1200,
-        holdingProfit: 200, realizedProfit: 0, hasEffectiveQuote: true, dailyProfit: 16, dailyProfitRate: 1.35
+        holdingProfit: 200, realizedProfit: 2762.09, priorRealizedProfit: 2762.09,
+        hasEffectiveQuote: true, dailyProfit: 16, dailyProfitRate: 1.35
       }]
     },
     {
@@ -259,6 +263,33 @@ test('pending shortcut opens the transaction tab and expands pending items', asy
   expect(view.find('.view-tabs button[aria-selected="true"]').text()).toBe('交易')
   expect(view.findAll('.activity-row.is-pending')).toHaveLength(1)
   expect(view.find('.activity-row.is-pending').text()).toContain('待确认 · 10月23日自动确认')
+  view.unmount()
+})
+
+test('prior realized profit is shown per holding and can be edited', async () => {
+  mocks.priorProfit.mockResolvedValue({ ...positionA, priorRealizedProfit: -63.13, realizedProfit: -63.13 })
+
+  const view = mount(FundsView, { attachTo: document.body })
+  await flushPromises()
+  await view.get('.fund-card > header').trigger('click')
+  await flushPromises()
+
+  expect(view.find('.prior-profit-line').text()).toContain('建账前已实现 +2,762.09')
+
+  await view.get('.prior-profit-line button').trigger('click')
+  await flushPromises()
+
+  const field = [...document.querySelectorAll('.sheet label')]
+    .find((item) => item.querySelector('span')?.textContent === '建账前已实现收益（元）')!
+    .querySelector('input')!
+  field.value = '-63.13'
+  field.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.priorProfit).toHaveBeenCalledWith('a', expect.objectContaining({ amount: -63.13 }))
   view.unmount()
 })
 

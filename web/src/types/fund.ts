@@ -25,6 +25,7 @@ export interface FundPosition {
   value: number
   holdingProfit: number
   realizedProfit: number
+  priorRealizedProfit?: number
   lastQuoteAttemptAt: string | null
   lastQuoteSource: string | null
   lastQuoteError: string | null
@@ -68,6 +69,7 @@ export interface FundPlatformHolding {
   holdingProfit: number
   realizedProfit: number
   hasEffectiveQuote: boolean
+  priorRealizedProfit?: number
   confirmationDelayDays?: number
   dailyProfit: number
   dailyProfitRate: number | null

@@ -124,6 +124,19 @@ export function parseAmount(value: string): number | null {
   return toNumber(parseDecimal(value, 2))
 }
 
+// 带符号金额（如建账前已实现收益，可能为负）：允许前导负号，最多两位小数。
+export function parseSignedAmount(value: string): number | null {
+  const normalized = value.trim().replaceAll(',', '')
+  const negative = normalized.startsWith('-')
+  const amount = parseDecimal(negative ? normalized.slice(1) : normalized, 2)
+
+  if (amount === null) {
+    return null
+  }
+
+  return (negative ? amount.negated() : amount).toNumber()
+}
+
 export function parseQuantity(value: string): number | null {
   const quantity = parseDecimal(value, 4)
 

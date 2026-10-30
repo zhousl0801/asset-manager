@@ -22,4 +22,5 @@ public sealed record FundPositionDto(
     string? GroupName = null,
     int ConfirmationDelayDays = 2,
     decimal DailyProfit = 0m,
-    decimal? DailyProfitRate = null);
+    decimal? DailyProfitRate = null,
+    decimal PriorRealizedProfit = 0m);
