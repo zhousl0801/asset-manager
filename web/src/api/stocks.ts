@@ -4,6 +4,7 @@ import type {
   SellStockInput,
   StockMutationResult,
   StockOverview,
+  StockQuote,
   StockQuoteRefresh,
   StockQuoteRefreshBatch,
   StockSearchResult
@@ -16,6 +17,12 @@ export function fetchStockOverview(): Promise<StockOverview> {
 
 export function searchStocks(query: string): Promise<StockSearchResult[]> {
   return apiRequest<StockSearchResult[]>(`/api/ledger/stocks/search?query=${encodeURIComponent(query)}`)
+}
+
+export function fetchStockQuote(market: string, code: string): Promise<StockQuote> {
+  return apiRequest<StockQuote>(
+    `/api/ledger/stocks/quote?market=${encodeURIComponent(market)}&code=${encodeURIComponent(code)}`
+  )
 }
 
 export function buyStock(input: BuyStockInput): Promise<StockMutationResult> {

@@ -378,6 +378,40 @@ public sealed class StockServiceTests
         }
     }
 
+    [Fact]
+    public async Task GetQuoteAsync_ReturnsLatestPriceWithoutWritingAnything()
+    {
+        var context = await CreateContextAsync();
+        var service = context.WithQuotes(new ScriptedStockProvider
+        {
+            Price = 2.435m,
+            PriceDate = Today,
+            PreviousClose = 2.5m
+        }).Stocks;
+
+        var result = await service.GetQuoteAsync(StockMarket.Shenzhen, " 159915 ", CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal("159915", result.Result.Code);
+        Assert.Equal(2.435m, result.Result.Price);
+        Assert.Equal(Today, result.Result.PriceDate);
+        Assert.Equal(2.5m, result.Result.PreviousClose);
+        Assert.Empty(context.Repository.AssetTransactions);
+        Assert.Null(context.Repository.GoldHolding);
+    }
+
+    [Fact]
+    public async Task GetQuoteAsync_WithoutProvider_ReportsUnavailable()
+    {
+        var context = await CreateContextAsync();
+
+        var result = await context.Stocks.GetQuoteAsync(StockMarket.Shenzhen, "159915", CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Unavailable, result.Status);
+        Assert.Contains("未配置股票行情服务", result.Errors[0]);
+    }
+
     private sealed class ScriptedStockProvider : IStockQuoteProvider
     {
         public decimal Price { get; init; }

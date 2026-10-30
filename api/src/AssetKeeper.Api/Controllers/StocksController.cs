@@ -1,4 +1,5 @@
 using AssetKeeper.Application.Quotes;
+using AssetKeeper.Domain.Assets;
 using AssetKeeper.Application.Stocks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -55,6 +56,20 @@ public sealed class StocksController : AssetOperationsControllerBase
         {
             return Problem(statusCode: StatusCodes.Status502BadGateway, title: "股票搜索暂不可用", detail: "股票数据源请求超时，请稍后重试。");
         }
+    }
+
+    [HttpGet("quote")]
+    [ProducesResponseType<StockQuoteDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> Quote(
+        [FromQuery] StockMarket market,
+        [FromQuery] string? code,
+        CancellationToken cancellationToken)
+    {
+        var result = await _stockService.GetQuoteAsync(market, code ?? string.Empty, cancellationToken);
+
+        return ToActionResult(result);
     }
 
     [HttpPost("buys")]

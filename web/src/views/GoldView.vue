@@ -17,6 +17,7 @@ import {
   parseNonNegativeQuantity,
   parsePrice,
   parseQuantity,
+  parseUnitPrice,
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
@@ -104,7 +105,7 @@ const canSubmit = computed(() => {
     case 'sellArrival':
       return arrivingPendingId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
     case 'holding':
-      return parseNonNegativeQuantity(form.grams) !== null && parseAmount(form.costPrice) !== null
+      return parseNonNegativeQuantity(form.grams) !== null && parseUnitPrice(form.costPrice) !== null
     default:
       return false
   }
@@ -121,7 +122,7 @@ const sellProceeds = computed<number | null>(() => {
 })
 const holdingCostTotal = computed<number | null>(() => {
   const grams = parseNonNegativeQuantity(form.grams)
-  const costPrice = parseAmount(form.costPrice)
+  const costPrice = parseUnitPrice(form.costPrice)
 
   if (grams === null || costPrice === null || grams <= 0) {
     return null
@@ -328,7 +329,7 @@ async function submitSellArrival(): Promise<void> {
 
 async function submitHolding(): Promise<void> {
   const grams = parseNonNegativeQuantity(form.grams)
-  const costPrice = parseAmount(form.costPrice)
+  const costPrice = parseUnitPrice(form.costPrice)
 
   if (grams === null || costPrice === null) {
     formError.value = '请填写有效的克数和成本均价。'

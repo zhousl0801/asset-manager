@@ -120,6 +120,49 @@ public sealed class StockService
             .ToList();
     }
 
+    public async Task<AssetOperationResult<StockQuoteDto>> GetQuoteAsync(
+        StockMarket market,
+        string code,
+        CancellationToken cancellationToken)
+    {
+        if (_quoteProvider is null)
+        {
+            return AssetOperationResult<StockQuoteDto>.Unavailable("未配置股票行情服务。");
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return AssetOperationResult<StockQuoteDto>.Invalid(["请提供股票代码。"]);
+        }
+
+        try
+        {
+            var quote = await _quoteProvider.GetLatestAsync(market, NormalizeCode(code), cancellationToken);
+            var dateErrors = AssetValidation.ValidateValueDate(quote.PriceDate, _businessDateProvider.Today);
+
+            if (dateErrors.Count > 0 || quote.Price <= 0m)
+            {
+                return AssetOperationResult<StockQuoteDto>.Unavailable("行情服务返回的价格或行情日期无效。");
+            }
+
+            return AssetOperationResult<StockQuoteDto>.Success(new StockQuoteDto(
+                quote.Market,
+                quote.Code,
+                quote.Price,
+                quote.PriceDate,
+                quote.PreviousClose is > 0m ? quote.PreviousClose : null,
+                quote.Source));
+        }
+        catch (QuoteUnavailableException exception)
+        {
+            return AssetOperationResult<StockQuoteDto>.Unavailable(exception.Message);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            return AssetOperationResult<StockQuoteDto>.Unavailable("股票行情服务暂时无法连接，请稍后重试。");
+        }
+    }
+
     public Task<AssetOperationResult<StockMutationResultDto>> BuyAsync(
         BuyStockRequest request,
         CancellationToken cancellationToken)

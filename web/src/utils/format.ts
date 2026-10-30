@@ -122,6 +122,17 @@ export function parseQuantity(value: string): number | null {
   return quantity.toNumber()
 }
 
+// 单价（元 / 股、元 / 克）：允许 0 与最多 4 位小数，不受金额两位小数的限制。
+export function parseUnitPrice(value: string): number | null {
+  const price = parseDecimal(value, 4)
+
+  if (price === null || price.isNegative()) {
+    return null
+  }
+
+  return price.toNumber()
+}
+
 export function parseNonNegativeQuantity(value: string): number | null {
   const quantity = parseDecimal(value, 4)
 

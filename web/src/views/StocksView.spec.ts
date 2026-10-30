@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   sell: vi.fn(),
   holding: vi.fn(),
   refresh: vi.fn(),
-  refreshOne: vi.fn()
+  refreshOne: vi.fn(),
+  quote: vi.fn(),
+  ledger: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -23,7 +25,12 @@ vi.mock('../api/stocks', () => ({
   sellStock: mocks.sell,
   saveStockHolding: mocks.holding,
   refreshStockQuotes: mocks.refresh,
-  refreshStockQuote: mocks.refreshOne
+  refreshStockQuote: mocks.refreshOne,
+  fetchStockQuote: mocks.quote
+}))
+vi.mock('../api/ledger', () => ({
+  fetchLedger: mocks.ledger,
+  updateAssetCoverage: vi.fn()
 }))
 
 const position = {
@@ -86,6 +93,8 @@ const overview = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.ledger.mockResolvedValue({ startDate: today, fundNotHeld: false, providentFundNotHeld: false, goldNotHeld: false, stockNotHeld: false })
+  mocks.quote.mockResolvedValue({ market: 'shenzhen', code: '159915', price: 2.435, priceDate: today, previousClose: 2.5, source: 'eastmoney' })
   mocks.overview.mockResolvedValue(structuredClone(overview))
   mocks.refreshOne.mockResolvedValue({
     positionId: 'stock-1',
@@ -284,5 +293,81 @@ test('closed positions move into the folded section and stop counting as held', 
   expect(view.text()).toContain('已清仓 1 只')
   expect(view.find('.closed-block').text()).toContain('平安银行')
   expect(view.findAll('.market-group .position-row')).toHaveLength(1)
+  view.unmount()
+})
+
+test('holding sheet takes cost per share and picks up the latest quote automatically', async () => {
+  mocks.search.mockResolvedValue([
+    { market: 'shenzhen', code: '159915', name: '创业板ETF易方达', currency: 'CNY', price: null, priceDate: null }
+  ])
+  mocks.holding.mockResolvedValue({
+    position: {
+      ...position,
+      id: 'stock-3',
+      market: 'shenzhen',
+      code: '159915',
+      name: '创业板ETF易方达',
+      shares: 10000,
+      cost: 27720,
+      averageCost: 2.772,
+      price: 2.435
+    },
+    cashBalance: 9000,
+    activity: { ...overview.activities[0], id: 'a5', positionId: 'stock-3', positionName: '创业板ETF易方达' }
+  })
+  mocks.overview.mockResolvedValue({
+    ...structuredClone(overview),
+    isConfigured: false,
+    positionCount: 0,
+    totalCost: 0,
+    totalValue: 0,
+    todayProfit: null,
+    holdingProfit: 0,
+    positions: [],
+    activities: []
+  })
+  const view = mount(StocksView, { attachTo: document.body })
+  await flushPromises()
+
+  await view.findAll('button').find((button) => button.text() === '录入已有持仓')!.trigger('click')
+  await flushPromises()
+
+  const searchInput = document.querySelector<HTMLInputElement>('.search-row input')!
+  searchInput.value = '159915'
+  searchInput.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+  document.querySelector<HTMLButtonElement>('.search-button')!.click()
+  await flushPromises()
+  document.querySelector<HTMLButtonElement>('.search-result')!.click()
+  await flushPromises()
+
+  expect(mocks.quote).toHaveBeenCalledWith('shenzhen', '159915')
+  const sheetText = () => document.querySelector('.sheet')!.textContent ?? ''
+  expect(sheetText()).toContain('现价')
+  expect(sheetText()).toContain('2.44')
+  expect(sheetText()).not.toContain('行情日期')
+  expect(sheetText()).toContain('成本均价（元 / 股）')
+  expect(sheetText()).toContain('起始持仓是当天快照')
+
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
+  expect(inputs.filter((input) => input.type === 'date')).toHaveLength(1)
+  inputs[0]!.value = '10000'
+  inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+  inputs[1]!.value = '2.772'
+  inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+
+  expect(sheetText()).toContain('持仓成本合计 ¥27,720.00')
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.holding.mock.calls[0]![0]).toMatchObject({
+    market: 'shenzhen',
+    code: '159915',
+    shares: 10000,
+    cost: 27720,
+    price: 2.435
+  })
   view.unmount()
 })

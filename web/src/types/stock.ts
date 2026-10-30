@@ -75,6 +75,15 @@ export interface StockMutationResult {
   activity: StockActivity
 }
 
+export interface StockQuote {
+  market: StockMarket
+  code: string
+  price: number
+  priceDate: string
+  previousClose: number | null
+  source: string
+}
+
 export interface StockQuoteRefresh {
   positionId: string
   name: string

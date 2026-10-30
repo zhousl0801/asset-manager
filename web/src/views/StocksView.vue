@@ -3,7 +3,7 @@ import Decimal from 'decimal.js'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, getApiErrorMessage } from '../api/client'
-import { buyStock, fetchStockOverview, refreshStockQuote, refreshStockQuotes, saveStockHolding, searchStocks, sellStock } from '../api/stocks'
+import { buyStock, fetchStockOverview, fetchStockQuote, refreshStockQuote, refreshStockQuotes, saveStockHolding, searchStocks, sellStock } from '../api/stocks'
 import { fetchLedger, updateAssetCoverage } from '../api/ledger'
 import AppNav from '../components/AppNav.vue'
 import BackButton from '../components/BackButton.vue'
@@ -14,10 +14,10 @@ import {
   formatMoney,
   formatQuantity,
   formatSignedMoney,
-  parseAmount,
   parseNonNegativeQuantity,
   parsePrice,
   parseQuantity,
+  parseUnitPrice,
   todayInBusinessTimeZone
 } from '../utils/format'
 import { createRequestId } from '../utils/request'
@@ -47,6 +47,9 @@ const searching = ref(false)
 const searched = ref(false)
 const formError = ref('')
 const isSaving = ref(false)
+const quoteLoading = ref(false)
+const quoteError = ref('')
+const ledgerStartDate = ref<string | null>(null)
 const requestId = ref(createRequestId())
 const expectedVersion = ref(0)
 const form = reactive({
@@ -225,6 +228,18 @@ const sheetSubtitle = computed(() => {
   }
 })
 
+const holdingCostTotal = computed<number | null>(() => {
+  const shares = parseNonNegativeQuantity(form.shares)
+  const costPrice = parseUnitPrice(form.cost)
+
+  if (shares === null || costPrice === null || shares <= 0) {
+    return null
+  }
+
+  return new Decimal(shares).times(costPrice).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+})
+const parseShareInput = computed<number>(() => parseNonNegativeQuantity(form.shares) ?? 0)
+
 const canSubmit = computed(() => {
   if (isSaving.value) {
     return false
@@ -245,10 +260,11 @@ const canSubmit = computed(() => {
     case 'holding':
       return selectedStock.value !== null
         && parseNonNegativeQuantity(form.shares) !== null
-        && parseAmount(form.cost) !== null
+        && parseUnitPrice(form.cost) !== null
         && parsePrice(form.price) !== null
         && form.businessDate.length > 0
         && form.priceDate.length > 0
+        && !quoteLoading.value
     default:
       return false
   }
@@ -256,8 +272,17 @@ const canSubmit = computed(() => {
 
 onMounted(async () => {
   await loadOverview()
+  await loadLedgerStartDate()
   await refreshOnEnter()
 })
+
+async function loadLedgerStartDate(): Promise<void> {
+  try {
+    ledgerStartDate.value = (await fetchLedger()).startDate
+  } catch {
+    ledgerStartDate.value = null
+  }
+}
 
 async function loadOverview(): Promise<void> {
   isLoading.value = true
@@ -336,13 +361,50 @@ function openSheet(kind: SheetKind, position: StockPosition | null = null): void
   searched.value = false
   form.shares = ''
   form.price = position ? String(position.price) : ''
-  form.cost = position ? String(position.cost) : ''
+  form.cost = ''
   form.businessDate = today
   form.priceDate = position?.priceDate ?? today
   form.note = ''
+  quoteError.value = ''
 
   if (kind === 'holding' && position) {
     form.shares = String(position.shares)
+    // 成本按元/股编辑；用总额除以股数还原单价，避免四舍五入后再乘回去产生总额漂移。
+    form.cost = position.shares > 0 ? String(Number((position.cost / position.shares).toFixed(4))) : ''
+  }
+
+  if (kind === 'holding' || kind === 'buy') {
+    const market = kind === 'holding' ? position?.market : undefined
+    const code = kind === 'holding' ? position?.code : undefined
+
+    if (market && code) {
+      void loadQuote(market, code)
+    }
+  }
+}
+
+async function loadQuote(market: StockMarket, code: string): Promise<void> {
+  quoteLoading.value = true
+  quoteError.value = ''
+
+  try {
+    const quote = await fetchStockQuote(market, code)
+
+    form.price = String(quote.price)
+    form.priceDate = quote.priceDate
+  } catch (error) {
+    quoteError.value = getApiErrorMessage(error, '行情获取失败，请稍后重试。')
+  } finally {
+    quoteLoading.value = false
+  }
+}
+
+function retryQuote(): void {
+  const market = selectedStock.value?.market
+  const code = selectedStock.value?.code
+
+  if (market && code) {
+    void loadQuote(market, code)
   }
 }
 
@@ -385,10 +447,7 @@ function selectStock(result: StockSearchResult): void {
   searchResults.value = []
   searchQuery.value = ''
   formError.value = ''
-
-  if (!form.price && result.price !== null) {
-    form.price = String(result.price)
-  }
+  void loadQuote(result.market, result.code)
 }
 
 function clearSelectedStock(): void {
@@ -495,18 +554,17 @@ async function submitSell(): Promise<void> {
 async function submitHolding(): Promise<void> {
   const stock = selectedStock.value
   const shares = parseNonNegativeQuantity(form.shares)
-  const cost = parseAmount(form.cost)
+  const costPrice = parseUnitPrice(form.cost)
   const price = parsePrice(form.price)
 
-  if (!stock || shares === null || cost === null || cost < 0 || price === null) {
-    formError.value = '请填写有效的持股数量、成本和现价。'
+  if (!stock || shares === null || costPrice === null || costPrice < 0 || price === null) {
+    formError.value = '请填写有效的持股数量和成本均价。'
     return
   }
 
-  if (shares === 0 && cost !== 0) {
-    formError.value = '持有数量为 0 时，持仓成本也应为 0。'
-    return
-  }
+  const cost = shares === 0
+    ? 0
+    : new Decimal(shares).times(costPrice).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
 
   isSaving.value = true
   await saveStockHolding({
@@ -945,6 +1003,9 @@ function goBack(): void {
           <label class="form-field">
             <span>成交价（元）</span>
             <input v-model="form.price" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
+            <small v-if="quoteLoading">正在获取最新价…</small>
+            <small v-else-if="form.price">默认取最新价 {{ formatMoney(Number(form.price)) }}（{{ formatBusinessDate(form.priceDate) }}），可按实际成交价修改</small>
+            <small v-else-if="quoteError">{{ quoteError }}</small>
           </label>
           <label class="form-field">
             <span>业务日期</span>
@@ -985,20 +1046,30 @@ function goBack(): void {
             <input v-model="form.shares" type="text" inputmode="decimal" autocomplete="off" placeholder="0" @input="formError = ''" />
           </label>
           <label class="form-field">
-            <span>持仓成本（元）</span>
+            <span>成本均价（元 / 股）</span>
             <input v-model="form.cost" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
+            <small v-if="holdingCostTotal !== null">按 {{ formatShares(parseShareInput) }} 股计算，持仓成本合计 ¥{{ formatMoney(holdingCostTotal) }}</small>
           </label>
-          <label class="form-field">
-            <span>现价（元）</span>
-            <input v-model="form.price" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
-          </label>
-          <label class="form-field">
-            <span>行情日期</span>
-            <input v-model="form.priceDate" type="date" @input="formError = ''" />
-          </label>
+          <div class="quote-line">
+            <span>现价</span>
+            <b v-if="quoteLoading">正在获取…</b>
+            <b v-else-if="form.price && form.priceDate">{{ formatMoney(Number(form.price)) }} 元 · {{ formatBusinessDate(form.priceDate) }}</b>
+            <b v-else>未获取到行情</b>
+            <button type="button" class="text-button" :disabled="quoteLoading" @click="retryQuote">重新获取</button>
+          </div>
+          <p v-if="quoteError" class="form-note error-note">{{ quoteError }}</p>
           <label class="form-field">
             <span>持仓日期</span>
-            <input v-model="form.businessDate" type="date" @input="formError = ''" />
+            <input
+              v-model="form.businessDate"
+              type="date"
+              :min="ledgerStartDate ?? undefined"
+              :max="today"
+              @input="formError = ''"
+            />
+            <small v-if="ledgerStartDate">
+              起始持仓是当天快照，不能早于账本起始日 {{ formatBusinessDate(ledgerStartDate) }}，通常直接填今天。
+            </small>
           </label>
         </template>
 
@@ -1205,6 +1276,29 @@ function goBack(): void {
   color: var(--color-error);
   font-size: var(--text-caption);
   line-height: 1.6;
+}
+
+.quote-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+}
+
+.quote-line b {
+  flex: 1;
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.error-note {
+  color: var(--color-error);
 }
 
 .market-group {
