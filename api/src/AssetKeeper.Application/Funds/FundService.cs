@@ -532,11 +532,24 @@ public sealed class FundService
             return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "该基金未设置基金代码，无法按数据源净值自动确认份额。" });
         }
 
+        if (request.TradeDate is DateOnly requestedTradeDate)
+        {
+            if (requestedTradeDate < request.BusinessDate)
+            {
+                return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "T 日不能早于下单日期。" });
+            }
+
+            if (requestedTradeDate > _businessDateProvider.Today.AddDays(10))
+            {
+                return AssetOperationResult<FundMutationResultDto>.Invalid(new[] { "T 日不能晚于今天 10 天以上。" });
+            }
+        }
+
 
         try
         {
             var now = _businessDateProvider.UtcNow;
-            var tradeDate = ResolveBuyTradeDate(request.BusinessDate, now);
+            var tradeDate = request.TradeDate ?? ResolveBuyTradeDate(request.BusinessDate, now);
             var transaction = AssetTransaction.CreateFundBuyPending(
                 ledger.Id,
                 position.Id,

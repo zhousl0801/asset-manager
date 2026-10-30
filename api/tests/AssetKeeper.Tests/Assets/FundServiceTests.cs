@@ -3,6 +3,7 @@ using AssetKeeper.Application.Assets;
 using AssetKeeper.Application.Cash;
 using AssetKeeper.Application.Funds;
 using AssetKeeper.Application.Ledgers;
+using AssetKeeper.Application.Quotes;
 using AssetKeeper.Domain.Assets;
 using AssetKeeper.Tests.Ledgers;
 
@@ -429,6 +430,97 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task BuyAsync_WithExplicitTradeDate_UsesThatDayForConfirmation()
+    {
+        var context = await CreateContextAsync();
+        var position = await CreatePositionAsync(context);
+
+        // 15:00 后下单时 T 日落到下一个交易日；这里显式传入，待确认按 10-22 净值确认。
+        var result = await context.Funds.BuyAsync(
+            new BuyFundRequest(position.Id, 130m, BusinessToday, null, Guid.NewGuid(), 0m, new DateOnly(2026, 10, 22)),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
+        var overview = await context.Funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        var pending = Assert.Single(overview.PendingBuys!);
+        Assert.Equal(BusinessToday, pending.BusinessDate);
+        Assert.Equal(new DateOnly(2026, 10, 22), pending.TradeDate);
+        Assert.Equal(new DateOnly(2026, 10, 26), pending.ConfirmationDate);
+    }
+
+    [Fact]
+    public async Task BuyAsync_WithTradeDateBeforeBusinessDate_ReturnsInvalid()
+    {
+        var context = await CreateContextAsync(startDate: new DateOnly(2026, 10, 15));
+        var position = await CreatePositionAsync(context);
+
+        var result = await context.Funds.BuyAsync(
+            new BuyFundRequest(position.Id, 130m, BusinessToday, null, Guid.NewGuid(), 0m, new DateOnly(2026, 10, 19)),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, error => error.Contains("T 日不能早于下单日期"));
+    }
+
+    [Fact]
+    public async Task ConfirmDueBuysAsync_ConfirmsPendingWithTradeDateNetValue()
+    {
+        var context = await CreateContextAsync(startDate: new DateOnly(2026, 10, 15));
+        var position = await CreatePositionAsync(context);
+        var funds = AutoConfirmFunds(context, new TradeDateQuotes(new DateOnly(2026, 10, 19), 13m));
+        await BuyPendingWithDateAsync(funds, position.Id, 130m, new DateOnly(2026, 10, 19));
+
+        var confirmed = await funds.ConfirmDueBuysAsync(CancellationToken.None);
+
+        Assert.Equal(1, confirmed);
+        var overview = await funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Empty(overview.PendingBuys!);
+        Assert.Equal(0m, overview.PendingAmount);
+        Assert.Equal(110m, overview.Positions[0].Shares);
+        Assert.Equal(1130m, overview.Positions[0].Cost);
+        Assert.Contains(overview.Activities, activity => activity.Type == FundActivityType.BuyConfirmed);
+    }
+
+    [Fact]
+    public async Task ConfirmDueBuysAsync_LeavesPendingBeforeConfirmationDate()
+    {
+        var context = await CreateContextAsync(startDate: new DateOnly(2026, 10, 15));
+        var position = await CreatePositionAsync(context);
+        var funds = AutoConfirmFunds(context, new TradeDateQuotes(new DateOnly(2026, 10, 20), 13m));
+        await BuyPendingWithDateAsync(funds, position.Id, 130m, new DateOnly(2026, 10, 20));
+
+        // 10-20 下单、T+2 是 10-22，确认日未到，这笔应该继续待确认。
+        var confirmed = await funds.ConfirmDueBuysAsync(CancellationToken.None);
+
+        Assert.Equal(0, confirmed);
+        var overview = await funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Single(overview.PendingBuys!);
+        Assert.Equal(130m, overview.PendingAmount);
+        Assert.Equal(100m, overview.Positions[0].Shares);
+    }
+
+    [Fact]
+    public async Task ConfirmDueBuysAsync_KeepsPendingWhenTradeDateNetValueIsMissing()
+    {
+        var context = await CreateContextAsync(startDate: new DateOnly(2026, 10, 15));
+        var position = await CreatePositionAsync(context);
+        var funds = AutoConfirmFunds(context, new TradeDateQuotes(new DateOnly(2026, 10, 18), 13m));
+        await BuyPendingWithDateAsync(funds, position.Id, 130m, new DateOnly(2026, 10, 19));
+
+        // 数据源还没公布这一天的净值时，自动确认不猜份额，保留待确认等下一次刷新重试。
+        var confirmed = await funds.ConfirmDueBuysAsync(CancellationToken.None);
+
+        Assert.Equal(0, confirmed);
+        var overview = await funds.GetOverviewAsync(CancellationToken.None);
+        Assert.NotNull(overview);
+        Assert.Single(overview.PendingBuys!);
+        Assert.Equal(130m, overview.PendingAmount);
+    }
+
+    [Fact]
     public async Task BuyAsync_WithUnknownPosition_ReturnsNotFound()
     {
         var context = await CreateContextAsync();
@@ -503,6 +595,27 @@ public sealed class FundServiceTests
         var overview = await service.GetOverviewAsync(CancellationToken.None);
 
         Assert.Null(overview);
+    }
+
+    private static FundService AutoConfirmFunds(TestContext context, IFundQuoteProvider quoteProvider)
+    {
+        return new FundService(
+            context.Repository,
+            new BusinessDateProvider(new FixedTimeProvider(Now)),
+            quoteProvider);
+    }
+
+    private static async Task BuyPendingWithDateAsync(
+        FundService funds,
+        Guid positionId,
+        decimal amount,
+        DateOnly businessDate)
+    {
+        var result = await funds.BuyAsync(
+            new BuyFundRequest(positionId, amount, businessDate, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Created, result.Status);
     }
 
     private static async Task<FundActivityDto> BuyPendingAsync(TestContext context, Guid positionId, decimal amount)
@@ -608,4 +721,16 @@ public sealed class FundServiceTests
         LedgerService Ledger,
         CashService Cash,
         FundService Funds);
+
+    /// <summary>只认一个交易日净值的行情源，用来验证自动确认按 T 日净值折算份额。</summary>
+    private sealed class TradeDateQuotes(DateOnly netValueDate, decimal netValue) : IFundQuoteProvider
+    {
+        public Task<ExternalFundQuote> GetLatestAsync(string code, CancellationToken cancellationToken) =>
+            Task.FromResult(new ExternalFundQuote(code, netValue, netValueDate, "test-provider", Now));
+
+        public Task<ExternalFundQuote> GetForDateAsync(string code, DateOnly date, CancellationToken cancellationToken) =>
+            date == netValueDate
+                ? Task.FromResult(new ExternalFundQuote(code, netValue, date, "test-provider", Now))
+                : throw new QuoteUnavailableException($"测试行情源未提供 {date:yyyy-MM-dd} 的净值。");
+    }
 }

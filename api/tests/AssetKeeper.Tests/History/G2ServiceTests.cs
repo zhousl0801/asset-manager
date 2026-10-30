@@ -17,6 +17,35 @@ public sealed class G2ServiceTests
     private static readonly DateTimeOffset Now = new(2026, 10, 21, 2, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task CorrectPendingBuyDate_MovesTradeDateAlong()
+    {
+        await using var context = await CreateAsync();
+        var funds = new FundService(context.Repository, context.Dates);
+        var positionId = await CreatePositionAsync(context);
+        await BuyPendingAsync(funds, positionId, 300m);
+
+        var service = new HistoryService(context.Repository, context.Dates);
+        var history = (await service.GetAsync(null, CancellationToken.None))!;
+        var fact = history.Facts.Single(item => item.Kind == AssetTransactionKind.FundBuyPending);
+        Assert.Equal(Today, fact.Date);
+
+        // 把下单日期改到 10-19，T 日必须跟着走；否则自动确认会拿错日期的净值。
+        var request = Change(history, fact) with { Date = new DateOnly(2026, 10, 19) };
+        var preview = await service.PreviewAsync(request, CancellationToken.None);
+        Assert.Equal(AssetOperationStatus.Success, preview.Status);
+
+        var result = await service.ChangeAsync(new(request, preview.Result!.PreviewToken), CancellationToken.None);
+        Assert.Equal(AssetOperationStatus.Success, result.Status);
+
+        context.Db.ChangeTracker.Clear();
+        var overview = (await new FundService(context.Repository, context.Dates).GetOverviewAsync(CancellationToken.None))!;
+        var pending = Assert.Single(overview.PendingBuys!);
+        Assert.Equal(new DateOnly(2026, 10, 19), pending.BusinessDate);
+        Assert.Equal(new DateOnly(2026, 10, 19), pending.TradeDate);
+        Assert.Equal(new DateOnly(2026, 10, 21), pending.ConfirmationDate);
+    }
+
+    [Fact]
     public async Task ReversePendingBuy_RestoresCashAndRemovesPending()
     {
         await using var context = await CreateAsync();

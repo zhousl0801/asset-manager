@@ -214,6 +214,8 @@ export interface BuyFundInput {
   amount: number
   fee: number
   businessDate: string
+  /** T 日（净值日）：按哪一天净值确认份额，省略时由服务端按 15:00 规则推断。 */
+  tradeDate?: string
   note: string
   requestId: string
 }

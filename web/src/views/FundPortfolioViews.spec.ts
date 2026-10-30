@@ -258,7 +258,7 @@ test('pending shortcut opens the transaction tab and expands pending items', asy
 
   expect(view.find('.view-tabs button[aria-selected="true"]').text()).toBe('交易')
   expect(view.findAll('.activity-row.is-pending')).toHaveLength(1)
-  expect(view.find('.activity-row.is-pending').text()).toContain('交易进行中')
+  expect(view.find('.activity-row.is-pending').text()).toContain('待确认 · 10月23日自动确认')
   view.unmount()
 })
 
@@ -528,9 +528,11 @@ test('pending buy can be confirmed manually with shares, net value and fee', asy
   await flushPromises()
 
   const pendingRow = view.findAll('.activity-row')
-    .find((row) => row.text().includes('债券基金') && row.text().includes('交易进行中'))!
+    .find((row) => row.text().includes('债券基金') && row.text().includes('待确认'))!
   await pendingRow.trigger('click')
   await flushPromises()
+
+  expect(document.querySelector('.sheet')?.textContent).toContain('10月23日 按 T 日净值自动折算份额')
 
   const field = (label: string) => [...document.querySelectorAll('.sheet label')]
     .find((item) => item.querySelector('span')?.textContent === label)!

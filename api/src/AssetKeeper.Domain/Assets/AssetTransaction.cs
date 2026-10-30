@@ -69,8 +69,7 @@ public sealed class AssetTransaction
 
     public int Version { get; private set; }
 
-    public void SetHistoryMetadata(DateOnly businessDate, DateOnly? priceDate, long sequence)
-    {
+    public void SetHistoryMetadata(DateOnly businessDate, DateOnly? priceDate, long sequence)    {
         if (businessDate == default || priceDate == default(DateOnly))
         {
             throw new ArgumentException("业务日期或行情日期无效。");
@@ -80,6 +79,27 @@ public sealed class AssetTransaction
         PriceDate = priceDate;
         BusinessSequence = sequence;
         NeedsDateConfirmation = false;
+    }
+
+    /// <summary>买入待确认的 T 日（净值归属日）跟随下单日期更正；其他记录不支持。</summary>
+    public void SyncFundTradeDate(DateOnly tradeDate)
+    {
+        if (Kind != AssetTransactionKind.FundBuyPending)
+        {
+            throw new InvalidOperationException("只有买入待确认可以调整 T 日。");
+        }
+
+        if (IsReversed)
+        {
+            throw new InvalidOperationException("已撤销记录不能调整 T 日。");
+        }
+
+        if (tradeDate < BusinessDate)
+        {
+            throw new ArgumentException("T 日不能早于下单日期。", nameof(tradeDate));
+        }
+
+        FundTradeDate = tradeDate;
     }
 
     public void Correct(decimal? quantity, decimal amount, decimal? price, DateOnly date, DateOnly? priceDate, long sequence, string? note, decimal? fee = null)

@@ -139,6 +139,7 @@ const form = reactive({
   fee: '0',
   confirmationDelayDays: '2',
   businessDate: today,
+  tradeDate: today,
   note: ''
 })
 
@@ -343,6 +344,16 @@ function activityKindOf(type: FundActivity['type'], isSip: boolean): ActivityKin
   }
 }
 
+function monthDayText(value: string): string {
+  const parts = value.split('-')
+
+  if (parts.length !== 3) {
+    return value
+  }
+
+  return `${Number(parts[1])}月${Number(parts[2])}日`
+}
+
 function activityLabelOf(kind: ActivityKind): string {
   switch (kind) {
     case 'sip':
@@ -442,7 +453,11 @@ const activityRows = computed<ActivityRow[]>(() => {
       fundName: activity.positionName,
       timestamp: [activity.businessDate, formatBusinessTime(activity.createdAt)].filter(Boolean).join(' '),
       amountText: activityAmountTextOf(activity, pendingBuy),
-      statusText: activity.isReversed ? '已撤销' : activityStatusOf(activity.type),
+      statusText: activity.isReversed
+        ? '已撤销'
+        : pendingBuy
+          ? `待确认 · ${monthDayText(pendingBuy.confirmationDate)}自动确认`
+          : activityStatusOf(activity.type),
       statusTone: activity.isReversed ? 'reversed' : isPending ? 'pending' : 'done',
       isPending: isPending && !activity.isReversed,
       pendingAction,
@@ -463,7 +478,7 @@ const activityRows = computed<ActivityRow[]>(() => {
       fundName: pending.positionName,
       timestamp: pending.businessDate,
       amountText: moneyText(pending.amount),
-      statusText: '交易进行中',
+      statusText: `待确认 · ${monthDayText(pending.confirmationDate)}自动确认`,
       statusTone: 'pending',
       isPending: true,
       pendingAction: 'buy',
@@ -588,7 +603,7 @@ const sheetTitle = computed(() => {
     case 'buy':
       return '记录基金买入'
     case 'buyConfirm':
-      return '登记买入确认'
+      return '确认买入份额'
     case 'shares':
       return '调整基金份额'
     case 'sell':
@@ -606,9 +621,9 @@ const sheetSubtitle = computed(() => {
     case 'opening':
       return '用于已有持仓，不扣现金'
     case 'buy':
-      return '现金减少，买入待确认增加'
+      return '现金减少，T+2 自动确认份额'
     case 'buyConfirm':
-      return '待确认转为持仓，不再次扣款'
+      return '到期自动确认，这里用于提前或更正'
     case 'shares':
       return '生成份额核对记录，保留原有流水'
     case 'sell':
@@ -1190,6 +1205,13 @@ function planCycleLabel(plan: AutoPlan): string {
   return `每月 ${plan.dayOfMonth ?? 1} 日`
 }
 
+// T 日默认跟下单日期一致；只有用户主动改过（或晚于下单日）时才保留用户的选择。
+function syncTradeDateToBusinessDate(): void {
+  if (!form.tradeDate || form.tradeDate < form.businessDate) {
+    form.tradeDate = form.businessDate
+  }
+}
+
 function openSheet(kind: SheetKind, positionId?: string): void {
   sheet.value = kind
   confirmingSellId.value = null
@@ -1199,6 +1221,7 @@ function openSheet(kind: SheetKind, positionId?: string): void {
   formError.value = ''
   form.note = ''
   form.businessDate = today
+  form.tradeDate = today
   form.shares = ''
   form.cost = ''
   form.amount = ''
@@ -1461,12 +1484,18 @@ async function submitBuy(): Promise<void> {
     return
   }
 
+  if (form.tradeDate && form.tradeDate < form.businessDate) {
+    formError.value = 'T 日不能早于下单日期。'
+    return
+  }
+
   isSaving.value = true
   const result = await buyFund({
     positionId: position.id,
     amount,
     fee,
     businessDate: form.businessDate,
+    tradeDate: form.tradeDate || form.businessDate,
     note: form.note.trim(),
     requestId: requestId.value
   })
@@ -1919,10 +1948,11 @@ function goBack(): void {
           <small>
             买入待确认 {{ scopedPendingBuys.length }} · 赎回申请 {{ scopedSellApplications.length }}
             · 待到账 {{ scopedPendingArrivals.length }}
+            <template v-if="scopedPendingBuys.length"> · T+2 自动确认</template>
             <template v-if="cancellablePendingCount"> · 15:00 前可撤销</template>
           </small>
         </span>
-        <span class="pending-shortcut-action">去处理 ›</span>
+        <span class="pending-shortcut-action">查看 ›</span>
       </button>
 
       <template v-if="activeView === 'positions' || activeView === 'returns'">
@@ -2289,7 +2319,7 @@ function goBack(): void {
         </div>
         <div v-if="selectedPendingBuy" class="summary-line">
           <span>交易日</span>
-          <b>T 日 {{ formatBusinessDate(selectedPendingBuy.tradeDate) }} · 预计 {{ formatBusinessDate(selectedPendingBuy.confirmationDate) }} 确认</b>
+          <b>T 日 {{ formatBusinessDate(selectedPendingBuy.tradeDate) }} · {{ monthDayText(selectedPendingBuy.confirmationDate) }}自动确认份额</b>
         </div>
         <div v-if="selectedSellApplication" class="summary-line">
           <span>申请赎回</span>
@@ -2389,8 +2419,13 @@ function goBack(): void {
           </label>
           <label class="form-field">
             <span>下单日期</span>
-            <input v-model="form.businessDate" type="date" :max="today" />
-            <small>补录历史买入时选择实际下单日期；15:00 前按当日 T 日计算。</small>
+            <input v-model="form.businessDate" type="date" :max="today" @change="syncTradeDateToBusinessDate" />
+            <small>补录历史买入时选择实际下单日期。</small>
+          </label>
+          <label class="form-field">
+            <span>T 日（净值日）</span>
+            <input v-model="form.tradeDate" type="date" :min="form.businessDate" />
+            <small>按哪一天净值确认份额，默认与下单日期相同；15:00 后下单的按平台规则改为下一个交易日。</small>
           </label>
           <small v-if="!selectedPosition?.code" class="form-note">请先为该持仓设置基金代码，才能从数据源自动确认份额。</small>
         </template>
@@ -2424,7 +2459,8 @@ function goBack(): void {
             <input v-model="form.businessDate" type="date" :min="selectedPendingBuy?.businessDate" :max="today" />
           </label>
           <p class="form-note">
-            确认后待确认金额转为持仓成本，不再次扣现金。自动确认会按 T 日净值折算；如平台实际份额或费用不同，请以这里登记的为准。
+            这笔会在 {{ monthDayText(selectedPendingBuy?.confirmationDate ?? '') }} 按 T 日净值自动折算份额并结转，不需要你填。
+            只有想提前登记、或平台实际份额与自动计算不一致时才在这里更正；确认后待确认金额转为持仓成本，不再次扣现金。
           </p>
           <button
             v-if="selectedPendingBuy?.canCancel"

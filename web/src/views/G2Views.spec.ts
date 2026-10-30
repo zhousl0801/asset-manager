@@ -92,14 +92,15 @@ test('pending buy shows trade and automatic confirmation dates and allows manual
   expect(view.find('.hero-meta').text()).toContain('含待确认 ¥300.00')
   const row = view.find('.activity-row.is-pending')
   expect(row.text()).toContain('基金 | 纳指基金')
-  expect(row.text()).toContain('交易进行中')
+  expect(row.text()).toContain('待确认 · 10月23日自动确认')
   expect(row.text()).toContain('300.00元')
 
   await row.trigger('click')
   await flushPromises()
   const sheetText = document.querySelector('.sheet')!.textContent ?? ''
   expect(sheetText).toContain('T 日 2026年10月21日')
-  expect(sheetText).toContain('预计 2026年10月23日 确认')
+  expect(sheetText).toContain('10月23日自动确认份额')
+  expect(sheetText).toContain('10月23日 按 T 日净值自动折算份额')
   expect(sheetText).toContain('待确认扣款')
   view.unmount()
 })
@@ -149,6 +150,9 @@ test('buy only records the paid amount and defers shares to confirmation', async
   expect(mocks.buy).toHaveBeenCalledTimes(1)
   expect(mocks.buy.mock.calls[0]![0]).toMatchObject({ positionId: 'p1', amount: 300 })
   expect(mocks.buy.mock.calls[0]![0]).not.toHaveProperty('shares')
+  // T 日默认跟下单日期一致，自动确认按这一天的净值折算份额。
+  expect(mocks.buy.mock.calls[0]![0]).toMatchObject({ tradeDate: expect.any(String) })
+  expect(mocks.buy.mock.calls[0]![0].tradeDate).toBe(mocks.buy.mock.calls[0]![0].businessDate)
   view.unmount()
 })
 

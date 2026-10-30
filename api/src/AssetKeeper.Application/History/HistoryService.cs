@@ -186,7 +186,9 @@ public sealed class HistoryService
                     }
                     else
                     {
+                        var previousBusinessDate = transaction.BusinessDate;
                         transaction.Correct(change.Quantity, change.Amount, change.Price, change.Date, change.PriceDate, change.Sequence, change.Note, change.Fee);
+                        SyncFundTradeDateAfterCorrection(transaction, previousBusinessDate);
                         transaction.LinkCashAdjustment(change.RelatedCashAdjustmentId);
                         await rebuilder.AddPriceAsync(ledger, transaction, cancellationToken);
                     }
@@ -346,8 +348,7 @@ public sealed class HistoryService
         return new LedgerReplayCalculator().Calculate(data, facts, _dates.Today, prices, currentDate: _dates.Today);
     }
 
-    private static void ValidateFundBuyChange(BusinessFact original, IReadOnlyList<BusinessFact> facts, HistoryChangeRequest request)
-    {
+    private static void ValidateFundBuyChange(BusinessFact original, IReadOnlyList<BusinessFact> facts, HistoryChangeRequest request)    {
         if (original.Source != "asset")
         {
             return;
@@ -457,6 +458,30 @@ public sealed class HistoryService
         if (request.Amount != pending.Amount)
         {
             throw new HistoryValidationException("积存金卖到账金额必须与待到账金额一致；如有差额，请先更正卖出记录。");
+        }
+    }
+
+    /// <summary>
+    /// 更正下单日期后，买入待确认的 T 日（净值归属日）必须跟着走：
+    /// 改为历史日期时直接以该日为 T 日；改为今天时保留 15:00 规则算出的结果（但不能早于新的下单日）。
+    /// 否则 T 日会停在旧的位置，自动确认按错误日期的净值折算份额。
+    /// </summary>
+    private void SyncFundTradeDateAfterCorrection(AssetTransaction transaction, DateOnly previousBusinessDate)
+    {
+        if (transaction.Kind != AssetTransactionKind.FundBuyPending || transaction.BusinessDate == previousBusinessDate)
+        {
+            return;
+        }
+
+        var businessDate = transaction.BusinessDate;
+        var current = transaction.FundTradeDate ?? businessDate;
+        var target = businessDate == _dates.Today
+            ? (current < businessDate ? businessDate : current)
+            : businessDate;
+
+        if (target != current)
+        {
+            transaction.SyncFundTradeDate(target);
         }
     }
 
