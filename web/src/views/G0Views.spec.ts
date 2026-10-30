@@ -26,6 +26,61 @@ test('provident list labels the query month separately from the balance date', a
   view.unmount()
 })
 
+test('provident amounts use the same gain/loss colors as profit', async () => {
+  mocks.provident.mockResolvedValue({
+    isConfigured: true,
+    balance: 250,
+    asOfDate: '2026-10-31',
+    periodFrom: '2026-10-01',
+    periodTo: '2026-10-31',
+    monthDeposit: 200,
+    monthWithdrawal: 50,
+    netChange: 150,
+    activities: [
+      { id: 'd1', type: 'deposit', amount: 200, balanceAfter: 300, note: null },
+      { id: 'w1', type: 'withdrawal', amount: 50, balanceAfter: 250, note: null }
+    ]
+  })
+  const view = mount(ProvidentView)
+  await flushPromises()
+
+  const metrics = view.findAll('.hero-metrics b')
+  expect(metrics[0]!.text()).toBe('+200.00')
+  expect(metrics[0]!.classes()).toContain('amount-gain')
+  expect(metrics[1]!.text()).toBe('−50.00')
+  expect(metrics[1]!.classes()).toContain('amount-loss')
+  expect(metrics[2]!.text()).toBe('+150.00')
+  expect(metrics[2]!.classes()).toContain('amount-gain')
+
+  const activityValues = view.findAll('.activity-value')
+  expect(activityValues[0]!.classes()).toContain('amount-gain')
+  expect(activityValues[1]!.classes()).toContain('amount-loss')
+  view.unmount()
+})
+
+test('cash net change is colored by direction', async () => {
+  mocks.cash.mockResolvedValue({
+    balance: 800,
+    version: 1,
+    asOfDate: '2026-10-31',
+    from: '2026-10-01',
+    to: '2026-10-31',
+    openingBalance: 1000,
+    inflow: 0,
+    outflow: 200,
+    adjustmentTotal: 0,
+    netChange: -200,
+    activities: []
+  })
+  const view = mount(CashView)
+  await flushPromises()
+
+  const netChange = view.findAll('.hero-metrics b')[2]!
+  expect(netChange.text()).toBe('−200.00')
+  expect(netChange.classes()).toContain('amount-loss')
+  view.unmount()
+})
+
 test('one provident form records the monthly deposit and withdrawal together', async () => {
   mocks.deposit.mockResolvedValue({ balance: 100, activity: { amount: 200 } })
   mocks.withdraw.mockResolvedValue({ balance: 50, activity: { amount: 50 } })

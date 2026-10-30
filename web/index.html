@@ -4,8 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0B0C0F" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('asset-keeper.theme')
+          const mode = stored === 'light' || stored === 'dark' ? stored : 'system'
+          const dark = mode === 'dark'
+            || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.colorScheme = dark ? 'dark' : 'light'
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0B0C0F' : '#FFFFFF')
+        } catch {
+          // 主题脚本失败时保持 HTML 默认的浅色主题。
+        }
+      })()
+    </script>
     <meta name="description" content="资产管家：个人资产观察与日常记账。" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

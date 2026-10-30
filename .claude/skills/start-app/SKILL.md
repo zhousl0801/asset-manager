@@ -56,7 +56,7 @@ ConnectionStrings__Default="Host=localhost;Port=5432;Database=asset_keeper;Usern
 
 日志里的这三行是正常启动信息，不是错误：
 
-- `行情定时刷新已启动：间隔 900 秒，启动时刷新 False，重试 1 次`
+- `行情定时刷新已启动：间隔 3600 秒，启动时刷新 False，重试 1 次`
 - `Now listening on: http://localhost:5069`
 - EF 的 `SELECT ... FROM ledgers ...` —— 后台计划任务在启动时就查库
 

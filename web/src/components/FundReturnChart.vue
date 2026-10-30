@@ -7,6 +7,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { formatSignedMoney } from '../utils/format'
 import { chartFontSize, chartTheme } from '../utils/chartTheme'
+import { resolvedTheme } from '../utils/theme'
 import type { FundReturnPoint } from '../types/fundReturn'
 
 echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, CanvasRenderer])
@@ -26,9 +27,6 @@ const chartLabel = computed(() => {
     : `投资收益走势图，${props.range}；暂无已披露收益`
 })
 let chart: echarts.ECharts | null = null
-const colorScheme = typeof window !== 'undefined'
-  ? window.matchMedia?.('(prefers-color-scheme: dark)')
-  : undefined
 
 function render(): void {
   chart?.setOption(buildOption(), { notMerge: true })
@@ -139,7 +137,6 @@ onMounted(() => {
   chart = echarts.init(container.value, undefined, { renderer: 'canvas' })
   render()
   window.addEventListener('resize', resize)
-  colorScheme?.addEventListener?.('change', render)
 })
 
 watch(
@@ -150,9 +147,10 @@ watch(
   { deep: true }
 )
 
+watch(resolvedTheme, render)
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
-  colorScheme?.removeEventListener?.('change', render)
   chart?.dispose()
   chart = null
 })

@@ -7,6 +7,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { formatMoney } from '../utils/format'
 import { chartFontSize, chartTheme } from '../utils/chartTheme'
+import { resolvedTheme } from '../utils/theme'
 import type { EntryKind, EntryPeriod, EntryStatsPoint } from '../types/entry'
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
@@ -20,9 +21,6 @@ const props = defineProps<{
 
 const container = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
-const colorScheme = typeof window !== 'undefined'
-  ? window.matchMedia?.('(prefers-color-scheme: dark)')
-  : undefined
 
 function buildOption(): EChartsOption {
   const theme = chartTheme()
@@ -104,14 +102,13 @@ onMounted(() => {
   chart = echarts.init(container.value, undefined, { renderer: 'canvas' })
   render()
   window.addEventListener('resize', resize)
-  colorScheme?.addEventListener?.('change', render)
 })
 
 watch(() => [props.points, props.direction, props.period], render, { deep: true })
+watch(resolvedTheme, render)
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
-  colorScheme?.removeEventListener?.('change', render)
   chart?.dispose()
   chart = null
 })

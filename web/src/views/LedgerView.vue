@@ -11,7 +11,7 @@ import PageHeader from '../components/PageHeader.vue'
 import LedgerStatsChart from '../components/LedgerStatsChart.vue'
 import { ExpenseCategories, IncomeCategories } from '../constants/categories'
 import type { EntryCategory } from '../types/category'
-import { formatBusinessDate, formatMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
+import { amountTone, formatBusinessDate, formatMoney, formatSignedMoney, sumAmounts, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel, periodStart, shiftAnchor } from '../utils/period'
 import type { EntryKind, EntryPeriod, EntryPeriodSummary, EntryStats, LedgerEntry } from '../types/entry'
 
@@ -292,7 +292,7 @@ function goBack(): void {
         </div>
         <div>
           <span>结余</span>
-          <b>{{ formatMoney(summary?.surplus) }}</b>
+          <b :class="amountTone(summary?.surplus)">{{ formatSignedMoney(summary?.surplus) }}</b>
         </div>
       </div>
     </section>

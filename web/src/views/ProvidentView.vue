@@ -8,7 +8,7 @@ import { fetchPlanOverview, pausePlan, resumePlan, savePlan } from '../api/plans
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BottomSheet from '../components/BottomSheet.vue'
-import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, todayInBusinessTimeZone } from '../utils/format'
+import { amountTone, formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, todayInBusinessTimeZone } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import { createRequestId } from '../utils/request'
 import type { PlanOverview } from '../types/plan'
@@ -335,6 +335,14 @@ function activityAmount(activity: ProvidentActivity): string {
   return `${activity.type === 'withdrawal' ? '−' : '+'}${formatMoney(activity.amount)}`
 }
 
+function activityAmountClass(activity: ProvidentActivity): string {
+  if (activity.type === 'opening') {
+    return 'transfer'
+  }
+
+  return activity.type === 'deposit' ? 'amount-gain' : 'amount-loss'
+}
+
 function activityNote(activity: ProvidentActivity): string {
   return activity.note ?? (activity.type === 'opening' ? '已有余额，不计入缴存' : activity.type === 'deposit' ? '个人＋单位合计' : '公积金 → 现金')
 }
@@ -370,15 +378,17 @@ function goBack(): void {
         <div class="hero-metrics">
           <div>
             <span>本月缴存</span>
-            <b>{{ formatMoney(overview.monthDeposit) }}</b>
+            <b :class="amountTone(overview.monthDeposit)">{{ formatSignedMoney(overview.monthDeposit) }}</b>
           </div>
           <div>
             <span>本月提取</span>
-            <b>{{ formatMoney(overview.monthWithdrawal) }}</b>
+            <b :class="amountTone(-overview.monthWithdrawal)">
+              {{ overview.monthWithdrawal > 0 ? `−${formatMoney(overview.monthWithdrawal)}` : formatMoney(0) }}
+            </b>
           </div>
           <div>
             <span>余额净变动</span>
-            <b>{{ formatSignedMoney(overview.netChange) }}</b>
+            <b :class="amountTone(overview.netChange)">{{ formatSignedMoney(overview.netChange) }}</b>
           </div>
         </div>
       </section>
@@ -405,7 +415,7 @@ function goBack(): void {
             <strong>{{ activity.type === 'opening' ? '起始公积金' : activity.type === 'deposit' ? '公积金缴存' : '公积金提取' }}</strong>
             <small>{{ activityNote(activity) }} · 余额 {{ formatMoney(activity.balanceAfter) }}</small>
           </span>
-          <b class="activity-value transfer">{{ activityAmount(activity) }}</b>
+          <b class="activity-value" :class="activityAmountClass(activity)">{{ activityAmount(activity) }}</b>
         </div>
       </section>
 

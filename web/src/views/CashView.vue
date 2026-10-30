@@ -5,7 +5,7 @@ import { fetchCashOverview, reconcileCash } from '../api/cash'
 import { ApiError, getApiErrorMessage } from '../api/client'
 import AppNav from '../components/AppNav.vue'
 import BackButton from '../components/BackButton.vue'
-import { formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, subtractAmounts } from '../utils/format'
+import { amountTone, formatBusinessDate, formatMoney, formatSignedMoney, parseAmount, subtractAmounts } from '../utils/format'
 import { formatPeriodLabel } from '../utils/period'
 import type { CashActivity, CashActivityType, CashOverview } from '../types/cash'
 import { createRequestId } from '../utils/request'
@@ -302,7 +302,7 @@ function handleKeydown(event: KeyboardEvent): void {
           </div>
           <div>
             <span>余额净变动</span>
-            <b>{{ formatSignedMoney(overview.netChange) }}</b>
+            <b :class="amountTone(overview.netChange)">{{ formatSignedMoney(overview.netChange) }}</b>
           </div>
         </div>
       </section>

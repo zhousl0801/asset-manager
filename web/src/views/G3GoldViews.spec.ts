@@ -194,12 +194,23 @@ test('opening the page refreshes a stale gold quote', async () => {
   view.unmount()
 })
 
-test('opening the page keeps a fresh gold quote without refreshing', async () => {
+test('opening the page refreshes the gold quote even when the cached quote is fresh', async () => {
+  mocks.refresh.mockResolvedValue({
+    updated: false,
+    source: 'icbc',
+    quote: 900,
+    quoteDate: today,
+    obtainedAt: new Date().toISOString(),
+    lastAttemptAt: new Date().toISOString(),
+    value: 27000,
+    cashBalance: 10000
+  })
+
   const view = mount(GoldView, { attachTo: document.body })
   await flushPromises()
 
-  expect(mocks.refresh).not.toHaveBeenCalled()
-  expect(mocks.overview).toHaveBeenCalledTimes(1)
+  expect(mocks.refresh).toHaveBeenCalledTimes(1)
+  expect(mocks.overview).toHaveBeenCalledTimes(2)
   view.unmount()
 })
 

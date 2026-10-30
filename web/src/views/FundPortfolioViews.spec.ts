@@ -262,6 +262,20 @@ test('pending shortcut opens the transaction tab and expands pending items', asy
   view.unmount()
 })
 
+test('holding profit, holding rate and realized profit share one color convention', async () => {
+  const view = mount(FundsView)
+  await flushPromises()
+
+  const metrics = view.findAll('.hero-metrics > div')
+  expect(metrics[0]!.find('b').text()).toBe('+400.00')
+  expect(metrics[0]!.find('b').classes()).toContain('amount-gain')
+  expect(metrics[1]!.find('b').text()).toBe('+23.53%')
+  expect(metrics[1]!.find('b').classes()).toContain('amount-gain')
+  expect(metrics[2]!.find('b').text()).toBe('0.00')
+  expect(metrics[2]!.find('b').classes()).not.toContain('amount-gain')
+  view.unmount()
+})
+
 test('switching group filters total, funds, pending items and activities consistently', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
@@ -271,8 +285,8 @@ test('switching group filters total, funds, pending items and activities consist
   expect(view.find('.pending-shortcut').exists()).toBe(true)
   expect(view.find('.pending-shortcut').text()).toContain('1 笔待处理')
 
-  const groupSelect = view.get('.filter-pill select')
-  await groupSelect.setValue('g1')
+  const groupPill = view.findAll('.group-pill').find((pill) => pill.text() === '纳斯达克指数')!
+  await groupPill.trigger('click')
   await flushPromises()
 
   expect(view.find('.hero-balance').text()).toContain('1,800.00')
@@ -326,24 +340,40 @@ test('expanded fund keeps A and C share classes separate with platform actions',
   expect(view.find('.holding-action-row').text()).not.toContain('刷新净值')
   expect(view.find('.fund-detail').text()).toContain('按基金代码和类别匹配')
   expect(view.find('.fund-detail').text()).not.toContain('150.0000 份')
+  expect(view.find('.fund-group-select').exists()).toBe(false)
 
   view.unmount()
 })
 
-test('moving a fund assigns the group through the first platform position', async () => {
+test('group detail adds and removes assets through the fund family', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
-  const bondCard = view.findAll('.fund-card').find((card) => card.text().includes('债券基金'))!
-  await bondCard.find('header').trigger('click')
+  await view.get('.group-manage').trigger('click')
   await flushPromises()
 
-  const select = bondCard.find('.fund-group-select select')
-  await select.setValue('g1')
+  const groupRow = [...document.querySelectorAll<HTMLButtonElement>('.sheet .group-manage-row')]
+    .find((row) => row.textContent?.includes('纳斯达克指数'))!
+  groupRow.click()
   await flushPromises()
 
+  const assetRows = [...document.querySelectorAll<HTMLButtonElement>('.sheet .group-asset-row')]
+  expect(assetRows).toHaveLength(2)
+  expect(assetRows.find((row) => row.textContent?.includes('纳指基金'))!.classList.contains('selected')).toBe(true)
+  const bondRow = assetRows.find((row) => row.textContent?.includes('债券基金'))!
+  expect(bondRow.textContent).toContain('当前持仓')
+  expect(bondRow.classList.contains('selected')).toBe(false)
+
+  bondRow.click()
+  await flushPromises()
   expect(mocks.assignGroup).toHaveBeenCalledWith('b', 'g1')
-  expect(mocks.overview).toHaveBeenCalledTimes(2)
+
+  const memberRow = [...document.querySelectorAll<HTMLButtonElement>('.sheet .group-asset-row')]
+    .find((row) => row.textContent?.includes('纳指基金'))!
+  memberRow.click()
+  await flushPromises()
+  expect(mocks.assignGroup).toHaveBeenCalledWith('a', null)
+
   view.unmount()
 })
 
@@ -351,11 +381,7 @@ test('group management creates a new group from the sheet', async () => {
   const view = mount(FundsView, { attachTo: document.body })
   await flushPromises()
 
-  await view.get('button[aria-label="搜索与指标"]').trigger('click')
-  await flushPromises()
-  const manage = [...document.querySelectorAll<HTMLButtonElement>('.sheet button')]
-    .find((button) => button.textContent?.trim() === '管理')!
-  manage.click()
+  await view.get('.group-manage').trigger('click')
   await flushPromises()
 
   const input = document.querySelector<HTMLInputElement>('.sheet input')!
@@ -540,7 +566,7 @@ test('fund recurring view reads plans and filters them to the active group', asy
   expect(mocks.plans).toHaveBeenCalledTimes(1)
   expect(view.findAll('.fund-plan-row')).toHaveLength(2)
 
-  await view.get('.filter-pill select').setValue('g1')
+  await view.findAll('.group-pill').find((pill) => pill.text() === '纳斯达克指数')!.trigger('click')
   await flushPromises()
   expect(view.findAll('.fund-plan-row')).toHaveLength(1)
   expect(view.find('.fund-plan-row').text()).toContain('纳指定投')

@@ -1,3 +1,5 @@
+import { resolvedTheme } from './theme'
+
 /**
  * ECharts 不能直接读取 CSS 变量，图表色集中在这里维护。
  * 浅色 / 深色图表的色值与 docs/design/ui-color-tokens.css 的语义值对应。
@@ -31,10 +33,7 @@ const dark = {
 } as const
 
 export function chartTheme() {
-  return typeof window !== 'undefined'
-    && window.matchMedia?.('(prefers-color-scheme: dark)').matches
-    ? dark
-    : light
+  return resolvedTheme.value === 'dark' ? dark : light
 }
 
 /** 跟随浏览器根字号缩放图表文字，接近 Dynamic Type 的效果。 */

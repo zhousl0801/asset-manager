@@ -4,7 +4,7 @@ import { fetchFundReturnDay, fetchFundReturns } from '../api/funds'
 import { getApiErrorMessage } from '../api/client'
 import BottomSheet from './BottomSheet.vue'
 import FundReturnChart from './FundReturnChart.vue'
-import { formatBusinessDate, formatMoney, formatSignedMoney, todayInBusinessTimeZone } from '../utils/format'
+import { amountTone, formatBusinessDate, formatMoney, formatSignedMoney, todayInBusinessTimeZone } from '../utils/format'
 import type { TrendRange } from '../types/trend'
 import type { FundReturn, FundReturnDay, FundReturnPoint } from '../types/fundReturn'
 
@@ -211,21 +211,21 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
       <div class="return-summary">
         <div>
           <span>区间盈亏</span>
-          <b :class="{ profit: (data.intervalProfit ?? 0) > 0, loss: (data.intervalProfit ?? 0) < 0 }">
+          <b :class="amountTone(data.intervalProfit)">
             {{ data.intervalProfit === null ? '—' : formatSignedMoney(data.intervalProfit) }}
           </b>
           <small>自 {{ formatBusinessDate(data.intervalFrom) }} 起，含在途</small>
         </div>
         <div>
           <span>持有收益</span>
-          <b :class="{ profit: (data.holdingProfit ?? 0) > 0, loss: (data.holdingProfit ?? 0) < 0 }">
+          <b :class="amountTone(data.holdingProfit)">
             {{ data.holdingProfit === null ? '—' : formatSignedMoney(data.holdingProfit) }}
           </b>
           <small>当前已确认持仓估值 − 成本</small>
         </div>
         <div>
           <span>区间收益率</span>
-          <b>{{ data.intervalRate === null ? '—' : `${formatSignedMoney(data.intervalRate)}%` }}</b>
+          <b :class="amountTone(data.intervalRate)">{{ data.intervalRate === null ? '—' : `${formatSignedMoney(data.intervalRate)}%` }}</b>
           <small>以区间起始资产为分母，非年化</small>
         </div>
       </div>
@@ -290,7 +290,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
         <div class="day-summary">
           <div>
             <span>当日合计</span>
-            <b :class="{ profit: (day.totalProfit ?? 0) > 0, loss: (day.totalProfit ?? 0) < 0 }">
+            <b :class="amountTone(day.totalProfit)">
               {{ day.totalProfit === null ? '—' : formatSignedMoney(day.totalProfit) }}
             </b>
           </div>
@@ -304,7 +304,7 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
               <small>{{ rowTitle(row.shareClass, row.platform) || '未标类别' }}</small>
             </div>
             <div class="day-position-value">
-              <b :class="{ profit: (row.dailyProfit ?? 0) > 0, loss: (row.dailyProfit ?? 0) < 0 }">
+              <b :class="amountTone(row.dailyProfit)">
                 {{ row.dailyProfit === null ? '—' : formatSignedMoney(row.dailyProfit) }}
               </b>
               <small>
@@ -413,14 +413,6 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   line-height: 1.45;
 }
 
-.profit {
-  color: var(--color-finance-gain);
-}
-
-.loss {
-  color: var(--color-finance-loss);
-}
-
 .return-meta {
   margin: 9px 0 0;
   color: var(--color-text-secondary);
@@ -520,8 +512,16 @@ function rowTitle(shareClass: string | null, platform: string | null): string {
   background: var(--color-finance-gain-bg);
 }
 
+.calendar-day.profit small {
+  color: var(--color-finance-gain);
+}
+
 .calendar-day.loss {
   background: var(--color-finance-loss-bg);
+}
+
+.calendar-day.loss small {
+  color: var(--color-finance-loss);
 }
 
 .calendar-day.quiet {

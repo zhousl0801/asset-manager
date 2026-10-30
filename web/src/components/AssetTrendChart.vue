@@ -11,6 +11,7 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsOption } from 'echarts'
 import { assetLabels, buildScopedTrend, buildTrendOption } from '../utils/trend'
+import { resolvedTheme } from '../utils/theme'
 import type { AssetTrend, AssetTrendPoint } from '../types/trend'
 
 echarts.use([
@@ -37,9 +38,6 @@ const chartLabel = computed(() => {
   return `资产趋势图，${props.trend.from} 至 ${props.trend.to}；${latestText}${types ? `；包含${types}` : ''}`
 })
 let chart: echarts.ECharts | null = null
-const colorScheme = typeof window !== 'undefined'
-  ? window.matchMedia?.('(prefers-color-scheme: dark)')
-  : undefined
 
 function resize(): void {
   chart?.resize()
@@ -66,7 +64,6 @@ onMounted(() => {
     if (point) emit('select', point)
   })
   window.addEventListener('resize', resize)
-  colorScheme?.addEventListener?.('change', render)
 })
 
 watch(
@@ -77,9 +74,10 @@ watch(
   { deep: true }
 )
 
+watch(resolvedTheme, () => render())
+
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resize)
-  colorScheme?.removeEventListener?.('change', render)
   chart?.dispose()
   chart = null
 })

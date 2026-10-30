@@ -8,6 +8,7 @@ import AppNav from '../components/AppNav.vue'
 import BackButton from '../components/BackButton.vue'
 import BottomSheet from '../components/BottomSheet.vue'
 import {
+  amountTone,
   formatBusinessDate,
   formatMoney,
   formatQuantity,
@@ -25,7 +26,6 @@ type SheetKind = 'buy' | 'sell' | 'sellArrival' | 'holding'
 
 const router = useRouter()
 const today = todayInBusinessTimeZone()
-const QUOTE_STALE_MILLISECONDS = 5 * 60 * 1000
 const overview = ref<GoldOverview | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -122,37 +122,22 @@ const sellProceeds = computed<number | null>(() => {
 
 onMounted(async () => {
   await loadOverview()
-  await refreshQuoteWhenStale()
+  await refreshQuoteOnEnter()
 })
 
-async function refreshQuoteWhenStale(): Promise<void> {
-  const current = overview.value
-
-  if (!current || !isQuoteStale(current)) {
+async function refreshQuoteOnEnter(): Promise<void> {
+  if (!overview.value) {
     return
   }
 
   try {
+    // 后台定时刷新为每小时一次；进入积存金页面时再取一次最新报价。
     await refreshGoldQuote()
   } catch {
-    // 失败原因由服务端记录在持仓状态中，下面重新读取以显示陈旧提示。
+    // 失败原因由服务端记录在持仓状态中，下面重新读取以显示失败提示。
   }
 
   await loadOverview()
-}
-
-function isQuoteStale(current: GoldOverview): boolean {
-  if (current.quoteDate !== today) {
-    return true
-  }
-
-  if (!current.lastQuoteAttemptAt) {
-    return true
-  }
-
-  const attemptedAt = Date.parse(current.lastQuoteAttemptAt)
-
-  return Number.isNaN(attemptedAt) || Date.now() - attemptedAt > QUOTE_STALE_MILLISECONDS
 }
 
 async function loadOverview(): Promise<void> {
@@ -475,7 +460,7 @@ function goBack(): void {
           </div>
           <div>
             <span>持有盈亏</span>
-            <b :class="{ profit: overview.holdingProfit > 0, loss: overview.holdingProfit < 0 }">
+            <b :class="amountTone(overview.hasEffectiveQuote ? overview.holdingProfit : null)">
               {{ overview.hasEffectiveQuote ? formatSignedMoney(overview.holdingProfit) : '行情待补' }}
             </b>
           </div>
@@ -784,14 +769,6 @@ function goBack(): void {
   font-weight: 500;
   letter-spacing: -0.3px;
   font-variant-numeric: tabular-nums;
-}
-
-.profit {
-  color: var(--color-finance-gain);
-}
-
-.loss {
-  color: var(--color-finance-loss);
 }
 
 .gold-actions {

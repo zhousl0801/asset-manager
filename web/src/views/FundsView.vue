@@ -28,6 +28,7 @@ import BottomSheet from '../components/BottomSheet.vue'
 import ConfirmSheet from '../components/ConfirmSheet.vue'
 import FundReturnsPanel from '../components/FundReturnsPanel.vue'
 import {
+  amountTone,
   formatBusinessDate,
   formatBusinessTime,
   addAmounts,
@@ -109,6 +110,7 @@ const pendingGroupRemoval = ref<{ id: string; name: string } | null>(null)
 const groupDraft = ref('')
 const groupError = ref('')
 const groupBusy = ref(false)
+const groupDetailId = ref<string | null>(null)
 const editingGroupId = ref<string | null>(null)
 const editingGroupName = ref('')
 const plans = ref<AutoPlan[]>([])
@@ -170,7 +172,7 @@ const groupChips = computed(() => {
   const ungroupedFunds = all.filter((fund) => !fund.groupId)
   const chips = [{
     key: 'all' as GroupScope,
-    label: '全部产品',
+    label: '全部',
     count: all.length,
     value: sumAmounts(all.map(fund => fund.assetValue))
   }, ...groups.value.map((group) => ({
@@ -191,6 +193,23 @@ const groupChips = computed(() => {
 
   return chips
 })
+
+const managedGroup = computed(() =>
+  groups.value.find((group) => group.id === groupDetailId.value) ?? null)
+
+const managedGroupFunds = computed(() => {
+  const groupId = managedGroup.value?.id
+
+  return groupId ? allFunds.value.filter((fund) => fund.groupId === groupId) : []
+})
+
+const managedGroupValue = computed(() =>
+  sumAmounts(managedGroupFunds.value.map((fund) => fund.assetValue)))
+
+const groupAssetFunds = computed(() =>
+  [...allFunds.value].sort((left, right) =>
+    new Decimal(right.assetValue).comparedTo(left.assetValue)
+      || left.name.localeCompare(right.name, 'zh-Hans-CN')))
 
 const scopedFunds = computed(() => {
   const search = searchText.value.trim().toLowerCase()
@@ -808,21 +827,21 @@ function metricDisplay(fund: FundSummary): { key: FundMetricKey; label: string; 
           sub: fund.hasEffectiveQuotes && fund.dailyProfitRate !== null
             ? `${formatSignedMoney(fund.dailyProfitRate)}%`
             : undefined,
-          tone: fund.dailyProfit > 0 ? 'profit' : fund.dailyProfit < 0 ? 'loss' : ''
+          tone: amountTone(fund.hasEffectiveQuotes ? fund.dailyProfit : null)
         }
       case 'profit':
         return {
           key,
           label: '持有收益',
           value: fund.hasEffectiveQuotes ? formatSignedMoney(fund.holdingProfit) : '行情待补',
-          tone: fund.holdingProfit > 0 ? 'profit' : fund.holdingProfit < 0 ? 'loss' : ''
+          tone: amountTone(fund.hasEffectiveQuotes ? fund.holdingProfit : null)
         }
       case 'cumulative':
         return {
           key,
           label: '累计收益',
           value: fund.historyConfirmed ? formatSignedMoney(cumulativeProfit(fund)) : '待核对',
-          tone: cumulativeProfit(fund) > 0 ? 'profit' : cumulativeProfit(fund) < 0 ? 'loss' : ''
+          tone: amountTone(fund.historyConfirmed ? cumulativeProfit(fund) : null)
         }
       case 'rate':
         return {
@@ -831,7 +850,7 @@ function metricDisplay(fund: FundSummary): { key: FundMetricKey; label: string; 
           value: fund.hasEffectiveQuotes && fund.cost > 0
             ? `${formatSignedMoney(fund.holdingProfit / fund.cost * 100)}%`
             : '—',
-          tone: fund.holdingProfit > 0 ? 'profit' : fund.holdingProfit < 0 ? 'loss' : ''
+          tone: amountTone(fund.hasEffectiveQuotes && fund.cost > 0 ? fund.holdingProfit / fund.cost : null)
         }
       case 'cost':
         return { key, label: '成本', value: `¥${formatMoney(fund.cost)}`, tone: '' }
@@ -1014,6 +1033,7 @@ async function loadPlans(): Promise<void> {
 function openGroupSheet(): void {
   settingsOpen.value = false
   groupSheetOpen.value = true
+  groupDetailId.value = null
   groupDraft.value = ''
   groupError.value = ''
   editingGroupId.value = null
@@ -1023,7 +1043,23 @@ function openGroupSheet(): void {
 function closeGroupSheet(): void {
   if (!groupBusy.value) {
     groupSheetOpen.value = false
+    groupDetailId.value = null
+    editingGroupId.value = null
   }
+}
+
+function openGroupDetail(groupId: string): void {
+  groupDetailId.value = groupId
+  groupError.value = ''
+  editingGroupId.value = null
+  editingGroupName.value = ''
+}
+
+function backToGroupList(): void {
+  groupDetailId.value = null
+  groupError.value = ''
+  editingGroupId.value = null
+  editingGroupName.value = ''
 }
 
 async function submitGroup(): Promise<void> {
@@ -1038,10 +1074,11 @@ async function submitGroup(): Promise<void> {
   groupError.value = ''
 
   try {
-    await createFundGroup(name)
+    const created = await createFundGroup(name)
     groupDraft.value = ''
-    notice.value = `已新增投资分组「${name}」。`
+    notice.value = `已新增投资分组「${name}」，可以继续添加资产。`
     await loadOverview()
+    groupDetailId.value = created.id
   } catch (error) {
     groupError.value = getApiErrorMessage(error, '新增分组失败，请重试。')
   } finally {
@@ -1099,6 +1136,10 @@ async function confirmRemoveGroup(): Promise<void> {
       activeGroup.value = 'all'
     }
 
+    if (groupDetailId.value === target.id) {
+      groupDetailId.value = null
+    }
+
     notice.value = `已删除分组「${target.name}」，组内基金回到未分组。`
     pendingGroupRemoval.value = null
     await loadOverview()
@@ -1110,24 +1151,29 @@ async function confirmRemoveGroup(): Promise<void> {
   }
 }
 
-async function moveFund(fund: FundSummary, event: Event): Promise<void> {
-  const target = event.target as HTMLSelectElement
-  const groupId = target.value || null
+async function toggleGroupFund(fund: FundSummary): Promise<void> {
+  const group = managedGroup.value
   const positionId = fund.classes.flatMap((fundClass) => fundClass.platforms)[0]?.positionId
 
-  if (!positionId) {
+  if (!group || !positionId || groupBusy.value) {
     return
   }
 
+  const isMember = fund.groupId === group.id
+  groupBusy.value = true
+  groupError.value = ''
+
   try {
-    await assignFundGroup(positionId, groupId)
-    notice.value = groupId
-      ? `「${fund.name}」已归入「${groupChips.value.find((chip) => chip.key === groupId)?.label ?? '分组'}」。`
-      : `「${fund.name}」已移到未分组。`
+    await assignFundGroup(positionId, isMember ? null : group.id)
+    notice.value = isMember
+      ? `「${fund.name}」已移出「${group.name}」。`
+      : `「${fund.name}」已加入「${group.name}」。`
     await loadOverview()
   } catch (error) {
-    notice.value = getApiErrorMessage(error, '调整分组失败，请重试。')
+    groupError.value = getApiErrorMessage(error, '调整分组资产失败，请重试。')
     await loadOverview()
+  } finally {
+    groupBusy.value = false
   }
 }
 
@@ -1808,35 +1854,45 @@ function goBack(): void {
         <div class="hero-metrics">
           <div>
             <span>持有收益</span>
-            <b :class="{ profit: scope.holdingProfit > 0, loss: scope.holdingProfit < 0 }">
+            <b :class="amountTone(scope.hasEffectiveQuotes ? scope.holdingProfit : null)">
               {{ scope.hasEffectiveQuotes ? formatSignedMoney(scope.holdingProfit) : '行情待补' }}
             </b>
           </div>
           <div>
             <span>持有收益率</span>
-            <b>{{ scope.hasEffectiveQuotes && scope.cost > 0 ? `${formatSignedMoney(scope.holdingProfit / scope.cost * 100)}%` : '—' }}</b>
+            <b :class="amountTone(scope.hasEffectiveQuotes ? scope.rate : null)">
+              {{ scope.hasEffectiveQuotes && scope.rate !== null ? `${formatSignedMoney(scope.rate)}%` : '—' }}
+            </b>
           </div>
           <div>
             <span>已实现收益</span>
-            <b>{{ scope.historyConfirmed ? formatSignedMoney(scope.realizedProfit) : '待核对' }}</b>
+            <b :class="amountTone(scope.historyConfirmed ? scope.realizedProfit : null)">
+              {{ scope.historyConfirmed ? formatSignedMoney(scope.realizedProfit) : '待核对' }}
+            </b>
           </div>
         </div>
       </section>
 
 
-      <div class="fund-filter-bar">
-        <label class="filter-pill">
-          <select
-            :value="activeGroup"
-            aria-label="筛选投资分组"
-            @change="selectGroup(($event.target as HTMLSelectElement).value)"
+      <div class="group-filter">
+        <div class="group-pills" role="tablist" aria-label="筛选投资分组">
+          <button
+            v-for="chip in groupChips"
+            :key="chip.key"
+            type="button"
+            role="tab"
+            class="group-pill"
+            :class="{ active: activeGroup === chip.key }"
+            :aria-selected="activeGroup === chip.key"
+            @click="selectGroup(chip.key)"
           >
-            <option value="all">全部产品</option>
-            <option v-if="groupChips.some((chip) => chip.key === 'ungrouped')" value="ungrouped">未分组</option>
-            <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-          </select>
+            {{ chip.label }}
+          </button>
+        </div>
+        <button type="button" class="group-manage" @click="openGroupSheet">
+          管理
           <AppIcon name="chevron" />
-        </label>
+        </button>
       </div>
 
       <div class="view-tabs ui-segmented" role="tablist" aria-label="投资视图">
@@ -1920,14 +1976,6 @@ function goBack(): void {
             </header>
 
             <div v-if="expandedFund === fund.key" class="fund-detail">
-              <label class="fund-group-select">
-                <span>投资分组</span>
-                <select :value="fund.groupId ?? ''" @change="moveFund(fund, $event)">
-                  <option value="">未分组</option>
-                  <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-                </select>
-              </label>
-
               <section
                 v-for="(fundClass, index) in fund.classes"
                 :key="fundClass.key ?? index"
@@ -1944,13 +1992,13 @@ function goBack(): void {
                   </div>
                   <div>
                     <span>持有盈亏</span>
-                    <b :class="{ profit: fundClass.holdingProfit > 0, loss: fundClass.holdingProfit < 0 }">
+                    <b :class="amountTone(fundClass.holdingProfit)">
                       {{ formatSignedMoney(fundClass.holdingProfit) }}
                     </b>
                   </div>
                   <div>
                     <span>已实现盈亏</span>
-                    <b :class="{ profit: fundClass.realizedProfit > 0, loss: fundClass.realizedProfit < 0 }">
+                    <b :class="amountTone(fundClass.realizedProfit)">
                       {{ formatSignedMoney(fundClass.realizedProfit) }}
                     </b>
                   </div>
@@ -2104,55 +2152,119 @@ function goBack(): void {
         </button>
       </div>
       <p v-if="metricNotice" class="summary-note">{{ metricNotice }}</p>
-
-      <div class="settings-group-row">
-        <div>
-          <span>投资分组</span>
-          <small>管理基金所属组合</small>
-        </div>
-        <button type="button" class="text-button" @click="openGroupSheet">管理</button>
-      </div>
     </BottomSheet>
 
     <BottomSheet
       :open="groupSheetOpen"
-      title="投资分组"
-      subtitle="自定义组合视角，最多 20 个字"
+      title="管理分组"
+      :subtitle="managedGroup ? '勾选资产加入分组，取消勾选即移出' : '新增、改名或删除分组'"
       :close-disabled="groupBusy"
       @close="closeGroupSheet"
     >
-      <form class="form-stack" @submit.prevent="submitGroup">
-        <label class="form-field">
-          <span>新增分组</span>
-          <div class="group-create-row">
-            <input v-model="groupDraft" type="text" maxlength="20" placeholder="例如：纳斯达克指数" />
-            <button type="submit" class="primary-button" :disabled="groupBusy">添加</button>
-          </div>
-        </label>
-      </form>
+      <div v-if="managedGroup" class="group-detail">
+        <button type="button" class="group-back" @click="backToGroupList">
+          <AppIcon name="chevron-back" />
+          全部分组
+        </button>
 
-      <p v-if="groupError" class="form-error" role="alert">{{ groupError }}</p>
-
-      <section class="group-manage-list">
-        <div v-for="group in groups" :key="group.id" class="group-manage-row">
-          <template v-if="editingGroupId === group.id">
-            <input v-model="editingGroupName" type="text" maxlength="20" aria-label="分组名称" />
-            <button type="button" class="confirm-button" :disabled="groupBusy" @click="saveGroupName(group.id)">保存</button>
+        <div class="group-detail-head">
+          <template v-if="editingGroupId === managedGroup.id">
+            <input
+              v-model="editingGroupName"
+              type="text"
+              maxlength="20"
+              aria-label="分组名称"
+              @keydown.enter.prevent="saveGroupName(managedGroup.id)"
+            />
+            <button type="button" class="confirm-button" :disabled="groupBusy" @click="saveGroupName(managedGroup.id)">保存</button>
             <button type="button" class="text-button" :disabled="groupBusy" @click="editingGroupId = null">取消</button>
           </template>
           <template v-else>
-            <div>
-              <strong>{{ group.name }}</strong>
-              <small>{{ group.fundCount }} 只基金 · {{ group.positionCount }} 个持仓</small>
+            <div class="group-detail-copy">
+              <strong>{{ managedGroup.name }}</strong>
+              <small>{{ managedGroupFunds.length }} 只基金 · {{ managedGroup.positionCount }} 个持仓</small>
             </div>
-            <button type="button" class="text-button" @click="startRenameGroup(group.id, group.name)">改名</button>
-            <button type="button" class="text-button danger" :disabled="groupBusy" @click="removeGroup(group.id, group.name)">删除</button>
+            <button type="button" class="text-button" @click="startRenameGroup(managedGroup.id, managedGroup.name)">改名</button>
+            <button
+              type="button"
+              class="text-button danger"
+              :disabled="groupBusy"
+              @click="removeGroup(managedGroup.id, managedGroup.name)"
+            >删除</button>
           </template>
         </div>
-        <p v-if="!groups.length" class="summary-note">还没有分组。新增后可在基金卡片里调整所属分组。</p>
-      </section>
 
-      <p class="summary-note">删除分组不会删除基金或改变资产，组内基金回到「未分组」。</p>
+        <div class="group-summary">
+          <div>
+            <span>已选资产（元）</span>
+            <b>¥{{ formatMoney(managedGroupValue) }}</b>
+          </div>
+          <div>
+            <span>已选资产数</span>
+            <b>{{ managedGroupFunds.length }}</b>
+          </div>
+        </div>
+
+        <p class="group-asset-title">选择资产</p>
+        <p v-if="!groupAssetFunds.length" class="summary-note">还没有基金持仓，先录入持仓后再添加。</p>
+        <section v-else class="group-asset-list">
+          <button
+            v-for="fund in groupAssetFunds"
+            :key="fund.key"
+            type="button"
+            class="group-asset-row"
+            :class="{ selected: fund.groupId === managedGroup.id }"
+            :disabled="groupBusy"
+            @click="toggleGroupFund(fund)"
+          >
+            <span class="group-asset-copy">
+              <strong>{{ fund.name }}</strong>
+              <small>当前持仓 ¥{{ formatMoney(fund.assetValue) }} · {{ fund.classes.length }} 个类别</small>
+              <small v-if="fund.groupId && fund.groupId !== managedGroup.id" class="group-asset-hint">
+                该产品已放置「{{ fund.groupName }}」中
+              </small>
+            </span>
+            <span class="group-check" :class="{ checked: fund.groupId === managedGroup.id }">
+              <AppIcon v-if="fund.groupId === managedGroup.id" name="check" />
+            </span>
+          </button>
+        </section>
+
+        <p class="summary-note">同一基金的 A/C 类会一起调整；取消勾选后回到「未分组」。</p>
+      </div>
+
+      <div v-else class="group-list">
+        <section v-if="groups.length" class="group-manage-list">
+          <button
+            v-for="group in groups"
+            :key="group.id"
+            type="button"
+            class="group-manage-row"
+            @click="openGroupDetail(group.id)"
+          >
+            <span>
+              <strong>{{ group.name }}</strong>
+              <small>{{ group.fundCount }} 只基金 · ¥{{ formatMoney(group.confirmedValue) }}</small>
+            </span>
+            <AppIcon name="chevron" />
+          </button>
+        </section>
+        <p v-else class="summary-note">还没有分组，先在下方新增一个。</p>
+
+        <form class="form-stack" @submit.prevent="submitGroup">
+          <label class="form-field">
+            <span>新增分组</span>
+            <div class="group-create-row">
+              <input v-model="groupDraft" type="text" maxlength="20" placeholder="例如：纳斯达克指数" />
+              <button type="submit" class="primary-button" :disabled="groupBusy">添加</button>
+            </div>
+          </label>
+        </form>
+
+        <p class="summary-note">分组只改变查看范围，不影响持仓、成本和收益。</p>
+      </div>
+
+      <p v-if="groupError" class="form-error" role="alert">{{ groupError }}</p>
     </BottomSheet>
 
     <BottomSheet
@@ -2595,14 +2707,6 @@ function goBack(): void {
   font-variant-numeric: tabular-nums;
 }
 
-.profit {
-  color: var(--color-finance-gain);
-}
-
-.loss {
-  color: var(--color-finance-loss);
-}
-
 .hero-search {
   overflow: hidden;
   max-width: 170px;
@@ -2723,64 +2827,62 @@ function goBack(): void {
   color: var(--color-text-disabled);
 }
 
-.fund-filter-bar {
+.group-filter {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
-.filter-pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
+.group-pills {
+  display: flex;
+  flex: 1;
+  gap: 6px;
   min-width: 0;
-  height: 36px;
-  padding: 0 6px 0 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-subtle, #f2f3f5);
-  color: var(--color-text-primary);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.filter-pill select {
-  max-width: 150px;
+.group-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.group-pill {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-footnote);
+  white-space: nowrap;
+}
+
+.group-pill.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.group-manage {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  min-height: 36px;
+  padding: 0 2px 0 8px;
   border: 0;
   background: transparent;
-  color: inherit;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  appearance: none;
-  text-overflow: ellipsis;
-}
-
-.filter-pill .app-icon {
-  width: 13px;
-  height: 13px;
-  margin-left: 2px;
-  color: var(--color-text-secondary);
-  transform: rotate(90deg);
-}
-
-.settings-group-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.settings-group-row span {
-  display: block;
-  font-size: var(--text-footnote);
-}
-
-.settings-group-row small {
-  display: block;
-  margin-top: 3px;
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
+  white-space: nowrap;
+}
+
+.group-manage .app-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .portfolio-toolbar input {
@@ -2957,26 +3059,6 @@ function goBack(): void {
 .fund-detail {
   padding: 0 14px 14px;
   border-top: 1px solid var(--color-border-subtle);
-}
-
-.fund-group-select {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-}
-
-.fund-group-select select {
-  flex: 1;
-  min-height: var(--touch-target);
-  padding: 0 8px;
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-tag);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-size: var(--text-footnote);
 }
 
 .fund-class {
@@ -3309,24 +3391,198 @@ function goBack(): void {
   font-size: var(--text-footnote);
 }
 
+.group-detail,
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 2px;
+  min-height: var(--touch-target);
+  padding: 0 4px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand);
+  font-size: var(--text-footnote);
+}
+
+.group-back .app-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.group-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+}
+
+.group-detail-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-detail-copy strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.group-detail-copy small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.group-detail-head input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--touch-target);
+  padding: 0 9px;
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-tag);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-footnote);
+}
+
+.group-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-brand-soft);
+}
+
+.group-summary span {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.group-summary b {
+  display: block;
+  margin-top: 5px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-summary > div:last-child {
+  text-align: right;
+}
+
+.group-asset-title {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+}
+
+.group-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-asset-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.group-asset-row.selected {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
+.group-asset-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-asset-copy strong {
+  display: block;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.group-asset-copy small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.group-asset-copy .group-asset-hint {
+  color: var(--color-brand);
+}
+
+.group-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--color-border-default);
+  border-radius: 50%;
+  color: var(--color-on-brand);
+}
+
+.group-check.checked {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+}
+
+.group-check .app-icon {
+  width: 14px;
+  height: 14px;
+}
+
 .group-manage-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
 }
 
 .group-manage-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 8px 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  text-align: left;
 }
 
-.group-manage-row > div {
+.group-manage-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.group-manage-row > span {
   flex: 1;
   min-width: 0;
 }
@@ -3344,14 +3600,10 @@ function goBack(): void {
   font-size: var(--text-caption);
 }
 
-.group-manage-row input {
-  flex: 1;
-  min-width: 0;
-  min-height: var(--touch-target);
-  padding: 0 8px;
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-tag);
-  font-size: var(--text-footnote);
+.group-manage-row .app-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-secondary);
 }
 
 .text-button {
