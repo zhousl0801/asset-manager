@@ -40,7 +40,7 @@ const form = reactive({
   grams: '',
   amount: '',
   netAmount: '',
-  cost: '',
+  costPrice: '',
   quote: '',
   businessDate: today,
   note: ''
@@ -86,7 +86,7 @@ const sheetNote = computed(() => {
     case 'sellArrival':
       return '到账金额必须与待到账金额一致，不再次确认盈亏；如有差额，请先更正卖出记录。'
     case 'holding':
-      return '报价自动使用当前行情；持有克数为 0 时，持仓成本也应为 0。此操作不改变现金。'
+      return '报价自动使用当前行情；成本按元/克填写，克数为 0 时持仓成本也为 0。此操作不改变现金。'
     default:
       return ''
   }
@@ -104,7 +104,7 @@ const canSubmit = computed(() => {
     case 'sellArrival':
       return arrivingPendingId.value !== null && (parseAmount(form.netAmount) ?? 0) > 0
     case 'holding':
-      return parseNonNegativeQuantity(form.grams) !== null && parseAmount(form.cost) !== null
+      return parseNonNegativeQuantity(form.grams) !== null && parseAmount(form.costPrice) !== null
     default:
       return false
   }
@@ -119,6 +119,17 @@ const sellProceeds = computed<number | null>(() => {
 
   return new Decimal(grams).times(quote).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
 })
+const holdingCostTotal = computed<number | null>(() => {
+  const grams = parseNonNegativeQuantity(form.grams)
+  const costPrice = parseAmount(form.costPrice)
+
+  if (grams === null || costPrice === null || grams <= 0) {
+    return null
+  }
+
+  return new Decimal(grams).times(costPrice).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+})
+const parseGramInput = computed<number>(() => parseNonNegativeQuantity(form.grams) ?? 0)
 
 onMounted(async () => {
   await loadOverview()
@@ -172,11 +183,14 @@ function openSheet(kind: SheetKind): void {
   form.grams = ''
   form.amount = ''
   form.netAmount = ''
-  form.cost = ''
+  form.costPrice = ''
 
   if (kind === 'holding' && overview.value?.isConfigured) {
     form.grams = String(overview.value.grams)
-    form.cost = String(overview.value.cost)
+    // 成本按元/克编辑；用总额除以克数还原单价，避免四舍五入后再乘回去产生总额漂移。
+    form.costPrice = overview.value.grams > 0
+      ? String(Number((overview.value.cost / overview.value.grams).toFixed(4)))
+      : ''
   }
 }
 
@@ -314,17 +328,16 @@ async function submitSellArrival(): Promise<void> {
 
 async function submitHolding(): Promise<void> {
   const grams = parseNonNegativeQuantity(form.grams)
-  const cost = parseAmount(form.cost)
+  const costPrice = parseAmount(form.costPrice)
 
-  if (grams === null || cost === null) {
-    formError.value = '请填写有效的克数和成本。'
+  if (grams === null || costPrice === null) {
+    formError.value = '请填写有效的克数和成本均价。'
     return
   }
 
-  if (grams === 0 && cost !== 0) {
-    formError.value = '持有克数为 0 时，持仓成本也应为 0。'
-    return
-  }
+  const cost = grams === 0
+    ? 0
+    : new Decimal(grams).times(costPrice).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
 
   if (!overview.value?.hasEffectiveQuote || overview.value.quote <= 0 || !overview.value.quoteDate) {
     formError.value = '行情暂不可用，请稍后自动获取报价后再保存。'
@@ -455,8 +468,8 @@ function goBack(): void {
             <b>{{ formatQuantity(overview.grams) }}</b>
           </div>
           <div>
-            <span>持仓成本</span>
-            <b>{{ formatMoney(overview.cost) }}</b>
+            <span>成本均价</span>
+            <b>{{ overview.averageCost === null ? '—' : `¥${formatMoney(overview.averageCost)} / 克` }}</b>
           </div>
           <div>
             <span>持有盈亏</span>
@@ -513,8 +526,8 @@ function goBack(): void {
           <small v-if="overview.lastQuoteError" class="quote-error">最近获取失败：{{ overview.lastQuoteError }}</small>
         </div>
         <div>
-          <span>平均持仓成本</span>
-          <b>{{ overview.averageCost === null ? '—' : `¥${formatMoney(overview.averageCost)} / 克` }}</b>
+          <span>持仓成本合计</span>
+          <b>¥{{ formatMoney(overview.cost) }}</b>
         </div>
       </div>
 
@@ -652,15 +665,16 @@ function goBack(): void {
             />
           </label>
           <label class="form-field">
-            <span>对应持仓成本（元）</span>
+            <span>成本均价（元 / 克）</span>
             <input
-              v-model="form.cost"
+              v-model="form.costPrice"
               type="text"
               inputmode="decimal"
               autocomplete="off"
               placeholder="0.00"
               @input="formError = ''"
             />
+            <small v-if="holdingCostTotal !== null">按 {{ formatQuantity(parseGramInput) }} 克计算，持仓成本合计 ¥{{ formatMoney(holdingCostTotal) }}</small>
           </label>
         </template>
 

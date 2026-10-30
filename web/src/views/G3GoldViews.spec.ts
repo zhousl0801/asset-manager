@@ -243,3 +243,45 @@ test('opening the page fetches a quote automatically when none exists', async ()
   expect(mocks.refresh).toHaveBeenCalledTimes(1)
   view.unmount()
 })
+
+test('holding form takes cost per gram and converts it to total cost', async () => {
+  mocks.holding.mockResolvedValue({
+    grams: 12.4948,
+    cost: 11527.95,
+    quote: 900,
+    quoteDate: today,
+    value: 11245.32,
+    cashBalance: 10000,
+    activity: { id: 'gh1', type: 'correction', grams: 12.4948, amount: 11527.98, cashEffect: 0 }
+  })
+  const view = mount(GoldView, { attachTo: document.body })
+  await flushPromises()
+
+  expect(view.find('.gold-hero').text()).toContain('成本均价')
+  expect(view.find('.gold-hero').text()).toContain('¥853.33 / 克')
+  expect(view.find('.quote-panel').text()).toContain('持仓成本合计')
+
+  await view.findAll('button').find((button) => button.text() === '录入 / 核对持仓')!.trigger('click')
+  await flushPromises()
+
+  const labels = Array.from(document.querySelectorAll('.sheet form .form-field > span')).map((node) => node.textContent)
+  expect(labels).toContain('成本均价（元 / 克）')
+
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
+  expect(inputs[1]!.value).toBe('853.3333')
+
+  inputs[0]!.value = '12.4948'
+  inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+  inputs[1]!.value = '922.62'
+  inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+
+  expect(document.querySelector('.sheet')!.textContent).toContain('持仓成本合计 ¥11,527.95')
+
+  document.querySelector('.sheet form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await flushPromises()
+
+  expect(mocks.holding).toHaveBeenCalledTimes(1)
+  expect(mocks.holding.mock.calls[0]![0]).toMatchObject({ grams: 12.4948, cost: 11527.95 })
+  view.unmount()
+})
