@@ -39,10 +39,10 @@ const missingAssets = computed(() => {
   }
 
   return [
-    { label: '公积金', route: '/provident', configured: ledger.providentFund.isConfigured, notHeld: ledger.providentFund.notHeld },
     { label: '基金', route: '/funds', configured: ledger.fund.isConfigured, notHeld: ledger.fund.notHeld },
-    { label: '积存金', route: '/gold', configured: ledger.gold.isConfigured, notHeld: ledger.gold.notHeld },
-    { label: '股票', route: '/stocks', configured: ledger.stock.isConfigured, notHeld: ledger.stock.notHeld }
+    { label: '股票', route: '/stocks', configured: ledger.stock.isConfigured, notHeld: ledger.stock.notHeld },
+    { label: '公积金', route: '/provident', configured: ledger.providentFund.isConfigured, notHeld: ledger.providentFund.notHeld },
+    { label: '积存金', route: '/gold', configured: ledger.gold.isConfigured, notHeld: ledger.gold.notHeld }
   ].filter((asset) => !asset.configured && !asset.notHeld)
 })
 
@@ -65,14 +65,6 @@ const maintenanceRows = computed(() => {
       notHeld: false
     },
     {
-      key: 'providentFund' as const,
-      label: '公积金',
-      note: ledger.providentFund.note ?? (ledger.providentFund.isConfigured ? '统一公积金余额' : '尚未录入'),
-      route: '/provident',
-      action: ledger.providentFund.notHeld ? '恢复' : ledger.providentFund.isConfigured ? '更新' : '去录入',
-      notHeld: ledger.providentFund.notHeld
-    },
-    {
       key: 'fund' as const,
       label: '基金',
       note: ledger.fund.note ?? (ledger.fund.isConfigured ? '基金持仓与交易' : '尚未录入'),
@@ -81,20 +73,28 @@ const maintenanceRows = computed(() => {
       notHeld: ledger.fund.notHeld
     },
     {
-      key: 'gold' as const,
-      label: '积存金',
-      note: ledger.gold.note ?? (ledger.gold.isConfigured ? '持仓与交易' : '尚未录入'),
-      route: '/gold',
-      action: ledger.gold.notHeld ? '恢复' : ledger.gold.isConfigured ? '核对' : '去录入',
-      notHeld: ledger.gold.notHeld
-    },
-    {
       key: 'stock' as const,
       label: '股票',
       note: ledger.stock.note ?? (ledger.stock.isConfigured ? '持仓与交易' : '尚未录入'),
       route: '/stocks',
       action: ledger.stock.notHeld ? '恢复' : ledger.stock.isConfigured ? '查看' : '去录入',
       notHeld: ledger.stock.notHeld
+    },
+    {
+      key: 'providentFund' as const,
+      label: '公积金',
+      note: ledger.providentFund.note ?? (ledger.providentFund.isConfigured ? '统一公积金余额' : '尚未录入'),
+      route: '/provident',
+      action: ledger.providentFund.notHeld ? '恢复' : ledger.providentFund.isConfigured ? '更新' : '去录入',
+      notHeld: ledger.providentFund.notHeld
+    },
+    {
+      key: 'gold' as const,
+      label: '积存金',
+      note: ledger.gold.note ?? (ledger.gold.isConfigured ? '持仓与交易' : '尚未录入'),
+      route: '/gold',
+      action: ledger.gold.notHeld ? '恢复' : ledger.gold.isConfigured ? '核对' : '去录入',
+      notHeld: ledger.gold.notHeld
     }
   ]
 })

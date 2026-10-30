@@ -54,18 +54,6 @@ const rows = computed<DistributionRow[]>(() => {
       percent: percentOf(ledger.cash.amount)
     },
     {
-      key: 'providentFund',
-      label: '公积金',
-      icon: 'home',
-      to: '/provident',
-      amount: ledger.providentFund.amount,
-      configured: ledger.providentFund.isConfigured,
-      notHeld: ledger.providentFund.notHeld,
-      note: ledger.providentFund.note ?? '尚未录入',
-      change: changeByKey.get('providentFund') ?? null,
-      percent: percentOf(ledger.providentFund.amount)
-    },
-    {
       key: 'fund',
       label: '基金',
       icon: 'chart',
@@ -78,18 +66,6 @@ const rows = computed<DistributionRow[]>(() => {
       percent: percentOf(ledger.fund.amount)
     },
     {
-      key: 'gold',
-      label: '积存金',
-      icon: 'gold',
-      to: '/gold',
-      amount: ledger.gold.amount,
-      configured: ledger.gold.isConfigured,
-      notHeld: ledger.gold.notHeld,
-      note: ledger.gold.note ?? '尚未录入',
-      change: changeByKey.get('gold') ?? null,
-      percent: percentOf(ledger.gold.amount)
-    },
-    {
       key: 'stock',
       label: '股票',
       icon: 'stock',
@@ -100,6 +76,30 @@ const rows = computed<DistributionRow[]>(() => {
       note: ledger.stock.note ?? '尚未录入',
       change: changeByKey.get('stock') ?? null,
       percent: percentOf(ledger.stock.amount)
+    },
+    {
+      key: 'providentFund',
+      label: '公积金',
+      icon: 'home',
+      to: '/provident',
+      amount: ledger.providentFund.amount,
+      configured: ledger.providentFund.isConfigured,
+      notHeld: ledger.providentFund.notHeld,
+      note: ledger.providentFund.note ?? '尚未录入',
+      change: changeByKey.get('providentFund') ?? null,
+      percent: percentOf(ledger.providentFund.amount)
+    },
+    {
+      key: 'gold',
+      label: '积存金',
+      icon: 'gold',
+      to: '/gold',
+      amount: ledger.gold.amount,
+      configured: ledger.gold.isConfigured,
+      notHeld: ledger.gold.notHeld,
+      note: ledger.gold.note ?? '尚未录入',
+      change: changeByKey.get('gold') ?? null,
+      percent: percentOf(ledger.gold.amount)
     }
   ]
 })

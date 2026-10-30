@@ -54,6 +54,17 @@ test('shows recorded categories, percentages, new records and missing assets', (
   view.unmount()
 })
 
+test('lists assets as cash, fund, stock, provident fund and gold', () => {
+  const view = mount(AssetDistribution, {
+    props: { overview, changes, comparable: false },
+    global: { stubs }
+  })
+  const labels = view.findAll('.asset-row .asset-title b').map((node) => node.text())
+
+  expect(labels).toEqual(['现金', '基金', '股票', '公积金', '积存金'])
+  view.unmount()
+})
+
 test('editable mode offers add and not-held actions for missing assets', async () => {
   const view = mount(AssetDistribution, {
     props: { overview, changes, comparable: false, editable: true },
@@ -92,7 +103,7 @@ test('hideFundCount removes the fund count but keeps pending amounts', () => {
     props: { overview: fundOverview, comparable: false, hideFundCount: true },
     global: { stubs }
   })
-  const fundRow = withoutCount.findAll('.asset-row')[2]!
+  const fundRow = withoutCount.findAll('.asset-row')[1]!
   expect(fundRow.text()).toContain('待确认 1,800.00')
   expect(fundRow.text()).not.toContain('持有 24 只基金')
   withoutCount.unmount()
