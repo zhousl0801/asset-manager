@@ -89,9 +89,11 @@ test('plan list shows the active salary plan and can save a new salary plan', as
   expect(view.text()).toContain('工资到账')
   expect(view.text()).toContain('每月 15 日 09:00')
 
-  const newButton = view.findAll('button').find((button) => button.text() === '新建计划')!
+  const newButton = view.findAll('button').find((button) => button.attributes('aria-label') === '新增定期收入计划')!
   await newButton.trigger('click')
   await flushPromises()
+
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('计划类型')
 
   const inputs = Array.from(document.querySelectorAll<HTMLInputElement>('.sheet form input'))
   inputs[1]!.value = '1000'
@@ -236,11 +238,9 @@ test('trading-day SIP selects one share class across channels and sends a busine
   mocks.save.mockResolvedValue({})
   const view = mount(PlanView, { attachTo: document.body })
   await flushPromises()
-  await view.findAll('button').find(button => button.text() === '新建计划')!.trigger('click')
+  await view.findAll('button').find(button => button.attributes('aria-label') === '新增基金计划')!.trigger('click')
   const select = (label: string) => [...document.querySelectorAll('label')].find(item => item.querySelector('span')?.textContent === label)!.querySelector('select')!
-  const type = select('计划类型')
-  type.value = 'fundSip'
-  type.dispatchEvent(new Event('change', { bubbles: true }))
+  expect(document.querySelector('.sheet')!.textContent).not.toContain('计划类型')
   await flushPromises()
   const target = select('基金及份额类别')
   expect(target.options).toHaveLength(2)
@@ -283,7 +283,7 @@ test('searching a new fund creates a zero-share position before saving the SIP',
 
   const view = mount(PlanView, { attachTo: document.body })
   await flushPromises()
-  await view.findAll('button').find(button => button.attributes('aria-label') === '新增基金定投')!.trigger('click')
+  await view.findAll('button').find(button => button.attributes('aria-label') === '新增基金计划')!.trigger('click')
   await flushPromises()
 
   const search = document.querySelector<HTMLInputElement>('.sheet input[type="search"]')!
@@ -364,5 +364,41 @@ test('editing a SIP with unavailable fund choices shows retry instead of submitt
   await flushPromises()
   expect(mocks.save).not.toHaveBeenCalled()
   expect(document.querySelector('button[type="submit"]')!.hasAttribute('disabled')).toBe(true)
+  view.unmount()
+})
+
+test('every plan group exposes the add entry on the right and shares one empty state', async () => {
+  mocks.overview.mockResolvedValue({
+    ...structuredClone(overview),
+    plans: [],
+    activeCount: 0
+  })
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+
+  const groups = ['.group-fund', '.group-provident', '.group-income'].map(selector => view.find(selector))
+
+  for (const group of groups) {
+    expect(group.find('.group-add').exists()).toBe(true)
+    expect(group.find('.group-add').text()).toContain('新增')
+    expect(group.find('.group-heading').text()).toContain('暂无计划')
+    expect(group.text().match(/暂无计划/g)).toHaveLength(1)
+  }
+
+  expect(view.findAll('button').some(button => button.text() === '新建计划')).toBe(false)
+  view.unmount()
+})
+
+test('provident plan form only offers deposit and withdrawal', async () => {
+  const view = mount(PlanView, { attachTo: document.body })
+  await flushPromises()
+  await view.findAll('button').find(button => button.attributes('aria-label') === '新增公积金计划')!.trigger('click')
+  await flushPromises()
+
+  const typeSelect = [...document.querySelectorAll('.sheet label')]
+    .find(label => label.querySelector('span')?.textContent === '计划类型')!
+    .querySelector('select')!
+
+  expect([...typeSelect.options].map(option => option.text)).toEqual(['缴存', '提取'])
   view.unmount()
 })

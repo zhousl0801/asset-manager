@@ -144,7 +144,7 @@ const planGroups = computed<PlanGroup[]>(() => {
   return [
     {
       key: 'fund',
-      title: '基金定投',
+      title: '基金',
       icon: 'chart',
       newType: 'fundSip',
       plans: fundPlans,
@@ -152,7 +152,7 @@ const planGroups = computed<PlanGroup[]>(() => {
     },
     {
       key: 'provident',
-      title: providentPlans.some(plan => plan.type === 'providentWithdrawal') ? '公积金' : '公积金缴存',
+      title: '公积金',
       icon: 'home',
       newType: 'providentDeposit',
       plans: providentPlans,
@@ -222,7 +222,47 @@ const fundPlanGroups = computed<FundPlanGroup[]>(() => {
 
 const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
 
-const sheetTitle = computed(() => editingPlan.value ? '编辑自动计划' : '新建自动计划')
+// 新增从哪个分组进来，决定表单展示哪些字段：基金只填基金信息，公积金只能选缴存 / 提取。
+const entryGroup = ref<PlanGroup['key'] | null>(null)
+
+const sheetTitle = computed(() => {
+  if (editingPlan.value) {
+    return '编辑自动计划'
+  }
+
+  switch (entryGroup.value) {
+    case 'fund':
+      return '新建基金定投'
+    case 'provident':
+      return '新建公积金计划'
+    case 'income':
+      return '新建定期收入'
+    default:
+      return '新建自动计划'
+  }
+})
+
+const showTypeField = computed(() => entryGroup.value === 'provident')
+
+const typeFieldOptions = computed<{ value: PlanType; label: string }[]>(() =>
+  entryGroup.value === 'provident'
+    ? [
+        { value: 'providentDeposit', label: '缴存' },
+        { value: 'providentWithdrawal', label: '提取' }
+      ]
+    : [])
+
+function groupKeyForType(type: PlanType): PlanGroup['key'] {
+  if (type === 'fundSip') {
+    return 'fund'
+  }
+
+  if (type === 'providentDeposit' || type === 'providentWithdrawal') {
+    return 'provident'
+  }
+
+  return 'income'
+}
 const actionable = computed(() => overview.value?.pendingOccurrences ?? [])
 const occurrenceTotalPages = computed(() =>
   Math.max(1, Math.ceil(occurrenceTotal.value / occurrencePageSize)))
@@ -408,6 +448,7 @@ function openNew(type: PlanType = 'salaryIncome'): void {
   editingPlan.value = null
   formError.value = ''
   form.type = type
+  entryGroup.value = groupKeyForType(type)
   form.name = ''
   form.amount = ''
   form.fee = '0'
@@ -430,6 +471,7 @@ function openEdit(plan: AutoPlan): void {
   editingPlan.value = plan
   formError.value = ''
   form.type = plan.type
+  entryGroup.value = groupKeyForType(plan.type)
   form.name = plan.name
   form.amount = String(plan.amount)
   form.fee = String(plan.fee ?? 0)
@@ -748,7 +790,7 @@ function groupSummary(plans: AutoPlan[], amountLabel: string): string {
 
 function providentSummary(plans: AutoPlan[]): string {
   if (!plans.length) {
-    return '缴存与提取'
+    return '暂无计划'
   }
 
   const activePlans = plans.filter(plan => plan.isActive)
@@ -894,8 +936,7 @@ function goBack(): void {
       </section>
 
       <div class="plan-actions">
-        <button type="button" class="action-primary" @click="openNew('salaryIncome')">新建计划</button>
-        <button type="button" class="action-secondary" :disabled="busyAction === 'run'" @click="runNow">
+        <button type="button" class="action-primary" :disabled="busyAction === 'run'" @click="runNow">
           {{ busyAction === 'run' ? '执行中…' : '立即执行' }}
         </button>
       </div>
@@ -920,11 +961,10 @@ function goBack(): void {
             <p>{{ group.summary }}</p>
           </div>
           <button
-            v-if="group.key === 'fund'"
             type="button"
             class="group-add"
-            aria-label="新增基金定投"
-            @click="openNew('fundSip')"
+            :aria-label="`新增${group.title}计划`"
+            @click="openNew(group.newType)"
           >＋ 新增</button>
         </header>
 
@@ -1013,10 +1053,6 @@ function goBack(): void {
               </template>
             </article>
           </div>
-          <p v-else class="group-empty">
-            还没有基金定投计划。
-            <button type="button" class="text-button" @click="openNew('fundSip')">新建一个</button>
-          </p>
         </template>
 
         <template v-else>
@@ -1046,10 +1082,6 @@ function goBack(): void {
               </span>
             </footer>
           </article>
-          <p v-if="!group.plans.length" class="group-empty">
-            还没有{{ group.title }}计划。
-            <button type="button" class="text-button" @click="openNew(group.newType)">新建一个</button>
-          </p>
         </template>
       </section>
 
@@ -1166,15 +1198,20 @@ function goBack(): void {
       @close="closeSheet"
     >
       <form class="form-stack" @submit.prevent="submit">
-        <label class="form-field">
+        <label v-if="showTypeField" class="form-field">
           <span>计划类型</span>
           <select v-model="form.type" :disabled="editingPlan !== null">
-            <option v-for="option in typeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            <option v-for="option in typeFieldOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
           </select>
         </label>
-        <label class="form-field">
+        <label v-if="form.type !== 'fundSip'" class="form-field">
           <span>名称（选填）</span>
-          <input v-model="form.name" type="text" maxlength="50" placeholder="留空使用默认名称" />
+          <input
+            v-model="form.name"
+            type="text"
+            maxlength="50"
+            :placeholder="form.type === 'salaryIncome' ? '例如：工资、奖金、年终奖' : '留空使用默认名称'"
+          />
         </label>
         <label class="form-field">
           <span>每期金额（元）</span>
@@ -1359,7 +1396,7 @@ function goBack(): void {
 
 .plan-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 14px;
 }
@@ -1497,16 +1534,6 @@ function goBack(): void {
   display: flex;
   flex-direction: column;
   gap: 9px;
-}
-
-.group-empty {
-  margin: 0;
-  padding: 15px 12px;
-  border: 1px dashed var(--color-border-subtle);
-  border-radius: var(--radius-control);
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption);
-  text-align: center;
 }
 
 .text-button {
