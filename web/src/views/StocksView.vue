@@ -14,6 +14,7 @@ import {
   formatMoney,
   formatQuantity,
   formatSignedMoney,
+  formatUnitPrice,
   parseNonNegativeQuantity,
   parsePrice,
   parseQuantity,
@@ -620,7 +621,7 @@ function formatPercent(value: number | null): string {
 }
 
 function positionAverageCostText(position: StockPosition): string {
-  return position.averageCost === null ? '—' : `¥${formatMoney(position.averageCost)}`
+  return position.averageCost === null ? '—' : `¥${formatUnitPrice(position.averageCost)}`
 }
 
 async function markNotHeld(): Promise<void> {
@@ -809,7 +810,7 @@ function goBack(): void {
                 <small>{{ position.code }}</small>
                 <small class="position-shares">{{ formatShares(position.shares) }} 股</small>
               </span>
-              <small>现价 {{ formatMoney(position.price) }} · 成本 {{ positionAverageCostText(position) }}</small>
+              <small>现价 {{ formatUnitPrice(position.price) }} · 成本 {{ positionAverageCostText(position) }}</small>
             </span>
             <span class="position-side">
               <b>¥{{ formatMoney(position.value) }}</b>
@@ -902,8 +903,8 @@ function goBack(): void {
         <div class="detail-lines">
           <div><span>持有数量</span><b>{{ formatShares(selectedPosition.shares) }} 股</b></div>
           <div><span>持仓成本</span><b>¥{{ formatMoney(selectedPosition.cost) }}</b></div>
-          <div><span>平均成本</span><b>{{ selectedPosition.averageCost === null ? '—' : `¥${formatMoney(selectedPosition.averageCost)}` }}</b></div>
-          <div><span>现价 / 昨收</span><b>{{ formatMoney(selectedPosition.price) }} / {{ selectedPosition.previousClose === null ? '—' : formatMoney(selectedPosition.previousClose) }}</b></div>
+          <div><span>平均成本</span><b>{{ selectedPosition.averageCost === null ? '—' : `¥${formatUnitPrice(selectedPosition.averageCost)}` }}</b></div>
+          <div><span>现价 / 昨收</span><b>{{ formatUnitPrice(selectedPosition.price) }} / {{ selectedPosition.previousClose === null ? '—' : formatUnitPrice(selectedPosition.previousClose) }}</b></div>
           <div><span>行情日期</span><b>{{ formatBusinessDate(selectedPosition.priceDate) }}</b></div>
         </div>
         <div class="detail-actions">
@@ -1004,7 +1005,7 @@ function goBack(): void {
             <span>成交价（元）</span>
             <input v-model="form.price" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" @input="formError = ''" />
             <small v-if="quoteLoading">正在获取最新价…</small>
-            <small v-else-if="form.price">默认取最新价 {{ formatMoney(Number(form.price)) }}（{{ formatBusinessDate(form.priceDate) }}），可按实际成交价修改</small>
+            <small v-else-if="form.price">默认取最新价 {{ formatUnitPrice(Number(form.price)) }}（{{ formatBusinessDate(form.priceDate) }}），可按实际成交价修改</small>
             <small v-else-if="quoteError">{{ quoteError }}</small>
           </label>
           <label class="form-field">
@@ -1053,7 +1054,7 @@ function goBack(): void {
           <div class="quote-line">
             <span>现价</span>
             <b v-if="quoteLoading">正在获取…</b>
-            <b v-else-if="form.price && form.priceDate">{{ formatMoney(Number(form.price)) }} 元 · {{ formatBusinessDate(form.priceDate) }}</b>
+            <b v-else-if="form.price && form.priceDate">{{ formatUnitPrice(Number(form.price)) }} 元 · {{ formatBusinessDate(form.priceDate) }}</b>
             <b v-else>未获取到行情</b>
             <button type="button" class="text-button" :disabled="quoteLoading" @click="retryQuote">重新获取</button>
           </div>

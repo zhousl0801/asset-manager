@@ -57,7 +57,8 @@ public sealed class StockPosition
 
     public decimal HoldingProfit => decimal.Round(Value - Cost, 2);
 
-    public decimal? AverageCost => Shares > 0m ? decimal.Round(Cost / Shares, 2) : null;
+    // 保留 4 位，交给展示层按品种决定显示几位（ETF / LOF 报价到 0.001）。
+    public decimal? AverageCost => Shares > 0m ? decimal.Round(Cost / Shares, 4) : null;
 
     public string DisplayName => $"{Name} ({Code})";
 

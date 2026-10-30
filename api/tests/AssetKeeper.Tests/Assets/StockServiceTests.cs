@@ -379,6 +379,22 @@ public sealed class StockServiceTests
     }
 
     [Fact]
+    public async Task SaveHoldingAsync_KeepsAverageCostToFourDecimals()
+    {
+        var context = await CreateContextAsync();
+
+        var result = await context.Stocks.SaveHoldingAsync(
+            new SaveStockHoldingRequest(
+                StockMarket.Shenzhen, "159915", "创业板ETF易方达", 10000m, 27720m, 2.435m,
+                Today, Today, "已有持仓", Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(AssetOperationStatus.Success, result.Status);
+        Assert.NotNull(result.Result);
+        Assert.Equal(2.772m, result.Result.Position.AverageCost);
+    }
+
+    [Fact]
     public async Task GetQuoteAsync_ReturnsLatestPriceWithoutWritingAnything()
     {
         var context = await CreateContextAsync();

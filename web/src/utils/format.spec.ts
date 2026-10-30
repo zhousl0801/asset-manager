@@ -6,10 +6,12 @@ import {
   formatMoney,
   formatQuantity,
   formatSignedMoney,
+  formatUnitPrice,
   parseAmount,
   parseNonNegativeQuantity,
   parsePrice,
   parseQuantity,
+  parseUnitPrice,
   todayInBusinessTimeZone
 } from './format'
 
@@ -117,5 +119,27 @@ describe('formatBusinessDate', () => {
 describe('todayInBusinessTimeZone', () => {
   it('returns an ISO date for the Shanghai business day', () => {
     expect(todayInBusinessTimeZone()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('formatUnitPrice', () => {
+  it('keeps two to three decimals for exchange prices', () => {
+  expect(formatUnitPrice(2.435)).toBe('2.435')
+  expect(formatUnitPrice(2.772)).toBe('2.772')
+  expect(formatUnitPrice(10.5)).toBe('10.50')
+  expect(formatUnitPrice(1500)).toBe('1,500.00')
+  expect(formatUnitPrice(0)).toBe('0.00')
+  expect(formatUnitPrice(null)).toBe('—')
+  })
+})
+
+describe('parseUnitPrice', () => {
+  it('accepts zero and up to four decimals', () => {
+    expect(parseUnitPrice('2.772')).toBe(2.772)
+    expect(parseUnitPrice('0')).toBe(0)
+    expect(parseUnitPrice('2.7721')).toBe(2.7721)
+    expect(parseUnitPrice('-1')).toBeNull()
+    expect(parseUnitPrice('2.77211')).toBeNull()
+    expect(parseUnitPrice('')).toBeNull()
   })
 })

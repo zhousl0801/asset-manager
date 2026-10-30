@@ -344,7 +344,7 @@ test('holding sheet takes cost per share and picks up the latest quote automatic
   expect(mocks.quote).toHaveBeenCalledWith('shenzhen', '159915')
   const sheetText = () => document.querySelector('.sheet')!.textContent ?? ''
   expect(sheetText()).toContain('现价')
-  expect(sheetText()).toContain('2.44')
+  expect(sheetText()).toContain('2.435')
   expect(sheetText()).not.toContain('行情日期')
   expect(sheetText()).toContain('成本均价（元 / 股）')
   expect(sheetText()).toContain('起始持仓是当天快照')

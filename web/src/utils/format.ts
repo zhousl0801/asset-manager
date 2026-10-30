@@ -10,6 +10,18 @@ export function formatMoney(value: Decimal.Value | null | undefined): string {
   return formatFixedDecimal(value, 2)
 }
 
+// 单价：至少两位，最多三位小数（ETF / LOF 报价到 0.001），A 股多出的尾零会去掉。
+export function formatUnitPrice(value: Decimal.Value | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '—'
+  }
+
+  const fixed = new Decimal(value).toFixed(3)
+  const trimmed = fixed.replace(/(\.\d{2})0$/, '$1')
+
+  return formatFixedDecimal(trimmed, trimmed.split('.')[1]?.length ?? 2)
+}
+
 export function formatQuantity(value: Decimal.Value | null | undefined): string {
   if (value === null || value === undefined) {
     return '—'
