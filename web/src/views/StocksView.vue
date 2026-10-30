@@ -645,9 +645,6 @@ function goBack(): void {
         <h1>股票</h1>
         <p>按市场查看持仓与今日盈亏</p>
       </div>
-      <button type="button" class="refresh-button" :disabled="isRefreshing" @click="refreshQuotes">
-        {{ isRefreshing ? '刷新中…' : '刷新行情' }}
-      </button>
     </header>
 
     <p v-if="isLoading && !overview" class="state">正在读取股票持仓…</p>
@@ -695,7 +692,9 @@ function goBack(): void {
       <div v-if="overview.positions.length > 0" class="stock-actions">
         <button type="button" class="action-primary" @click="openSheet('buy')">买入</button>
         <button type="button" class="action-secondary" @click="openSheet('holding')">录入 / 核对</button>
-        <button type="button" class="action-secondary" :disabled="isRefreshing" @click="refreshQuotes">刷新行情</button>
+        <button type="button" class="action-secondary" :disabled="isRefreshing" @click="refreshQuotes">
+          {{ isRefreshing ? '刷新中…' : '刷新行情' }}
+        </button>
       </div>
 
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
@@ -1051,23 +1050,6 @@ function goBack(): void {
   margin: 3px 0 0;
   color: var(--color-text-secondary);
   font-size: var(--text-caption);
-}
-
-.refresh-button {
-  flex: 0 0 auto;
-  min-height: var(--touch-target);
-  margin-left: auto;
-  padding: 0 11px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-surface);
-  color: var(--color-brand);
-  font-size: var(--text-footnote);
-  font-weight: 600;
-}
-
-.refresh-button:disabled {
-  color: var(--color-text-disabled);
 }
 
 .stock-hero {

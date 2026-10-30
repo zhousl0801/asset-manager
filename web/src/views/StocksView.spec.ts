@@ -247,6 +247,17 @@ test('shows broker style price, cost and today change percent', async () => {
   view.unmount()
 })
 
+test('offers a single refresh quote entry', async () => {
+  const view = mount(StocksView, { attachTo: document.body })
+  await flushPromises()
+
+  const refreshButtons = view.findAll('button').filter((button) => button.text().includes('刷新行情'))
+
+  expect(refreshButtons).toHaveLength(1)
+  expect(refreshButtons[0]!.classes()).toContain('action-secondary')
+  view.unmount()
+})
+
 test('closed positions move into the folded section and stop counting as held', async () => {
   const closed = {
     ...position,
